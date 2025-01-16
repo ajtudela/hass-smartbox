@@ -1,6 +1,7 @@
+import logging
+
 from homeassistant.const import TEMP_CELSIUS, TEMP_FAHRENHEIT
 from homeassistant.util.unit_conversion import TemperatureConverter
-import logging
 
 
 def simple_celsius_to_fahrenheit(temp: float) -> float:
@@ -15,7 +16,6 @@ def convert_temp(hass, node_units: str, temp: float) -> float:
 
 
 def round_temp(hass, temp: float) -> float:
-    print(f"TEMP {temp} {type(temp)}")
     # HA uses different precisions for Fahrenheit (whole
     # integers) vs Celsius (tenths)
     if hass.config.units.temperature_unit == TEMP_CELSIUS:

@@ -5,8 +5,6 @@ import logging
 from typing import Any, cast
 from unittest.mock import MagicMock
 
-from smartbox import Session, UpdateManager
-
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
     PRESET_AWAY,
@@ -17,6 +15,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from smartbox import Session, UpdateManager
 
 from .const import (
     GITHUB_ISSUES_URL,
@@ -185,7 +184,7 @@ class SmartboxNode:
     @property
     def node_id(self) -> str:
         """Return the id of the node."""
-        return f"{self._device.dev_id}-{self._node_info['addr']}"
+        return f"{self._device.dev_id}_{self._node_info['addr']}"
 
     @property
     def name(self) -> str:

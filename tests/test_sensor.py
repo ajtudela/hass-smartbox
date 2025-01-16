@@ -1,27 +1,21 @@
 import logging
-from pytest import approx
 
-from custom_components.smartbox.const import DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-from homeassistant.const import (
-    ATTR_FRIENDLY_NAME,
-    ATTR_LOCKED,
-    STATE_UNAVAILABLE,
-)
-from homeassistant.setup import async_setup_component
-
+from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_LOCKED, STATE_UNAVAILABLE
 from mocks import (
     active_or_charging_update,
     get_entity_id_from_unique_id,
+    get_node_unique_id,
     get_object_id,
     get_sensor_entity_id,
     get_sensor_entity_name,
-    get_node_unique_id,
 )
-
-from test_utils import convert_temp, round_temp
+from pytest import approx
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from test_utils import convert_temp, round_temp
+
 from custom_components.smartbox.const import (
+    DOMAIN,
     HEATER_NODE_TYPE_ACM,
     HEATER_NODE_TYPE_HTR_MOD,
 )
@@ -36,14 +30,8 @@ def _check_temp_state(hass, mock_node_status, state):
     )
 
 
-async def test_basic_temp(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_temp(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 13
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -106,14 +94,8 @@ async def test_basic_temp(hass, mock_smartbox):
             assert state.state != STATE_UNAVAILABLE
 
 
-async def test_basic_power(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_power(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 13
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -214,14 +196,8 @@ async def test_unavailable(hass, mock_smartbox_unavailable):
                 assert state.state == STATE_UNAVAILABLE
 
 
-async def test_basic_charge_level(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_charge_level(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 13
     entries = hass.config_entries.async_entries(DOMAIN)

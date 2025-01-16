@@ -1,13 +1,11 @@
 """Config flow for Smartbox."""
 
-from collections.abc import Mapping
-import copy
 import logging
 from typing import Any
 
+import homeassistant.helpers.config_validation as cv
 import requests
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -16,14 +14,13 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
 )
 
-from . import create_smartbox_session_from_entry, InvalidAuth
+from . import InvalidAuth, create_smartbox_session_from_entry
 from .const import (
     CONF_API_NAME,
     CONF_BASIC_AUTH_CREDS,

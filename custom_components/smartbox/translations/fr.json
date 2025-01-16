@@ -1,0 +1,83 @@
+{
+  "title": "Smartbox",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ajouter un compte",
+        "data": {
+          "api_name": "Nom de l'API",
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe",
+          "basic_auth_creds": "Entête d'authentification"
+        },
+        "data_description": {
+          "api_name": "Le nom API de votre fournisseur de chauffage.",
+          "basic_auth_creds": "Il s'agit d'un entête HTTP Basic Auth utilisé pour effectuer l'authentification initiale auprès du serveur."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Réauthentification",
+        "description": "Vous devez vous réauthentifier.",
+        "data": {
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de se connecter {error}",
+      "invalid_auth": "Authentification invalide {error}",
+      "unknown": "Erreur inconnue {error}"
+    },
+    "abort": {
+      "unknown": "Erreur inconnue {error}.",
+      "already_configured": "Ce compte est déjà configuré.",
+      "reauth_successful": "Réauthentification réussie."
+    }
+  },
+  "options": {
+    "step": {
+      "session_options": {
+        "title": "Options de session",
+        "data": {
+          "session_retry_attempts": "Nombre de tentatives d'opérations REST",
+          "session_backoff_factor": "Intervalle entre chaque tentatives REST",
+          "socket_reconnect_attempts": "Nombre de tentative de connexion aux sockets",
+          "socket_backoff_factor": "Intervalle entre chaque tentative sockets"
+        },
+        "data_description": {
+          "session_retry_attempts": "Nombre de tentatives d'opérations REST.",
+          "session_backoff_factor": "Intervalle entre chaque tentatives REST",
+          "socket_reconnect_attempts": "Nombre de tentative de connexion aux sockets",
+          "socket_backoff_factor": "Intervalle entre chaque tentative sockets"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "charge_level": {
+        "name": "Niveau de charge"
+      },
+      "duty_cycle": {
+        "name": "Cycle de service"
+      }
+    },
+    "number": {
+      "power_limit": {
+        "name": "Limite de puissance"
+      }
+    },
+    "switch": {
+      "true_radiant": {
+        "name": "Véritable Radiant"
+      },
+      "window_mode": {
+        "name": "Mode Fenêtre"
+      },
+      "away_status": {
+        "name": "Statut d'Absence"
+      }
+    }
+  }
+}

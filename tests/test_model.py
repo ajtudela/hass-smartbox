@@ -1,19 +1,19 @@
 import logging
-import pytest
-from unittest.mock import (
-    MagicMock,
-    NonCallableMock,
-    patch,
-)
+from unittest.mock import MagicMock, NonCallableMock, patch
 
+import pytest
+from const import MOCK_SMARTBOX_DEVICE_INFO
 from homeassistant.components.climate import (
-    HVACMode,
     PRESET_ACTIVITY,
     PRESET_AWAY,
     PRESET_COMFORT,
     PRESET_ECO,
     PRESET_HOME,
+    HVACMode,
 )
+from mocks import mock_device, mock_node
+from test_utils import assert_log_message
+
 from custom_components.smartbox.const import (
     HEATER_NODE_TYPE_ACM,
     HEATER_NODE_TYPE_HTR,
@@ -22,9 +22,9 @@ from custom_components.smartbox.const import (
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
 )
-
-from const import MOCK_SMARTBOX_DEVICE_INFO
 from custom_components.smartbox.model import (
+    SmartboxDevice,
+    SmartboxNode,
     create_smartbox_device,
     get_devices,
     get_hvac_mode,
@@ -34,12 +34,7 @@ from custom_components.smartbox.model import (
     set_hvac_mode_args,
     set_preset_mode_status_update,
     set_temperature_args,
-    SmartboxDevice,
-    SmartboxNode,
 )
-
-from mocks import mock_device, mock_node
-from test_utils import assert_log_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,10 +62,6 @@ async def test_create_smartbox_device(hass):
 
 
 async def test_get_devices(hass, mock_smartbox):
-    dev_1_id = "test_device_id_1"
-    dev_1_name = "Device 1"
-    dev_2_id = "test_device_id_2"  # missing
-    dev_2_name = "Device 2"  # missing
     test_devices = [
         SmartboxDevice(
             dev,
@@ -82,7 +73,7 @@ async def test_get_devices(hass, mock_smartbox):
         "custom_components.smartbox.model.create_smartbox_device",
         autospec=True,
         side_effect=test_devices,
-    ) as create_smartbox_device_mock:
+    ):
         # check we called the smartbox API correctly
         devices = await get_devices(hass, mock_smartbox.session)
         assert devices == test_devices
@@ -131,7 +122,7 @@ async def test_smartbox_device_init(hass, mock_smartbox):
 
 async def test_smartbox_device_dev_data_updates(hass):
     """Independently test device data updates usually done by UpdateManager"""
-    dev_id = "test_device_id_1"
+    dev_id = "device_1"
     mock_session = MagicMock()
     mock_node_1 = MagicMock()
     mock_node_2 = MagicMock()
@@ -160,7 +151,7 @@ async def test_smartbox_device_dev_data_updates(hass):
 
 async def test_smartbox_device_node_status_update(hass, caplog):
     """Independently test node status updates usually called by UpdateManager"""
-    dev_id = "test_device_id_1"
+    dev_id = "device_1"
     mock_session = MagicMock()
     mock_node_1 = MagicMock()
     mock_node_2 = MagicMock()
@@ -202,7 +193,7 @@ async def test_smartbox_device_node_status_update(hass, caplog):
 
 async def test_smartbox_device_node_setup_update(hass, caplog):
     """Independently test node setup updates usually called by UpdateManager"""
-    dev_id = "test_device_id_1"
+    dev_id = "device_1"
     mock_session = MagicMock()
     mock_node_1 = MagicMock()
     mock_node_2 = MagicMock()
@@ -258,7 +249,7 @@ async def test_smartbox_node(hass):
     node = SmartboxNode(
         mock_device, node_info, mock_session, initial_status, initial_setup
     )
-    assert node.node_id == f"{dev_id}-{node_addr}"
+    assert node.node_id == f"{dev_id}_{node_addr}"
     assert node.name == node_name
     assert node.node_type == node_type
     assert node.addr == node_addr
@@ -296,7 +287,7 @@ async def test_smartbox_node(hass):
 
 
 def test_is_heater_node():
-    dev_id = "test_device_id_1"
+    dev_id = "device_1"
     addr = 1
     assert is_heater_node(mock_node(dev_id, addr, HEATER_NODE_TYPE_HTR))
     assert is_heater_node(mock_node(dev_id, addr, HEATER_NODE_TYPE_HTR_MOD))
@@ -305,7 +296,7 @@ def test_is_heater_node():
 
 
 def test_is_supported_node():
-    dev_id = "test_device_id_1"
+    dev_id = "device_1"
     addr = 1
     assert is_supported_node(mock_node(dev_id, addr, HEATER_NODE_TYPE_HTR))
     assert is_supported_node(mock_node(dev_id, addr, HEATER_NODE_TYPE_HTR_MOD))

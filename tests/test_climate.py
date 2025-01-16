@@ -1,22 +1,15 @@
 import logging
-import pytest
 
-from homeassistant.setup import async_setup_component
-from homeassistant.const import (
-    ATTR_ENTITY_ID,
-    ATTR_FRIENDLY_NAME,
-    ATTR_LOCKED,
-    ATTR_TEMPERATURE,
-    ENTITY_MATCH_ALL,
-    STATE_UNAVAILABLE,
-)
+import pytest
 from homeassistant.components.climate import HVACAction, HVACMode
-from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
     ATTR_PRESET_MODE,
+)
+from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
+from homeassistant.components.climate.const import (
     PRESET_ACTIVITY,
     PRESET_AWAY,
     PRESET_COMFORT,
@@ -26,29 +19,33 @@ from homeassistant.components.climate.const import (
     SERVICE_SET_PRESET_MODE,
     SERVICE_SET_TEMPERATURE,
 )
-
-from custom_components.smartbox.climate import (
-    get_hvac_mode,
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_FRIENDLY_NAME,
+    ATTR_LOCKED,
+    ATTR_TEMPERATURE,
+    ENTITY_MATCH_ALL,
+    STATE_UNAVAILABLE,
 )
+from mocks import (
+    active_or_charging_update,
+    get_climate_entity_id,
+    get_climate_entity_name,
+    get_entity_id_from_unique_id,
+    get_node_unique_id,
+    get_object_id,
+)
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from test_utils import assert_no_log_errors, convert_temp, round_temp
+
+from custom_components.smartbox.climate import get_hvac_mode
 from custom_components.smartbox.const import (
-    HEATER_NODE_TYPE_HTR,
-    HEATER_NODE_TYPE_ACM,
+    DOMAIN,
     HEATER_NODE_TYPE_HTR_MOD,
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
 )
-
-from mocks import (
-    active_or_charging_update,
-    get_climate_entity_id,
-    get_entity_id_from_unique_id,
-    get_climate_entity_name,
-    get_object_id,
-    get_node_unique_id,
-)
-
-from test_utils import assert_no_log_errors, convert_temp, round_temp
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,18 +80,8 @@ def _check_state(hass, mock_node, mock_node_status, state):
     )
 
 
-from custom_components.smartbox.const import DOMAIN
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-
-async def test_basic_climate(hass, mock_smartbox, caplog):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_climate(hass, mock_smartbox, config_entry, caplog):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -106,13 +93,12 @@ async def test_basic_climate(hass, mock_smartbox, caplog):
         for mock_node in mock_smartbox.session.get_nodes(mock_device["dev_id"]):
             entity_id = get_climate_entity_id(mock_node)
             state = hass.states.get(entity_id)
-            print(hass.states)
 
             # check basic properties
             assert state.object_id.startswith(
                 get_object_id(get_climate_entity_name(mock_node))
             )
-            unique_id = get_node_unique_id(mock_device, mock_node, "climate")
+            unique_id = get_node_unique_id(mock_device, mock_node, "thermostat")
             assert entity_id == get_entity_id_from_unique_id(
                 hass, CLIMATE_DOMAIN, unique_id
             )
@@ -146,14 +132,8 @@ async def test_basic_climate(hass, mock_smartbox, caplog):
     assert_no_log_errors(caplog)
 
 
-async def test_unavailable(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_unavailable(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -209,14 +189,8 @@ def _check_not_away_preset(node_type, status, preset_mode):
         assert preset_mode == PRESET_HOME
 
 
-async def test_away(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_away(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -259,14 +233,8 @@ async def test_away(hass, mock_smartbox):
         )
 
 
-async def test_away_preset(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_away_preset(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -340,14 +308,8 @@ async def test_away_preset(hass, mock_smartbox):
             )
 
 
-async def test_schedule_preset(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_schedule_preset(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -379,14 +341,8 @@ async def test_schedule_preset(hass, mock_smartbox):
     assert mock_node_status["mode"] == "auto"
 
 
-async def test_self_learn_preset(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_self_learn_preset(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -421,14 +377,8 @@ async def test_self_learn_preset(hass, mock_smartbox):
     assert mock_node_status["mode"] == "self_learn"
 
 
-async def test_activity_preset(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_activity_preset(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -618,14 +568,8 @@ async def test_frost_preset(hass, mock_smartbox):
 #     assert "Unsupported preset_mode frost for acm node" in exc_info.exconly()
 
 
-async def test_set_hvac_mode(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_set_hvac_mode(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -694,14 +638,8 @@ async def test_set_hvac_mode(hass, mock_smartbox):
                 assert mock_node_status["mode"] == "off"
 
 
-async def test_set_target_temp(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_set_target_temp(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -751,14 +689,8 @@ async def test_set_target_temp(hass, mock_smartbox):
                 assert new_target_temp == pytest.approx(old_target_temp + 1)
 
 
-async def test_hvac_action(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_hvac_action(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -789,14 +721,8 @@ async def test_hvac_action(hass, mock_smartbox):
             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
 
 
-async def test_unavailable_at_startup(hass, mock_smartbox_unavailable):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox_unavailable.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_unavailable_at_startup(hass, mock_smartbox_unavailable, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 8
     entries = hass.config_entries.async_entries(DOMAIN)

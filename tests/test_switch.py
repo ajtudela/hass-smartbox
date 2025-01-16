@@ -1,17 +1,14 @@
-from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.components.switch import SERVICE_TURN_ON, SERVICE_TURN_OFF
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
-from homeassistant.setup import async_setup_component
-from custom_components.smartbox.const import DOMAIN
 import logging
 
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
+from homeassistant.components.switch import SERVICE_TURN_OFF, SERVICE_TURN_ON
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
 from mocks import (
-    get_entity_id_from_unique_id,
-    get_object_id,
     get_away_status_switch_entity_id,
     get_away_status_switch_entity_name,
-    get_device_unique_id,
+    get_entity_id_from_unique_id,
     get_node_unique_id,
+    get_object_id,
     get_true_radiant_switch_entity_id,
     get_true_radiant_switch_entity_name,
     get_window_mode_switch_entity_id,
@@ -19,17 +16,11 @@ from mocks import (
 )
 from test_utils import assert_log_message
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from custom_components.smartbox.const import DOMAIN
 
 
-async def test_away_status(hass, mock_smartbox):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_away_status(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 12
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -38,19 +29,20 @@ async def test_away_status(hass, mock_smartbox):
     assert DOMAIN in hass.config.components
 
     for mock_device in mock_smartbox.session.get_devices():
-        entity_id = get_away_status_switch_entity_id(mock_device)
+        mock_node = mock_smartbox.session.get_nodes(mock_device["dev_id"])[0]
+        entity_id = get_away_status_switch_entity_id(mock_node)
         state = hass.states.get(entity_id)
 
         # check basic properties
         assert state.object_id.startswith(
-            get_object_id(get_away_status_switch_entity_name(mock_device))
+            get_object_id(get_away_status_switch_entity_name(mock_node))
         )
-        assert state.entity_id.startswith(get_away_status_switch_entity_id(mock_device))
-        assert state.name == f"{mock_device['name']} Away Status"
+        assert state.entity_id.startswith(get_away_status_switch_entity_id(mock_node))
+        assert state.name == f"{mock_node['name']} Away Status"
         assert (
-            state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_device['name']} Away Status"
+            state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Away Status"
         )
-        unique_id = get_device_unique_id(mock_device, "away_status")
+        unique_id = get_node_unique_id(mock_device, mock_node, "away_status")
         assert entity_id == get_entity_id_from_unique_id(hass, SWITCH_DOMAIN, unique_id)
 
         # Starts not away
@@ -58,21 +50,23 @@ async def test_away_status(hass, mock_smartbox):
 
     # Set device 1 to away
     mock_device_1 = mock_smartbox.session.get_devices()[0]
+    mock_node_1 = mock_smartbox.session.get_nodes(mock_device_1["dev_id"])[0]
     mock_smartbox.dev_data_update(mock_device_1, {"away_status": {"away": True}})
 
-    entity_id = get_away_status_switch_entity_id(mock_device_1)
+    entity_id = get_away_status_switch_entity_id(mock_node_1)
     await hass.helpers.entity_component.async_update_entity(entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "on"
 
     mock_device_2 = mock_smartbox.session.get_devices()[1]
-    entity_id = get_away_status_switch_entity_id(mock_device_2)
+    mock_node_2 = mock_smartbox.session.get_nodes(mock_device_2["dev_id"])[0]
+    entity_id = get_away_status_switch_entity_id(mock_node_2)
     await hass.helpers.entity_component.async_update_entity(entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "off"
 
     # Turn off via HA
-    entity_id = get_away_status_switch_entity_id(mock_device_1)
+    entity_id = get_away_status_switch_entity_id(mock_node_1)
     await hass.services.async_call(
         SWITCH_DOMAIN,
         SERVICE_TURN_OFF,
@@ -84,7 +78,7 @@ async def test_away_status(hass, mock_smartbox):
     assert state.state == "off"
 
     # Turn device 2 to away via HA
-    entity_id = get_away_status_switch_entity_id(mock_device_2)
+    entity_id = get_away_status_switch_entity_id(mock_node_2)
     await hass.services.async_call(
         SWITCH_DOMAIN,
         SERVICE_TURN_ON,
@@ -96,14 +90,8 @@ async def test_away_status(hass, mock_smartbox):
     assert state.state == "on"
 
 
-async def test_basic_window_mode(hass, mock_smartbox, caplog):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 12
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -191,14 +179,8 @@ async def test_basic_window_mode(hass, mock_smartbox, caplog):
             assert state.state == "off"
 
 
-async def test_basic_true_radiant(hass, mock_smartbox, caplog):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="test_username_1",
-        data=mock_smartbox.config[DOMAIN],
-    )
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 12
     entries = hass.config_entries.async_entries(DOMAIN)

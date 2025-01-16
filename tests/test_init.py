@@ -1,30 +1,4 @@
 import logging
-from unittest.mock import patch
-
-from homeassistant.setup import async_setup_component
-
-from smartbox import __version__ as SMARTBOX_VERSION
-
-from custom_components.smartbox import __version__
-from custom_components.smartbox.const import (
-    DOMAIN,
-    CONF_API_NAME,
-    CONF_BASIC_AUTH_CREDS,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    CONF_SESSION_RETRY_ATTEMPTS,
-    CONF_SESSION_BACKOFF_FACTOR,
-    CONF_SOCKET_RECONNECT_ATTEMPTS,
-    CONF_SOCKET_BACKOFF_FACTOR,
-    HEATER_NODE_TYPE_ACM,
-    HEATER_NODE_TYPE_HTR,
-    HEATER_NODE_TYPE_HTR_MOD,
-    SMARTBOX_DEVICES,
-)
-from mocks import mock_device, mock_node
-from test_utils import assert_log_message
-from const import MOCK_SMARTBOX_CONFIG
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 

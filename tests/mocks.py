@@ -1,5 +1,5 @@
-from copy import deepcopy
 import logging
+from copy import deepcopy
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,6 +8,7 @@ from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.helpers import entity_registry
+
 from custom_components.smartbox.const import (
     DOMAIN,
     HEATER_NODE_TYPE_ACM,
@@ -15,9 +16,9 @@ from custom_components.smartbox.const import (
     HEATER_NODE_TYPE_HTR_MOD,
 )
 from custom_components.smartbox.types import SetupDict, StatusDict
+from tests.const import CONF_DEVICE_IDS
 
 _LOGGER = logging.getLogger(__name__)
-from tests.const import CONF_DEVICE_IDS
 
 
 def mock_device(dev_id: str, nodes: List[MagicMock]) -> MagicMock:
@@ -32,7 +33,7 @@ def mock_node(dev_id: str, addr: int, node_type: str, mode="auto") -> MagicMock:
     node = MagicMock()
     node.node_type = node_type
     node.name = f"node_{addr}"
-    node.node_id = f"{dev_id}-{addr}"
+    node.node_id = f"{dev_id}_{addr}"
     node.status = {
         "mtemp": "19.5",
         "units": "C",
@@ -129,7 +130,7 @@ def get_device_unique_id(mock_device: Dict[str, Any], entity_type: str) -> str:
 def get_node_unique_id(
     mock_device: Dict[str, Any], mock_node: Dict[str, Any], entity_type: str
 ) -> str:
-    return f"{mock_device['dev_id']}-{mock_node['addr']}_{entity_type}"
+    return f"{mock_device['dev_id']}_{mock_node['addr']}_{entity_type}"
 
 
 def get_entity_id_from_unique_id(hass, platform, unique_id):

@@ -18,7 +18,6 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_LOCKED, ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -29,6 +28,7 @@ from .const import (
     PRESET_SELF_LEARN,
     SMARTBOX_NODES,
 )
+from .entity import SmartBoxNodeEntity
 from .model import (
     SmartboxNode,
     _check_status_key,
@@ -62,16 +62,16 @@ async def async_setup_entry(
     _LOGGER.debug("Finished setting up Smartbox climate platform")
 
 
-class SmartboxHeater(ClimateEntity):
+class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
     """Smartbox heater climate control."""
 
-    _attr_translation_key = "thermostat"
+    _attr_key = "thermostat"
     _attr_name = None
 
     def __init__(self, node: MagicMock | SmartboxNode) -> None:
         """Initialize the sensor."""
         _LOGGER.debug("Setting up Smartbox climate platerqgsdform")
-        self._node = node
+        super().__init__(node=node)
         self._status: dict[str, Any] = {}
         self._available = False  # unavailable until we get an update
         self._enable_turn_on_off_backwards_compatibility = False
@@ -81,9 +81,7 @@ class SmartboxHeater(ClimateEntity):
             | ClimateEntityFeature.TURN_OFF
             | ClimateEntityFeature.TURN_ON
         )
-        self._device_id = self._node.node_id
-        self._attr_unique_id = self._node.node_id
-        _LOGGER.debug("Created node %s unique_id=%s", self.name, self.unique_id)
+        _LOGGER.debug("Created node unique_id=%s", self.unique_id)
 
     async def async_turn_off(self) -> None:
         """Turn off hvac."""
@@ -92,27 +90,6 @@ class SmartboxHeater(ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn on hvac."""
         await self.async_set_hvac_mode(HVACMode.AUTO)
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
-            name=self._node.name,
-            model_id=self._node.device.model_id,
-            sw_version=self._node.device.sw_version,
-            serial_number=self._node.device.serial_number,
-        )
-
-    @property
-    def unique_id(self) -> str:
-        """Return Unique ID string."""
-        return f"{self._node.node_id}_climate"
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name}"
 
     @property
     def supported_features(self) -> int:

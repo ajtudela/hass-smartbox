@@ -1,7 +1,7 @@
 """Support for Smartbox sensor entities."""
 
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -11,9 +11,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_LOCKED, PERCENTAGE, UnitOfEnergy, UnitOfPower
+from homeassistant.const import (
+    ATTR_LOCKED,
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfEnergy,
+    UnitOfPower,
+)
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
@@ -23,6 +28,7 @@ from .const import (
     HEATER_NODE_TYPE_HTR_MOD,
     SMARTBOX_NODES,
 )
+from .entity import SmartBoxNodeEntity
 from .model import SmartboxNode, get_temperature_unit, is_heater_node
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,30 +90,18 @@ async def async_setup_entry(
     _LOGGER.debug("Finished setting up Smartbox sensor platform")
 
 
-class SmartboxSensorBase(SensorEntity):
+class SmartboxSensorBase(SmartBoxNodeEntity, SensorEntity):
     """Base class for Smartbox sensor."""
 
     def __init__(self, node: SmartboxNode | MagicMock) -> None:
         """Initialize the Climate Entity."""
-        self._node = node
+        super().__init__(node=node)
         self._status: dict[str, Any] = {}
         self._available = False  # unavailable until we get an update
         self._samples: dict[str, Any] = {}
         self._last_update: datetime | None = None
         self._time_since_last_update: timedelta | None = None
-        self._device_id = self._node.node_id
-        _LOGGER.debug("Created node %s unique_id=%s", self.name, self.unique_id)
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
-            name=self._node.name,
-            model_id=self._node.device.model_id,
-            sw_version=self._node.device.sw_version,
-            serial_number=self._node.device.serial_number,
-        )
+        _LOGGER.debug("Created node unique_id=%s", self.unique_id)
 
     @property
     def extra_state_attributes(self) -> dict[str, bool]:
@@ -146,18 +140,9 @@ class SmartboxSensorBase(SensorEntity):
 class TemperatureSensor(SmartboxSensorBase):
     """Smartbox heater temperature sensor."""
 
+    _attr_key = "temperature"
     device_class = SensorDeviceClass.TEMPERATURE
     state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name} Temperature"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the sensor."""
-        return f"{self._node.node_id}_temperature"
 
     @property
     def native_value(self) -> float:
@@ -180,19 +165,11 @@ class PowerSensor(SmartboxSensorBase):
     sensor.
     """
 
+    _attr_key = "power"
     device_class = SensorDeviceClass.POWER
     native_unit_of_measurement = UnitOfPower.WATT
     state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name} Power"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the sensor."""
-        return f"{self._node.node_id}_power"
+    entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def native_value(self) -> float:
@@ -203,19 +180,10 @@ class PowerSensor(SmartboxSensorBase):
 class DutyCycleSensor(SmartboxSensorBase):
     """Smartbox heater duty cycle sensor: Represents the duty cycle for the heater."""
 
+    _attr_key = "duty_cycle"
     device_class = SensorDeviceClass.POWER_FACTOR
     native_unit_of_measurement = PERCENTAGE
     state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name} Duty Cycle"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the sensor."""
-        return f"{self._node.node_id}_duty_cycle"
 
     @property
     def native_value(self) -> float:
@@ -226,19 +194,10 @@ class DutyCycleSensor(SmartboxSensorBase):
 class EnergySensor(SmartboxSensorBase):
     """Smartbox heater energy sensor: Represents the energy consumed by the heater."""
 
+    _attr_key = "energy"
     device_class = SensorDeviceClass.ENERGY
     native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
     state_class = SensorStateClass.TOTAL
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name} Energy"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the sensor."""
-        return f"{self._node.node_id}_energy"
 
     @property
     def native_value(self) -> float | None:
@@ -259,19 +218,10 @@ class EnergySensor(SmartboxSensorBase):
 class ChargeLevelSensor(SmartboxSensorBase):
     """Smartbox storage heater charge level sensor."""
 
+    _attr_key = "charge_level"
     device_class = SensorDeviceClass.BATTERY
     native_unit_of_measurement = PERCENTAGE
     state_class = SensorStateClass.MEASUREMENT
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return f"{self._node.name} Charge Level"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the sensor."""
-        return f"{self._node.node_id}_charge_level"
 
     @property
     def native_value(self) -> int:
