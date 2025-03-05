@@ -1,7 +1,6 @@
 """Constants for the Smartbox integration."""
 
-from datetime import timedelta
-from enum import StrEnum
+from enum import Enum, StrEnum
 
 from smartbox import SmartboxNodeType
 
@@ -12,7 +11,8 @@ CONF_DISPLAY_ENTITY_PICTURES = "resailer_entity"
 CONF_TIMEDELTA_POWER = "timedelta_update_power"
 
 DEFAULT_TIMEDELTA_POWER = 60
-
+DEFAULT_BOOST_TIME = 60
+DEFAULT_BOOST_TEMP = 21.0
 GITHUB_ISSUES_URL = "https://github.com/ajtudela/hass-smartbox/issues"
 
 HEATER_NODE_TYPES = [
@@ -21,11 +21,11 @@ HEATER_NODE_TYPES = [
     SmartboxNodeType.HTR_MOD,
 ]
 
-MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=1)
 
 PRESET_FROST = "frost"
 PRESET_SCHEDULE = "schedule"
 PRESET_SELF_LEARN = "self_learn"
+PRESET_BOOST = "boost"
 
 SMARTBOX_DEVICES = "smartbox_devices"
 SMARTBOX_NODES = "smartbox_nodes"
@@ -40,3 +40,11 @@ class HistoryConsumptionStatus(StrEnum):
     START = "start"
     AUTO = "auto"
     OFF = "off"
+
+
+class BoostConfig(Enum):
+    """Boost configuration."""
+
+    UNSUPPORTED = 0
+    BASIC = 1
+    FULL = 2

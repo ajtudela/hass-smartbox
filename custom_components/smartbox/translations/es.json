@@ -66,11 +66,20 @@
       },
       "duty_cycle": {
         "name": "Ciclo de trabajo"
+      },
+      "remaining_boost_duration": {
+        "name": "Duración de refuerzo restante"
       }
     },
     "number": {
       "power_limit": {
         "name": "Límite de potencia"
+      },
+      "config_boost_temperature": {
+        "name": "Temperatura de refuerzo"
+      },
+      "config_boost_duration": {
+        "name": "Duración de refuerzo"
       }
     },
     "switch": {
@@ -82,6 +91,9 @@
       },
       "away_status": {
         "name": "Estado de ausencia"
+      },
+      "boost": {
+        "name": "Boost"
       }
     }
   }

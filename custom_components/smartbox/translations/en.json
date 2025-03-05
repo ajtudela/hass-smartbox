@@ -63,11 +63,20 @@
       },
       "total_consumption": {
         "name": "Total Consumption"
+      },
+      "remaining_boost_duration": {
+        "name": "Remaining Boost Duration"
       }
     },
     "number": {
       "power_limit": {
         "name": "Power Limit"
+      },
+      "config_boost_temperature": {
+        "name": "Boost temperature"
+      },
+      "config_boost_duration": {
+        "name": "Boost duration"
       }
     },
     "switch": {
@@ -79,6 +88,29 @@
       },
       "away_status": {
         "name": "Away Status"
+      },
+      "boost": {
+        "name": "Boost"
+      }
+    }
+  },
+  "services": {
+    "set_boost_params": {
+      "name": "Set boost parameters",
+      "description": "Sets temperature and duration parameters for the boost function.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "The boost switch entity to configure."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "The target temperature to set during boost mode."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "The duration of boost mode in minutes."
+        }
       }
     }
   }

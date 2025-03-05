@@ -12,7 +12,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SmartboxConfigEntry
 from .entity import SmartBoxNodeEntity
-from .model import is_heater_node
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ async def async_setup_entry(
         [
             LockBinarySensor(node, entry)
             for node in entry.runtime_data.nodes
-            if is_heater_node(node)
+            if node.heater_node
         ],
         update_before_add=True,
     )

@@ -21,19 +21,15 @@ from custom_components.smartbox.const import (
 from custom_components.smartbox.model import (
     SmartboxDevice,
     SmartboxNode,
-    _get_htr_mod_preset_mode,
     get_hvac_mode,
     get_target_temperature,
     get_temperature_unit,
-    is_heater_node,
-    is_supported_node,
     set_hvac_mode_args,
     set_preset_mode_status_update,
     set_temperature_args,
 )
 
 from .const import MOCK_SMARTBOX_DEVICE_INFO
-from .mocks import mock_node
 from .test_utils import assert_log_message
 
 _LOGGER = logging.getLogger(__name__)
@@ -246,24 +242,6 @@ async def test_smartbox_node(hass):
     node.update_setup({})
     with pytest.raises(KeyError):
         node.true_radiant
-
-
-def test_is_heater_node():
-    dev_id = "device_1"
-    addr = 1
-    assert is_heater_node(mock_node(dev_id, addr, SmartboxNodeType.HTR))
-    assert is_heater_node(mock_node(dev_id, addr, SmartboxNodeType.HTR_MOD))
-    assert is_heater_node(mock_node(dev_id, addr, SmartboxNodeType.ACM))
-    assert not is_heater_node(mock_node(dev_id, addr, "sldkfjsd"))
-
-
-def test_is_supported_node():
-    dev_id = "device_1"
-    addr = 1
-    assert is_supported_node(mock_node(dev_id, addr, SmartboxNodeType.HTR))
-    assert is_supported_node(mock_node(dev_id, addr, SmartboxNodeType.HTR_MOD))
-    assert is_supported_node(mock_node(dev_id, addr, SmartboxNodeType.ACM))
-    assert not is_supported_node(mock_node(dev_id, addr, "oijijr"))
 
 
 def test_get_target_temperature():
@@ -575,42 +553,6 @@ def test_get_temperature_unit():
     with pytest.raises(ValueError) as exc_info:
         get_temperature_unit({"units": "K"})
     assert "Unknown temp unit K" in exc_info.exconly()
-
-
-def test_get_htr_mod_preset_mode():
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "manual", "comfort")
-        == PRESET_COMFORT
-    )
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "manual", "eco") == PRESET_ECO
-    )
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "manual", "ice")
-        == PRESET_FROST
-    )
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "auto", "") == PRESET_SCHEDULE
-    )
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "presence", "")
-        == PRESET_ACTIVITY
-    )
-    assert (
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "self_learn", "")
-        == PRESET_SELF_LEARN
-    )
-
-    with pytest.raises(ValueError) as exc_info:
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "manual", "unknown")
-    assert (
-        "Unexpected 'selected_temp' value selected_temp found for htr_mod"
-        in exc_info.exconly()
-    )
-
-    with pytest.raises(ValueError) as exc_info:
-        _get_htr_mod_preset_mode(SmartboxNodeType.HTR_MOD, "unknown_mode", "")
-    assert "Unknown smartbox node mode unknown_mode" in exc_info.exconly()
 
 
 async def test_update_samples(hass):

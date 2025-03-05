@@ -27,6 +27,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -41,7 +42,7 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity import SmartBoxNodeEntity
-from .model import SmartboxNode, get_temperature_unit, is_heater_node
+from .model import SmartboxNode, get_temperature_unit
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)
@@ -59,7 +60,7 @@ async def async_setup_entry(
         [
             TemperatureSensor(node, entry)
             for node in entry.runtime_data.nodes
-            if is_heater_node(node)
+            if node.heater_node
         ],
         update_before_add=True,
     )
@@ -93,11 +94,18 @@ async def async_setup_entry(
         [
             ChargeLevelSensor(node, entry)
             for node in entry.runtime_data.nodes
-            if is_heater_node(node) and node.node_type == SmartboxNodeType.ACM
+            if node.heater_node and node.node_type == SmartboxNodeType.ACM
         ],
         update_before_add=True,
     )
-
+    async_add_entities(
+        [
+            BoostRemainingDurationSensor(node, entry)
+            for node in entry.runtime_data.nodes
+            if node.boost_available
+        ],
+        update_before_add=True,
+    )
     _LOGGER.debug("Finished setting up Smartbox sensor platform")
 
 
@@ -339,3 +347,17 @@ class ChargeLevelSensor(SmartboxSensorBase):
     def native_value(self) -> int:
         """Return the native value of the sensor."""
         return self._status["charge_level"]
+
+
+class BoostRemainingDurationSensor(SmartboxSensorBase):
+    """Smartbox storage heater charge level sensor."""
+
+    _attr_key = "remaining_boost_duration"
+    device_class = SensorDeviceClass.DURATION
+    native_unit_of_measurement = UnitOfTime.SECONDS
+    state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> int:
+        """Return the native value of the sensor."""
+        return self._node.remaining_boost_time

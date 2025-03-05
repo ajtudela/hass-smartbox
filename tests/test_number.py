@@ -16,7 +16,7 @@ from .mocks import (
 async def test_power_limit(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 1
+    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 17
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 

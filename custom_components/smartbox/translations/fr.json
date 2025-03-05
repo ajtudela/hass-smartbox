@@ -66,11 +66,20 @@
       },
       "duty_cycle": {
         "name": "Cycle de service"
+      },
+      "remaining_boost_duration": {
+        "name": "Durée de boost restante"
       }
     },
     "number": {
       "power_limit": {
         "name": "Limite de puissance"
+      },
+      "config_boost_temperature": {
+        "name": "Température de boost"
+      },
+      "config_boost_duration": {
+        "name": "Durée de boost"
       }
     },
     "switch": {
@@ -82,6 +91,9 @@
       },
       "away_status": {
         "name": "Statut d'Absence"
+      },
+      "boost": {
+        "name": "Boost"
       }
     }
   }

@@ -1,11 +1,14 @@
 """Models for Smartbox."""
 
 import asyncio
+from datetime import datetime, timedelta
 import logging
+import math
 import time
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+from dateutil import tz
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
     PRESET_AWAY,
@@ -21,12 +24,15 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from smartbox import AsyncSmartboxSession, SmartboxNodeType, UpdateManager
 
 from .const import (
+    DEFAULT_BOOST_TEMP,
+    DEFAULT_BOOST_TIME,
     DOMAIN,
     GITHUB_ISSUES_URL,
     HEATER_NODE_TYPES,
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
+    BoostConfig,
 )
 from .types import Device, FactoryOptionsDict, Node, SamplesDict, SetupDict, StatusDict
 
@@ -378,6 +384,14 @@ class SmartboxNode:
         )
         self._setup["true_radiant_enabled"] = true_radiant
 
+    async def set_extra_options(self, options: dict[str, Any]) -> None:
+        """Set window mode."""
+        await self._session.set_node_setup(
+            self._device.dev_id,
+            self._node_info,
+            {"extra_options": options},
+        )
+
     def is_heating(self, status: dict[str, Any]) -> str:
         """Is heating."""
         return (
@@ -420,15 +434,64 @@ class SmartboxNode:
         """Get the energy used."""
         return self._samples[-1]["counter"]
 
+    @property
+    def boost_config(self) -> BoostConfig:
+        """Get the boost config."""
+        _boost_config = self._setup.get("factory_options", {}).get("boost_config", 0)
+        return BoostConfig(_boost_config)
 
-def is_heater_node(node: SmartboxNode | MagicMock) -> bool:
-    """Is this node a heater."""
-    return node.node_type in HEATER_NODE_TYPES
+    @property
+    def boost(self) -> bool:
+        """Boost status."""
+        return self.status.get("boost", False)
 
+    @property
+    def boost_available(self) -> bool:
+        """Is boost available."""
+        return bool(self.boost_config)
 
-def is_supported_node(node: SmartboxNode | MagicMock) -> bool:
-    """Is this node supported."""
-    return is_heater_node(node)
+    @property
+    def heater_node(self) -> bool:
+        """Is this node a heater."""
+        return self.node_type in HEATER_NODE_TYPES
+
+    @property
+    def boost_time(self) -> float:
+        """Get the boost time."""
+        return float(
+            self.setup.get("extra_options", {}).get("boost_time", DEFAULT_BOOST_TIME)
+        )
+
+    @property
+    def boost_temp(self) -> float:
+        """Get the boost time."""
+        return float(
+            self.setup.get("extra_options", {}).get("boost_temp", DEFAULT_BOOST_TEMP)
+        )
+
+    @property
+    def supported_node(self) -> bool:
+        """Is this node supported."""
+        return self.heater_node
+
+    @property
+    def boost_end_min(self) -> int:
+        """Get the boost end time."""
+        return self.status.get("boost_end_min", 0)
+
+    @property
+    def remaining_boost_time(self) -> int:
+        """Return the remaining boost time."""
+        if not self.boost:
+            return 0
+        boost_end = self.boost_end_min
+        today = datetime.now(tz.tzutc()) + timedelta(hours=1)
+        boost_end_min = boost_end % 60
+        boost_end_hour = math.trunc(boost_end / 60)
+        boost_end_datetime = today.replace(
+            hour=boost_end_hour, minute=boost_end_min
+        ).astimezone(tz.tzlocal())
+        return (boost_end_datetime - today).total_seconds()
 
 
 def get_temperature_unit(status: StatusDict) -> None | UnitOfTemperature:
@@ -533,6 +596,8 @@ def set_temperature_args(
 
 def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
     """Get the mode of HVAC."""
+    if status.get("boost", False):
+        return HVACMode.HEAT
     _check_status_key("mode", node_type, status)
     if status["mode"] == "off" or (
         node_type == SmartboxNodeType.HTR_MOD and not status["on"]
@@ -580,29 +645,6 @@ def set_hvac_mode_args(
     if hvac_mode == HVACMode.AUTO:
         return {"mode": "auto"}
     raise ValueError(error_msg)
-
-
-def _get_htr_mod_preset_mode(node_type: str, mode: str, selected_temp: str) -> str:
-    if mode == "manual":
-        if selected_temp == "comfort":
-            return PRESET_COMFORT
-        if selected_temp == "eco":
-            return PRESET_ECO
-        if selected_temp == "ice":
-            return PRESET_FROST
-        msg = (
-            f"'Unexpected 'selected_temp' value {'selected_temp'} found for "
-            f"{node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
-        )
-        raise ValueError(msg)
-    if mode == "auto":
-        return PRESET_SCHEDULE
-    if mode == "presence":
-        return PRESET_ACTIVITY
-    if mode == "self_learn":
-        return PRESET_SELF_LEARN
-    msg = f"Unknown smartbox node mode {mode}"
-    raise ValueError(msg)
 
 
 def set_preset_mode_status_update(

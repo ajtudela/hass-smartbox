@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
     PRESET_AWAY,
+    PRESET_BOOST,
     PRESET_COMFORT,
     PRESET_ECO,
     PRESET_HOME,
@@ -21,16 +22,20 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import SmartboxConfigEntry
-from .const import PRESET_FROST, PRESET_SCHEDULE, PRESET_SELF_LEARN, SmartboxNodeType
+from .const import (
+    GITHUB_ISSUES_URL,
+    PRESET_FROST,
+    PRESET_SCHEDULE,
+    PRESET_SELF_LEARN,
+    SmartboxNodeType,
+)
 from .entity import SmartBoxNodeEntity
 from .model import (
     SmartboxNode,
     _check_status_key,
-    _get_htr_mod_preset_mode,
     get_hvac_mode,
     get_target_temperature,
     get_temperature_unit,
-    is_heater_node,
     set_hvac_mode_args,
     set_preset_mode_status_update,
     set_temperature_args,
@@ -51,7 +56,7 @@ async def async_setup_entry(
         [
             SmartboxHeater(node, entry)
             for node in entry.runtime_data.nodes
-            if is_heater_node(node)
+            if node.heater_node
         ],
         update_before_add=True,
     )
@@ -64,20 +69,18 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
     _attr_key = "thermostat"
     _attr_name = None
     _attr_websocket_event = "status"
-    _attr_should_poll = True
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.PRESET_MODE
+        | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.TURN_ON
+    )
 
     def __init__(self, node: MagicMock | SmartboxNode, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         _LOGGER.debug("Setting up Smartbox climate platerqgsdform")
         super().__init__(node=node, entry=entry)
         self._status: dict[str, Any] = {}
-        self._enable_turn_on_off_backwards_compatibility = False
-        self._supported_features = (
-            ClimateEntityFeature.TARGET_TEMPERATURE
-            | ClimateEntityFeature.PRESET_MODE
-            | ClimateEntityFeature.TURN_OFF
-            | ClimateEntityFeature.TURN_ON
-        )
         _LOGGER.debug("Created node unique_id=%s", self.unique_id)
 
     async def async_turn_off(self) -> None:
@@ -89,19 +92,12 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         await self.async_set_hvac_mode(HVACMode.AUTO)
 
     @property
-    def supported_features(self) -> ClimateEntityFeature:
-        """Return the list of supported features."""
-        return self._supported_features
-
-    @property
     def temperature_unit(self) -> str:
         """Return the unit of measurement."""
         unit = get_temperature_unit(self._status)
         if unit is not None:
             return unit
-        return (
-            UnitOfTemperature.CELSIUS  # climate sensors need a temperature unit on construction
-        )
+        return UnitOfTemperature.CELSIUS
 
     @property
     def current_temperature(self) -> float:
@@ -123,9 +119,17 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         """Return current operation ie. heat or idle."""
-        return (
-            HVACAction.HEATING if self._node.is_heating(self._status) else HVACAction.IDLE
-        )
+        if self._node.is_heating(self._status):
+            return HVACAction.HEATING
+        if (
+            self._node.status["mode"] == "off"
+            or (
+                self._node.node_type == SmartboxNodeType.HTR_MOD
+                and not self._node.status["on"]
+            )
+        ) and not self._node.boost:
+            return HVACAction.OFF
+        return HVACAction.IDLE
 
     @property
     def hvac_mode(self) -> HVACMode | None:
@@ -144,35 +148,60 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         await self._node.set_status(**status_args)
 
     @property
-    def preset_mode(self) -> str:
+    def preset_mode(self) -> str:  # noqa: PLR0911
         """Get preset mode."""
         if self._node.away:
             return PRESET_AWAY
+        if self._node.boost:
+            return PRESET_BOOST
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
             _check_status_key("mode", self._node.node_type, self._status)
             _check_status_key("selected_temp", self._node.node_type, self._status)
-            return _get_htr_mod_preset_mode(
-                self._node.node_type,
-                self._status["mode"],
-                self._status["selected_temp"],
-            )
+            mode = self._status["mode"]
+            selected_temp = self._status["selected_temp"]
+            if mode == "manual":
+                if selected_temp == "comfort":
+                    return PRESET_COMFORT
+                if selected_temp == "eco":
+                    return PRESET_ECO
+                if selected_temp == "ice":
+                    return PRESET_FROST
+                msg = (
+                    f"'Unexpected 'selected_temp' value {'selected_temp'} found for "
+                    f"{self._node.node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
+                )
+                raise ValueError(msg)
+            if mode == "auto":
+                return PRESET_SCHEDULE
+            if mode == "presence":
+                return PRESET_ACTIVITY
+            if mode == "self_learn":
+                return PRESET_SELF_LEARN
+            msg = f"Unknown smartbox node mode {mode}"
+            raise ValueError(msg)
+
         return PRESET_HOME
 
     @property
     def preset_modes(self) -> list[str]:
         """Get the preset_modes."""
+        default_preset_modes = [PRESET_AWAY]
+        if self._node.boost_available:
+            default_preset_modes.append(PRESET_BOOST)
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
-            return [
-                PRESET_ACTIVITY,
-                PRESET_AWAY,
-                PRESET_COMFORT,
-                PRESET_ECO,
-                PRESET_FROST,
-                PRESET_SCHEDULE,
-                PRESET_SELF_LEARN,
-            ]
-
-        return [PRESET_AWAY, PRESET_HOME]
+            default_preset_modes.extend(
+                [
+                    PRESET_ACTIVITY,
+                    PRESET_COMFORT,
+                    PRESET_ECO,
+                    PRESET_FROST,
+                    PRESET_SCHEDULE,
+                    PRESET_SELF_LEARN,
+                ]
+            )
+        else:
+            default_preset_modes.append(PRESET_HOME)
+        return default_preset_modes
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the mode."""
@@ -181,6 +210,24 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             return
         if self._node.away:
             await self._node.update_device_away_status(away=False)
+        if preset_mode == PRESET_BOOST:
+            # current_extra_options = self._node.setup.get("extra_options", {}).copy()
+            # boost_temp = self._node.setup.get("extra_options", {}).get(
+            #     "boost_temp", "21.0"
+            # )
+            # boost_time = self._node.setup.get("extra_options", {}).get("boost_time", 60)
+            # boost_end_min = self._node.status.get("boost_end_min", 0)
+            # print(
+            #     {
+            #         "boost_temperature": float(boost_temp),
+            #         "boost_duration_minutes": boost_time,
+            #         "time_remaining": boost_end_min,
+            #     }
+            # )
+            # # current_extra_options = self._node.setup.get("extra_options", {}).copy()
+            # # await self._node.set_boost_mode({"extra_options": current_extra_options})
+            await self._node.set_status(boost=True)
+            return
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
             status_update = set_preset_mode_status_update(
                 self._node.node_type, self._status, preset_mode
