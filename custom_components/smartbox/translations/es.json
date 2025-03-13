@@ -67,8 +67,8 @@
       "duty_cycle": {
         "name": "Ciclo de trabajo"
       },
-      "remaining_boost_duration": {
-        "name": "Duración de refuerzo restante"
+      "boost_end_time": {
+        "name": "Duración de refuerzo"
       }
     },
     "number": {

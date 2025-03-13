@@ -13,7 +13,7 @@ from smartbox import AsyncSmartboxSession
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
 
 from .const import CONF_API_NAME
-from .model import SmartboxDevice, SmartboxNode, get_devices
+from .models import SmartboxDevice, SmartboxNode, get_devices
 
 __version__ = "2.1.2"
 
@@ -91,6 +91,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         _LOGGER.debug("Configuring nodes for device %s %s", device.dev_id, nodes)
         entry.runtime_data.nodes.extend(nodes)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     entry.async_on_unload(entry.add_update_listener(update_listener))
     return True
 

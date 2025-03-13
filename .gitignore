@@ -138,3 +138,5 @@ dmypy.json
 .pyre/
 
 junit.xml
+.DS_Store
+config

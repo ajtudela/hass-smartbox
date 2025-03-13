@@ -34,9 +34,15 @@ from .const import (
     PRESET_SELF_LEARN,
     BoostConfig,
 )
-from .types import Device, FactoryOptionsDict, Node, SamplesDict, SetupDict, StatusDict
 
 _LOGGER = logging.getLogger(__name__)
+
+FactoryOptionsDict = dict[str, bool]
+SetupDict = dict[str, Any]
+StatusDict = dict[str, Any]
+SamplesDict = dict[str, Any]
+Node = dict[str, Any]
+Device = dict[str, Any]
 
 
 class SmartboxDevice:
@@ -72,9 +78,9 @@ class SmartboxDevice:
         """Initilaise nodes."""
         self = cls(device=device, session=session, hass=hass)
         # Would do in __init__, but needs to be a coroutine
-        self._connected_status = (await self._session.get_device_connected(self.dev_id))[
-            "connected"
-        ]
+        self._connected_status = (
+            await self._session.get_device_connected(self.dev_id)
+        )["connected"]
         session_nodes: list[Node] = await self._session.get_nodes(self.dev_id)
 
         for node_info in session_nodes:
@@ -82,7 +88,9 @@ class SmartboxDevice:
                 self._power_limit = await self._session.get_device_power_limit(
                     self.dev_id
                 )
-            self._away = (await self._session.get_device_away_status(self.dev_id))["away"]
+            self._away = (await self._session.get_device_away_status(self.dev_id))[
+                "away"
+            ]
             node: SmartboxNode = await SmartboxNode.create(
                 device=self, node_info=node_info, session=self._session
             )
@@ -156,7 +164,9 @@ class SmartboxDevice:
                     self._hass, f"{DOMAIN}_{node.node_id}_setup", node_setup
                 )
         else:
-            _LOGGER.error("Received setup update for unknown node %s %s", node_type, addr)
+            _LOGGER.error(
+                "Received setup update for unknown node %s %s", node_type, addr
+            )
 
     @property
     def device(self) -> Device:

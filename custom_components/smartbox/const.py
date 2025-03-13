@@ -6,6 +6,8 @@ from smartbox import SmartboxNodeType
 
 DOMAIN = "smartbox"
 
+ATTR_DURATION = "duration"
+SERVICE_SET_BOOST_PARAMS = "set_boost_params"
 CONF_API_NAME = "api_name"
 CONF_DISPLAY_ENTITY_PICTURES = "resailer_entity"
 CONF_TIMEDELTA_POWER = "timedelta_update_power"

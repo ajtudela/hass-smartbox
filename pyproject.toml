@@ -51,10 +51,8 @@ warn_unused_configs = true
 
 [tool.ruff]
 target-version = "py313"
-fix = true
-line-length = 90
-
-
+#fix = true
+#line-length = 90
 
 [tool.ruff.lint]
 select = ["ALL"]

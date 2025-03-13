@@ -26,15 +26,15 @@ from .test_utils import simple_celsius_to_fahrenheit
 pytest_plugins = "pytest_homeassistant_custom_component"
 
 
-# This fixture enables loading custom integrations in all tests.
-# Remove to enable selective use of this fixture
-@pytest.fixture(name="auto_enable_custom_integrations", autouse=True)
-def auto_enable_custom_integrations(
-    recorder_mock,
-    hass: Any,  # noqa: ANN401
-    enable_custom_integrations: Any,  # noqa: ANN401
-) -> None:
-    """Enable custom integrations defined in the test dir."""
+# Test initialization must ensure custom_components are enabled
+# but we can't autouse a simple fixture for that since the recorder
+# need to be initialized first
+@pytest.fixture(autouse=True)
+def auto_enable(request: pytest.FixtureRequest):
+    if "recorder_mock" in request.fixturenames:
+        request.getfixturevalue("recorder_mock")
+    hass = request.getfixturevalue("hass")
+    hass.data.pop("custom_components")
 
 
 # This fixture is used to prevent HomeAssistant from attempting to create and

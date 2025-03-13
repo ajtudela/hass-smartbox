@@ -81,7 +81,7 @@ def _check_state(hass, mock_node, mock_node_status, state):
     )
 
 
-async def test_basic_climate(hass, mock_smartbox, config_entry, caplog):
+async def test_basic_climate(hass, mock_smartbox, config_entry, caplog, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 7

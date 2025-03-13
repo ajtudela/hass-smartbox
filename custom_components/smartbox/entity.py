@@ -8,7 +8,7 @@ from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from . import SmartboxConfigEntry
 from .const import CONF_DISPLAY_ENTITY_PICTURES, DOMAIN
-from .model import SmartboxDevice, SmartboxNode
+from .models import SmartboxDevice, SmartboxNode
 
 
 class DefaultSmartBoxEntity(Entity):

@@ -18,7 +18,7 @@ from custom_components.smartbox.const import (
     PRESET_SELF_LEARN,
     SmartboxNodeType,
 )
-from custom_components.smartbox.model import (
+from custom_components.smartbox.models import (
     SmartboxDevice,
     SmartboxNode,
     get_hvac_mode,
@@ -43,7 +43,7 @@ async def test_smartbox_device_dev_data_updates(hass):
     mock_node_2 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.model.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -72,7 +72,7 @@ async def test_smartbox_device_connected_updates(hass):
     mock_node_2 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.model.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -97,7 +97,7 @@ async def test_smartbox_device_node_status_update(hass, caplog):
     mock_node_3 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.model.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -133,7 +133,7 @@ async def test_smartbox_device_node_status_update(hass, caplog):
         mock_node_2.update_status.assert_not_called()
         assert_log_message(
             caplog,
-            "custom_components.smartbox.model",
+            "custom_components.smartbox.models",
             logging.ERROR,
             "Received status update for unknown node htr 3",
         )
@@ -147,7 +147,7 @@ async def test_smartbox_device_node_setup_update(hass, caplog):
     mock_node_2 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.model.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -175,7 +175,7 @@ async def test_smartbox_device_node_setup_update(hass, caplog):
         mock_node_2.update_setup.assert_not_called()
         assert_log_message(
             caplog,
-            "custom_components.smartbox.model",
+            "custom_components.smartbox.models",
             logging.ERROR,
             "Received setup update for unknown node htr 3",
         )
@@ -650,7 +650,7 @@ def test_smartbox_device_property():
     mock_device_info = MOCK_SMARTBOX_DEVICE_INFO[dev_id]
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.model.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(mock_device_info, mock_session, hass=None)

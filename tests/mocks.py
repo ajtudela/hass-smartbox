@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry
 from smartbox.resailer import SmartboxResailer
 
 from custom_components.smartbox.const import DOMAIN, HEATER_NODE_TYPES, SmartboxNodeType
-from custom_components.smartbox.types import SetupDict, StatusDict
+from custom_components.smartbox.models import SetupDict, StatusDict
 from tests.const import CONF_DEVICE_IDS
 
 _LOGGER = logging.getLogger(__name__)

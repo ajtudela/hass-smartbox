@@ -39,7 +39,7 @@ def _check_temp_state(hass, mock_node_status, state):
 
 
 @pytest.mark.asyncio
-async def test_basic_temp(hass, mock_smartbox, config_entry):
+async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
@@ -64,7 +64,8 @@ async def test_basic_temp(hass, mock_smartbox, config_entry):
             )
             assert state.name == f"{mock_node['name']} Temperature"
             assert (
-                state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Temperature"
+                state.attributes[ATTR_FRIENDLY_NAME]
+                == f"{mock_node['name']} Temperature"
             )
             unique_id = get_node_unique_id(mock_device, mock_node, "temperature")
             assert entity_id == get_entity_id_from_unique_id(
@@ -105,7 +106,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry):
 
 
 @pytest.mark.asyncio
-async def test_basic_power(hass, mock_smartbox, config_entry):
+async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
@@ -180,7 +181,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry):
 
 
 @pytest.mark.asyncio
-async def test_unavailable(hass, mock_smartbox_unavailable):
+async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="test_username_1",
@@ -214,7 +215,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable):
 
 
 @pytest.mark.asyncio
-async def test_basic_charge_level(hass, mock_smartbox, config_entry):
+async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33

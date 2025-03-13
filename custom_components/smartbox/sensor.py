@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 import logging
+import math
 import time
 from unittest.mock import MagicMock
 
@@ -27,11 +28,11 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
     UnitOfTemperature,
-    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.util import dt
 
 from . import SmartboxConfigEntry
 from .const import (
@@ -42,7 +43,7 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity import SmartBoxNodeEntity
-from .model import SmartboxNode, get_temperature_unit
+from .models import SmartboxNode, get_temperature_unit
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)
@@ -100,7 +101,7 @@ async def async_setup_entry(
     )
     async_add_entities(
         [
-            BoostRemainingDurationSensor(node, entry)
+            BoostEndTimeSensor(node, entry)
             for node in entry.runtime_data.nodes
             if node.boost_available
         ],
@@ -319,9 +320,13 @@ class TotalConsumptionSensor(SmartboxSensorBase):
         statistics: list[StatisticData] = []
         for entry in samples_data:
             counter = float(entry["counter"])
-            start = datetime.fromtimestamp(entry["t"], tz.tzlocal()) - timedelta(hours=1)
+            start = datetime.fromtimestamp(entry["t"], tz.tzlocal()) - timedelta(
+                hours=1
+            )
             if start.minute == 0:
-                statistics.append(StatisticData(start=start, sum=counter, state=counter))
+                statistics.append(
+                    StatisticData(start=start, sum=counter, state=counter)
+                )
         if statistics and history_status != HistoryConsumptionStatus.OFF:
             metadata: StatisticMetaData = StatisticMetaData(
                 has_mean=False,
@@ -349,15 +354,21 @@ class ChargeLevelSensor(SmartboxSensorBase):
         return self._status["charge_level"]
 
 
-class BoostRemainingDurationSensor(SmartboxSensorBase):
-    """Smartbox storage heater charge level sensor."""
+class BoostEndTimeSensor(SmartboxSensorBase):
+    """Smartbox end boost time sensor."""
 
-    _attr_key = "remaining_boost_duration"
-    device_class = SensorDeviceClass.DURATION
-    native_unit_of_measurement = UnitOfTime.SECONDS
-    state_class = SensorStateClass.MEASUREMENT
+    _attr_key = "boost_end_time"
+    device_class = SensorDeviceClass.TIMESTAMP
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> datetime | None:
         """Return the native value of the sensor."""
-        return self._node.remaining_boost_time
+        if not self._node.boost:
+            return None
+        boost_end = self._node.boost_end_min
+        boost_end_time = dt.now().replace(
+            hour=math.trunc(boost_end / 60), minute=boost_end % 60
+        )
+        if boost_end_time < dt.now():
+            boost_end_time = boost_end_time + timedelta(days=1)
+        return boost_end_time

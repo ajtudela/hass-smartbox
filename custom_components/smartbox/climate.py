@@ -30,7 +30,7 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity import SmartBoxNodeEntity
-from .model import (
+from .models import (
     SmartboxNode,
     _check_status_key,
     get_hvac_mode,
@@ -211,21 +211,6 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         if self._node.away:
             await self._node.update_device_away_status(away=False)
         if preset_mode == PRESET_BOOST:
-            # current_extra_options = self._node.setup.get("extra_options", {}).copy()
-            # boost_temp = self._node.setup.get("extra_options", {}).get(
-            #     "boost_temp", "21.0"
-            # )
-            # boost_time = self._node.setup.get("extra_options", {}).get("boost_time", 60)
-            # boost_end_min = self._node.status.get("boost_end_min", 0)
-            # print(
-            #     {
-            #         "boost_temperature": float(boost_temp),
-            #         "boost_duration_minutes": boost_time,
-            #         "time_remaining": boost_end_min,
-            #     }
-            # )
-            # # current_extra_options = self._node.setup.get("extra_options", {}).copy()
-            # # await self._node.set_boost_mode({"extra_options": current_extra_options})
             await self._node.set_status(boost=True)
             return
         if self._node.node_type == SmartboxNodeType.HTR_MOD:

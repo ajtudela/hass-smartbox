@@ -67,8 +67,8 @@
       "duty_cycle": {
         "name": "Cycle de service"
       },
-      "remaining_boost_duration": {
-        "name": "Durée de boost restante"
+      "boost_end_time": {
+        "name": "Fin de boost"
       }
     },
     "number": {

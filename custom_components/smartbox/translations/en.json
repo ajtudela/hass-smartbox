@@ -64,8 +64,8 @@
       "total_consumption": {
         "name": "Total Consumption"
       },
-      "remaining_boost_duration": {
-        "name": "Remaining Boost Duration"
+      "boost_end_time": {
+        "name": "Boost end"
       }
     },
     "number": {
