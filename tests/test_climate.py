@@ -9,6 +9,7 @@ from homeassistant.components.climate.const import (
     DOMAIN as CLIMATE_DOMAIN,
     PRESET_ACTIVITY,
     PRESET_AWAY,
+    PRESET_BOOST,
     PRESET_COMFORT,
     PRESET_ECO,
     PRESET_HOME,
@@ -837,3 +838,41 @@ async def test_turn_off(hass, mock_smartbox, config_entry):
                 assert not mock_node_status["on"]
             else:
                 assert mock_node_status["mode"] == "off"
+
+
+async def test_boost_preset(hass, mock_smartbox, config_entry):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 7
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+
+    assert DOMAIN in hass.config.components
+
+    # Device 2 node 1 starts in manual mode, selected_temp comfort
+    mock_device_2 = (await mock_smartbox.session.get_devices())[1]
+    mock_device_2_node_2 = (
+        await mock_smartbox.session.get_nodes(mock_device_2["dev_id"])
+    )[2]
+    entity_id_device_2_node_2 = get_climate_entity_id(mock_device_2_node_2)
+
+    state = hass.states.get(entity_id_device_2_node_2)
+    assert state.attributes[ATTR_PRESET_MODE] == PRESET_BOOST
+
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_PRESET_MODE,
+        {
+            ATTR_PRESET_MODE: PRESET_BOOST,
+            ATTR_ENTITY_ID: entity_id_device_2_node_2,
+        },
+        blocking=True,
+    )
+
+    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_2)
+    state = hass.states.get(entity_id_device_2_node_2)
+    assert state.attributes[ATTR_PRESET_MODE] == PRESET_BOOST
+    mock_node_status = await mock_smartbox.session.get_status(
+        mock_device_2["dev_id"], mock_device_2_node_2
+    )
+    assert mock_node_status["mode"] == "auto"

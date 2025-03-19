@@ -144,13 +144,11 @@ class BoostSwitch(SmartBoxNodeEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on boost mode."""
         _LOGGER.debug("Activating boost mode for %s", self._node.name)
-        # Use the device's native boost function
         await self._node.set_status(boost=True)
 
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off boost mode."""
         _LOGGER.debug("Deactivating boost mode for %s", self._node.name)
-        # Turn off the device's native boost function
         await self._node.set_status(boost=False)
 
     @property

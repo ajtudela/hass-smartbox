@@ -480,11 +480,6 @@ class SmartboxNode:
         )
 
     @property
-    def supported_node(self) -> bool:
-        """Is this node supported."""
-        return self.heater_node
-
-    @property
     def boost_end_min(self) -> int:
         """Get the boost end time."""
         return self.status.get("boost_end_min", 0)

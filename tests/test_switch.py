@@ -12,6 +12,8 @@ from custom_components.smartbox.const import DOMAIN
 from .mocks import (
     get_away_status_switch_entity_id,
     get_away_status_switch_entity_name,
+    get_boost_switch_entity_id,
+    get_boost_switch_entity_name,
     get_entity_id_from_unique_id,
     get_node_unique_id,
     get_object_id,
@@ -43,7 +45,9 @@ async def test_away_status(hass, mock_smartbox, config_entry):
         )
         assert state.entity_id.startswith(get_away_status_switch_entity_id(mock_node))
         assert state.name == f"{mock_node['name']} Away Status"
-        assert state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Away Status"
+        assert (
+            state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Away Status"
+        )
         unique_id = get_node_unique_id(mock_device, mock_node, "away_status")
         assert entity_id == get_entity_id_from_unique_id(hass, SWITCH_DOMAIN, unique_id)
 
@@ -127,7 +131,8 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
             )
             assert state.name == f"{mock_node['name']} Window Mode"
             assert (
-                state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Window Mode"
+                state.attributes[ATTR_FRIENDLY_NAME]
+                == f"{mock_node['name']} Window Mode"
             )
             unique_id = get_node_unique_id(mock_device, mock_node, "window_mode")
             assert entity_id == get_entity_id_from_unique_id(
@@ -226,7 +231,9 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
 
             # Check true_radiant is correct
             assert (
-                state.state == "on" if mock_node_setup["true_radiant_enabled"] else "off"
+                state.state == "on"
+                if mock_node_setup["true_radiant_enabled"]
+                else "off"
             )
 
             # Turn on true_radiant via socket
@@ -240,6 +247,95 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
             # Turn off true_radiant via socket
             mock_smartbox.generate_socket_setup_update(
                 mock_device, mock_node, {"true_radiant_enabled": False}
+            )
+            await hass.helpers.entity_component.async_update_entity(entity_id)
+            state = hass.states.get(entity_id)
+            assert state.state == "off"
+
+            # Turn on via HA
+            await hass.services.async_call(
+                SWITCH_DOMAIN,
+                SERVICE_TURN_ON,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True,
+            )
+            await hass.helpers.entity_component.async_update_entity(entity_id)
+            state = hass.states.get(entity_id)
+            assert state.state == "on"
+
+            # Turn off via HA
+            await hass.services.async_call(
+                SWITCH_DOMAIN,
+                SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: entity_id},
+                blocking=True,
+            )
+            await hass.helpers.entity_component.async_update_entity(entity_id)
+            state = hass.states.get(entity_id)
+            assert state.state == "off"
+
+
+async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 24
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+
+    assert DOMAIN in hass.config.components
+
+    for mock_device in await mock_smartbox.session.get_devices():
+        for mock_node in await mock_smartbox.session.get_nodes(mock_device["dev_id"]):
+            entity_id = get_boost_switch_entity_id(mock_node)
+            mock_node_setup = await mock_smartbox.session.get_node_setup(
+                mock_device["dev_id"], mock_node
+            )
+            # if "factory_options" not in mock_node_setup or not mock_node_setup[
+            #     "factory_options"
+            # ].get("boost_available", 2):
+            #     # if not mock_node_setup.get("boost_available", False):
+            #     # We shouldn't have created a switch entity for this
+            #     assert hass.states.get(entity_id) is None
+            #     assert_log_message(
+            #         caplog,
+            #         "custom_components.smartbox.switch",
+            #         logging.INFO,
+            #         f"Boost mode not available for node {mock_node['name']}",
+            #     )
+            #     continue
+
+            state = hass.states.get(entity_id)
+            assert state is not None
+
+            # check basic properties
+            assert state.object_id.startswith(
+                get_object_id(get_boost_switch_entity_name(mock_node))
+            )
+            assert state.name == f"{mock_node['name']} Boost"
+            assert state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Boost"
+            unique_id = get_node_unique_id(mock_device, mock_node, "boost")
+            assert entity_id == get_entity_id_from_unique_id(
+                hass, SWITCH_DOMAIN, unique_id
+            )
+            mock_node_status = await mock_smartbox.session.get_status(
+                mock_device["dev_id"], mock_node
+            )
+            # Check boost is correct
+            assert (
+                state.state == "on" if mock_node_status.get("boost", False) else "off"
+            )
+
+            # Turn on boost via socket
+            mock_smartbox.generate_socket_status_update(
+                mock_device, mock_node, {"boost": True}
+            )
+            await hass.helpers.entity_component.async_update_entity(entity_id)
+            state = hass.states.get(entity_id)
+            assert state.state == "on"
+
+            # Turn off boost via socket
+            mock_smartbox.generate_socket_status_update(
+                mock_device, mock_node, {"boost": False}
             )
             await hass.helpers.entity_component.async_update_entity(entity_id)
             state = hass.states.get(entity_id)

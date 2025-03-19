@@ -123,15 +123,19 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": True,
                 "window_mode_available": True,
+                "boost_available": 0,
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
+            "boost_enabled": False,
         },
         {
             "factory_options": {
                 "true_radiant_available": False,
                 "window_mode_available": False,
+                "boost_available": 2,
             },
+            "boost_enabled": True,
         },
     ],
     "device_2": [
@@ -148,6 +152,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
+            "boost_enabled": True,
         },
         {
             "factory_options": {
@@ -156,6 +161,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
+            "boost_enabled": False,
         },
         {
             "factory_options": {
@@ -164,6 +170,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
+            "boost_enabled": False,
         },
         {
             "factory_options": {
@@ -172,6 +179,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
+            "boost_enabled": False,
         },
         {
             # Test factory_options missing
@@ -261,8 +269,9 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "sync_status": "ok",
             "locked": False,
             "active": True,
-            "mode": "manual",
+            "mode": "auto",
             "power": "510",
+            "boost": True,
         },
         {
             "on": True,

@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta
 import logging
 from unittest.mock import AsyncMock, MagicMock, NonCallableMock, patch
 
+from dateutil import tz
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
     PRESET_AWAY,
@@ -417,7 +419,9 @@ def test_set_temperature_args():
 def test_get_hvac_mode():
     assert get_hvac_mode(SmartboxNodeType.HTR, {"mode": "off"}) == HVACMode.OFF
     assert get_hvac_mode(SmartboxNodeType.ACM, {"mode": "auto"}) == HVACMode.AUTO
-    assert get_hvac_mode(SmartboxNodeType.HTR, {"mode": "modified_auto"}) == HVACMode.AUTO
+    assert (
+        get_hvac_mode(SmartboxNodeType.HTR, {"mode": "modified_auto"}) == HVACMode.AUTO
+    )
     assert get_hvac_mode(SmartboxNodeType.ACM, {"mode": "manual"}) == HVACMode.HEAT
     with pytest.raises(ValueError):
         get_hvac_mode(SmartboxNodeType.HTR, {"mode": "blah"})
@@ -462,7 +466,9 @@ def test_get_hvac_mode():
 
 def test_set_hvac_mode_args():
     assert set_hvac_mode_args(SmartboxNodeType.HTR, {}, HVACMode.OFF) == {"mode": "off"}
-    assert set_hvac_mode_args(SmartboxNodeType.ACM, {}, HVACMode.AUTO) == {"mode": "auto"}
+    assert set_hvac_mode_args(SmartboxNodeType.ACM, {}, HVACMode.AUTO) == {
+        "mode": "auto"
+    }
     assert set_hvac_mode_args(SmartboxNodeType.HTR, {}, HVACMode.HEAT) == {
         "mode": "manual"
     }
@@ -527,7 +533,9 @@ def test_set_preset_mode_status_update():
         "mode": "manual",
         "selected_temp": "eco",
     }
-    assert set_preset_mode_status_update(SmartboxNodeType.HTR_MOD, {}, PRESET_FROST) == {
+    assert set_preset_mode_status_update(
+        SmartboxNodeType.HTR_MOD, {}, PRESET_FROST
+    ) == {
         "on": True,
         "mode": "manual",
         "selected_temp": "ice",
@@ -656,3 +664,54 @@ def test_smartbox_device_property():
         device = SmartboxDevice(mock_device_info, mock_session, hass=None)
         assert device.device == mock_device_info
         assert device.name == MOCK_SMARTBOX_DEVICE_INFO[dev_id]["name"]
+
+
+async def test_remaining_boost_time(hass):
+    dev_id = "test_device_id_1"
+    mock_device = AsyncMock()
+    mock_device.dev_id = dev_id
+    mock_device.away = False
+    node_addr = 3
+    node_type = SmartboxNodeType.HTR
+    node_name = "Bathroom Heater"
+    node_info = {"addr": node_addr, "name": node_name, "type": node_type}
+    mock_session = AsyncMock()
+    initial_status = {
+        "mtemp": "21.4",
+        "stemp": "22.5",
+        "boost": True,
+        "boost_end_min": 90,
+    }
+    initial_setup = {
+        "true_radiant_enabled": False,
+        "window_mode_enabled": False,
+    }
+    node_sample = {"samples": [{"t": 1735686000, "temp": "11.3", "counter": 247426}]}
+
+    node = SmartboxNode(
+        mock_device,
+        node_info,
+        mock_session,
+        initial_status,
+        initial_setup,
+        node_sample,
+    )
+
+    assert node.boost_end_min == 90
+    # Test case when boost is not active
+    node._status["boost"] = False
+    assert node.remaining_boost_time == 0
+
+    # Test case when boost is active
+    node._status["boost"] = True
+    node._status["boost_end_min"] = 90  # 1 hour 30 minutes from midnight
+    today = datetime.now(tz.tzutc()) + timedelta(hours=1)
+    boost_end_datetime = today.replace(hour=1, minute=30).astimezone(tz.tzlocal())
+    expected_remaining_time = (boost_end_datetime - today).total_seconds()
+    assert node.remaining_boost_time == expected_remaining_time
+
+    # Test case when boost end time is in the past
+    node._status["boost_end_min"] = 30  # 30 minutes from midnight
+    boost_end_datetime = today.replace(hour=0, minute=30).astimezone(tz.tzlocal())
+    expected_remaining_time = (boost_end_datetime - today).total_seconds()
+    assert node.remaining_boost_time == expected_remaining_time

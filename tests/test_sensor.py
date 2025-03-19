@@ -15,7 +15,11 @@ from custom_components.smartbox.const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from custom_components.smartbox.sensor import PowerSensor, TotalConsumptionSensor
+from custom_components.smartbox.sensor import (
+    BoostEndTimeSensor,
+    PowerSensor,
+    TotalConsumptionSensor,
+)
 
 from .mocks import (
     active_or_charging_update,
@@ -473,3 +477,27 @@ async def test_adjust_short_term_statistics_no_adjustment(
         await sensor._adjust_short_term_statistics()
 
         mock_instance.async_adjust_statistics.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_native_value_boost_end_time_sensor(hass, mock_smartbox, config_entry):
+    mock_node = AsyncMock()
+    mock_node.boost = True
+    mock_node.boost_end_min = 90  # 1 hour and 30 minutes
+    sensor = BoostEndTimeSensor(mock_node, config_entry)
+    sensor.hass = hass
+
+    with patch("custom_components.smartbox.sensor.dt.now") as mock_now:
+        mock_now.return_value = datetime(2023, 10, 10, 0, 0, 0, tzinfo=tz.tzlocal())
+        expected_time = datetime(2023, 10, 10, 1, 30, tzinfo=tz.tzlocal())
+        assert sensor.native_value == expected_time
+
+        # Test boost end time is in the past, should return next day
+        mock_node.boost_end_min = 30  # 30 minutes
+        mock_now.return_value = datetime(2023, 10, 10, 1, 0, 0, tzinfo=tz.tzlocal())
+        expected_time = datetime(2023, 10, 11, 0, 30, tzinfo=tz.tzlocal())
+        assert sensor.native_value == expected_time
+
+        # Test no boost
+        mock_node.boost = False
+        assert sensor.native_value is None
