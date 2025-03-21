@@ -173,7 +173,9 @@ async def test_unavailable(hass, mock_smartbox, config_entry):
 
 
 def _check_not_away_preset(node_type, status, preset_mode):
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if status.get("boost", False) is True:
+        assert preset_mode == PRESET_BOOST
+    elif node_type == SmartboxNodeType.HTR_MOD:
         if status["mode"] == "auto":
             assert preset_mode == PRESET_SCHEDULE
         elif status["mode"] == "manual":
@@ -442,7 +444,7 @@ async def test_comfort_preset(hass, mock_smartbox):
     mock_device_2 = (await mock_smartbox.session.get_devices())[1]
     mock_device_2_node_2 = (
         await mock_smartbox.session.get_nodes(mock_device_2["dev_id"])
-    )[2]
+    )[5]
     entity_id_device_2_node_2 = get_climate_entity_id(mock_device_2_node_2)
 
     state = hass.states.get(entity_id_device_2_node_2)
@@ -532,7 +534,7 @@ async def test_frost_preset(hass, mock_smartbox):
     mock_device_2 = (await mock_smartbox.session.get_devices())[1]
     mock_device_2_node_2 = (
         await mock_smartbox.session.get_nodes(mock_device_2["dev_id"])
-    )[2]
+    )[5]
     entity_id_device_2_node_2 = get_climate_entity_id(mock_device_2_node_2)
 
     state = hass.states.get(entity_id_device_2_node_2)
@@ -623,6 +625,7 @@ async def test_set_hvac_mode(hass, mock_smartbox, config_entry):
             entity_id = get_climate_entity_id(mock_node)
             await hass.helpers.entity_component.async_update_entity(entity_id)
             state = hass.states.get(entity_id)
+            # Ici si il est en boost ça reste en ON?
             assert state.state == HVACMode.OFF
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node

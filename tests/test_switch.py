@@ -28,7 +28,7 @@ from .test_utils import assert_log_message
 async def test_away_status(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 24
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -97,7 +97,7 @@ async def test_away_status(hass, mock_smartbox, config_entry):
 async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 24
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -186,7 +186,7 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
 async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 24
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -278,7 +278,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
 async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 24
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -290,19 +290,19 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
             mock_node_setup = await mock_smartbox.session.get_node_setup(
                 mock_device["dev_id"], mock_node
             )
-            # if "factory_options" not in mock_node_setup or not mock_node_setup[
-            #     "factory_options"
-            # ].get("boost_available", 2):
-            #     # if not mock_node_setup.get("boost_available", False):
-            #     # We shouldn't have created a switch entity for this
-            #     assert hass.states.get(entity_id) is None
-            #     assert_log_message(
-            #         caplog,
-            #         "custom_components.smartbox.switch",
-            #         logging.INFO,
-            #         f"Boost mode not available for node {mock_node['name']}",
-            #     )
-            #     continue
+            if "factory_options" not in mock_node_setup or not mock_node_setup[
+                "factory_options"
+            ].get("boost_config", 2):
+                # if not mock_node_setup.get("boost_available", False):
+                # We shouldn't have created a switch entity for this
+                assert hass.states.get(entity_id) is None
+                assert_log_message(
+                    caplog,
+                    "custom_components.smartbox.switch",
+                    logging.INFO,
+                    f"Boost mode not available for node {mock_node['name']}",
+                )
+                continue
 
             state = hass.states.get(entity_id)
             assert state is not None

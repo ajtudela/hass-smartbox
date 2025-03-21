@@ -458,7 +458,7 @@ class SmartboxNode:
     @property
     def boost_available(self) -> bool:
         """Is boost available."""
-        return bool(self.boost_config)
+        return bool(self.boost_config.value)
 
     @property
     def heater_node(self) -> bool:

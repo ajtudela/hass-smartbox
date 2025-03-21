@@ -145,6 +145,8 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         """Set operation mode."""
         _LOGGER.debug("Setting HVAC mode to %s", hvac_mode)
         status_args = set_hvac_mode_args(self._node.node_type, self._status, hvac_mode)
+        if self._node.boost:
+            status_args["boost"] = False
         await self._node.set_status(**status_args)
 
     @property
@@ -219,7 +221,9 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             )
             await self._node.set_status(**status_update)
         elif preset_mode != PRESET_HOME:
-            msg = f"Unsupported preset_mode {preset_mode} for {self._node.node_type} node"
+            msg = (
+                f"Unsupported preset_mode {preset_mode} for {self._node.node_type} node"
+            )
             raise ValueError(msg)
 
     @property

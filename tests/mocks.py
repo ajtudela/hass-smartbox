@@ -244,6 +244,13 @@ class MockSmartbox:
         mock_session.get_node_setup = get_node_setup
         mock_session.get_setup = get_node_setup
 
+        async def set_node_setup(dev_id, node, setup_updates):
+            self._session_node_setup[dev_id][node["addr"]].update(setup_updates)
+            self._session_node_setup = self._socket_node_setup
+
+        mock_session.set_setup = set_node_setup
+        mock_session.set_node_setup = set_node_setup
+
         async def get_device_power_limit(dev_id, node=None):
             if node is not None:
                 return self._session_node_setup[dev_id][node["addr"]]["power"]

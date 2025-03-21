@@ -123,7 +123,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": True,
                 "window_mode_available": True,
-                "boost_available": 0,
+                "boost_config": 0,
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
@@ -133,7 +133,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": False,
                 "window_mode_available": False,
-                "boost_available": 2,
+                "boost_config": 2,
             },
             "boost_enabled": True,
         },
@@ -149,6 +149,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": True,
                 "window_mode_available": True,
+                "boost_config": 2,
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
@@ -158,6 +159,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": True,
                 "window_mode_available": True,
+                "boost_config": 2,
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
@@ -167,6 +169,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": True,
                 "window_mode_available": True,
+                "boost_config": 2,
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
@@ -176,6 +179,7 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             "factory_options": {
                 "true_radiant_available": False,
                 "window_mode_available": False,
+                "boost_config": 2,
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
@@ -299,6 +303,20 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "locked": False,
             "active": True,
             "mode": "self_learn",
+            "power": "510",
+        },
+        {
+            "on": True,
+            "mtemp": "19.2",
+            "selected_temp": "eco",
+            "comfort_temp": "24.3",
+            "eco_offset": "4",
+            "ice_temp": "7",
+            "units": "C",
+            "sync_status": "ok",
+            "locked": False,
+            "active": True,
+            "mode": "manual",
             "power": "510",
         },
         {
