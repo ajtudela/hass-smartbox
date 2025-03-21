@@ -46,7 +46,7 @@ def _check_temp_state(hass, mock_node_status, state):
 async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 30
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -113,7 +113,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
 async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 30
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -194,7 +194,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 23
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -222,7 +222,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
 async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 30
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
