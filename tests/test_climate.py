@@ -186,13 +186,13 @@ def _check_not_away_preset(node_type, status, preset_mode):
             elif status["selected_temp"] == "ice":
                 assert preset_mode == PRESET_FROST
             else:
-                pytest.fail(f"Unknown selected_temp {status['selected_temp']}")
+                pytest.fail(f"Unexpected selected_temp {status['selected_temp']}")
         elif status["mode"] == "self_learn":
             assert preset_mode == PRESET_SELF_LEARN
         elif status["mode"] == "presence":
             assert preset_mode == PRESET_ACTIVITY
         else:
-            pytest.fail(f"Unknown mode {status['mode']}")
+            pytest.fail(f"Unknown smartbox node mode {status['mode']}")
     else:
         assert preset_mode == PRESET_HOME
 
@@ -721,6 +721,18 @@ async def test_hvac_action(hass, mock_smartbox, config_entry):
             await hass.helpers.entity_component.async_update_entity(entity_id)
             state = hass.states.get(entity_id)
             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
+
+            mock_smartbox.generate_socket_status_update(
+                mock_device,
+                mock_node,
+                active_or_charging_update(node_type=mock_node["type"], active=False),
+            )
+            await hass.helpers.entity_component.async_update_entity(entity_id)
+            state = hass.states.get(entity_id)
+            assert state.attributes[ATTR_HVAC_ACTION] in [
+                HVACAction.OFF,
+                HVACAction.IDLE,
+            ]
 
 
 async def test_unavailable_at_startup(hass, mock_smartbox_unavailable, config_entry):

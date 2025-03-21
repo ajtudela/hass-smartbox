@@ -66,7 +66,7 @@ async def async_setup_entry(
     )
     async_add_entities(boost_entities, update_before_add=True)
 
-    async def handle_set_boost_params(call: ServiceCall) -> None:
+    async def handle_set_boost_params(call: ServiceCall) -> None:  # pragma: no cover
         """Handle the service call."""
         areas: list = call.data.get(ATTR_AREA_ID, [])
         devices: list = call.data.get(ATTR_DEVICE_ID, [])
