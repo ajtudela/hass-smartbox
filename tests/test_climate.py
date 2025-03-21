@@ -1,4 +1,5 @@
 import logging
+from unittest.mock import MagicMock
 
 from homeassistant.components.climate import HVACAction, HVACMode
 from homeassistant.components.climate.const import (
@@ -30,7 +31,7 @@ from homeassistant.const import (
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.smartbox.climate import get_hvac_mode
+from custom_components.smartbox.climate import SmartboxHeater, get_hvac_mode
 from custom_components.smartbox.const import (
     DOMAIN,
     PRESET_FROST,
@@ -891,3 +892,101 @@ async def test_boost_preset(hass, mock_smartbox, config_entry):
         mock_device_2["dev_id"], mock_device_2_node_2
     )
     assert mock_node_status["mode"] == "auto"
+
+
+@pytest.mark.parametrize(
+    ("node_attributes", "expected_preset"),
+    [
+        ({"away": True}, PRESET_AWAY),
+        ({"boost": True}, PRESET_BOOST),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "manual", "selected_temp": "comfort"},
+            },
+            PRESET_COMFORT,
+        ),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "manual", "selected_temp": "eco"},
+            },
+            PRESET_ECO,
+        ),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "manual", "selected_temp": "ice"},
+            },
+            PRESET_FROST,
+        ),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "auto"},
+            },
+            PRESET_SCHEDULE,
+        ),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "presence"},
+            },
+            PRESET_ACTIVITY,
+        ),
+        (
+            {
+                "node_type": SmartboxNodeType.HTR_MOD,
+                "status": {"mode": "self_learn"},
+            },
+            PRESET_SELF_LEARN,
+        ),
+        (
+            {
+                "node_type": "other",
+            },
+            PRESET_HOME,
+        ),
+    ],
+)
+def test_preset_mode(node_attributes, expected_preset):
+    """Test the preset_mode property."""
+    mock_node = MagicMock()
+    mock_node.away = node_attributes.get("away", False)
+    mock_node.boost = node_attributes.get("boost", False)
+    mock_node.node_type = node_attributes.get("node_type", "other")
+    mock_node.status = node_attributes.get("status", {})
+
+    heater = SmartboxHeater(mock_node, MagicMock())
+    heater._status = mock_node.status
+
+    assert heater.preset_mode == expected_preset
+
+
+def test_preset_mode_invalid_selected_temp():
+    """Test preset_mode raises ValueError for invalid selected_temp."""
+    mock_node = MagicMock()
+    mock_node.node_type = SmartboxNodeType.HTR_MOD
+    mock_node.status = {"mode": "manual", "selected_temp": "invalid_temp"}
+    mock_node.away = False
+    mock_node.boost = False
+
+    heater = SmartboxHeater(mock_node, MagicMock())
+    heater._status = mock_node.status
+    with pytest.raises(ValueError, match="Unexpected 'selected_temp' value"):
+        _ = heater.preset_mode
+
+
+def test_preset_mode_invalid_mode():
+    """Test preset_mode raises ValueError for invalid mode."""
+    mock_node = MagicMock()
+    mock_node.node_type = SmartboxNodeType.HTR_MOD
+    mock_node.status = {"mode": "invalid_mode", "selected_temp": "invalid_temp"}
+    mock_node.away = False
+    mock_node.boost = False
+
+    heater = SmartboxHeater(mock_node, MagicMock())
+    heater._status = mock_node.status
+
+    with pytest.raises(ValueError, match="Unknown smartbox node mode"):
+        _ = heater.preset_mode

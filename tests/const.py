@@ -322,7 +322,7 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
         {
             "on": True,
             "mtemp": "15.2",
-            "selected_temp": "ice",
+            "selected_temp": "toto",
             "comfort_temp": "23.3",
             "eco_offset": "4",
             "ice_temp": "7",
@@ -330,7 +330,7 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "sync_status": "ok",
             "locked": False,
             "active": True,
-            "mode": "presence",
+            "mode": "manual",
             "power": "510",
         },
     ],

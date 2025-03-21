@@ -158,10 +158,10 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             return PRESET_BOOST
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
             _check_status_key("mode", self._node.node_type, self._status)
-            _check_status_key("selected_temp", self._node.node_type, self._status)
             mode = self._status["mode"]
-            selected_temp = self._status["selected_temp"]
             if mode == "manual":
+                _check_status_key("selected_temp", self._node.node_type, self._status)
+                selected_temp = self._status["selected_temp"]
                 if selected_temp == "comfort":
                     return PRESET_COMFORT
                 if selected_temp == "eco":
@@ -181,7 +181,6 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
                 return PRESET_SELF_LEARN
             msg = f"Unknown smartbox node mode {mode}"
             raise ValueError(msg)
-
         return PRESET_HOME
 
     @property
@@ -220,11 +219,6 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
                 self._node.node_type, self._status, preset_mode
             )
             await self._node.set_status(**status_update)
-        elif preset_mode != PRESET_HOME:
-            msg = (
-                f"Unsupported preset_mode {preset_mode} for {self._node.node_type} node"
-            )
-            raise ValueError(msg)
 
     @property
     def extra_state_attributes(self) -> dict[str, bool]:
