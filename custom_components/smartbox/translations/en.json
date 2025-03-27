@@ -3,7 +3,7 @@
   "system_health": {
     "info": {
       "api_health_check": "Status of the API server",
-      "can_reach_web_resailer": "Reach the resailer portal",
+      "can_reach_web_reseller": "Reach the reseller portal",
       "api_version": "Version of the API"
     }
   },
@@ -44,7 +44,7 @@
         "data": {
           "history_consumption": "Consumption history",
           "timedelta_update_power": "Delta for update power entity (in sec)",
-          "resailer_entity": "Resailer logo for entities"
+          "reseller_entity": "Reseller logo for entities"
         },
         "data_description": {
           "history_consumption": "Consumption history recovery mode. Auto: forces the data. Start: initialization. Off: no data recovery (be careful, some values ​​may be aberrant).",

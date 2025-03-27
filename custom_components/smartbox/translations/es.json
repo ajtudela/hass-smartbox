@@ -3,7 +3,7 @@
   "system_health": {
     "info": {
       "api_health_check": "Estado del servidor API",
-      "can_reach_web_resailer": "Accede al portal web de tus revendedor",
+      "can_reach_web_reseller": "Accede al portal web de tus revendedor",
       "api_version": "Versión API"
     }
   },
@@ -46,7 +46,7 @@
         "title": "Opciones",
         "data": {
           "history_consumption": "Historial de consumo",
-          "resailer_entity": "Entidad del revendedor",
+          "reseller_entity": "Entidad del revendedor",
           "timedelta_update_power": "Delta para actualizar entidad de potencia (en seg)"
         },
         "data_description": {

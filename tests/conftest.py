@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from homeassistant.core import HomeAssistant
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from smartbox.resailer import SmartboxResailer
+from smartbox.reseller import SmartboxReseller
 
 from .const import (
     CONF_USERNAME,
@@ -180,12 +180,12 @@ def mock_devices():
 
 
 @pytest.fixture
-def resailer(mocker):
+def reseller(mocker):
     return mocker.patch(
-        "smartbox.resailer.AvailableResailers.resailers",
+        "smartbox.reseller.AvailableResellers.resellers",
         new_callable=mocker.PropertyMock,
         return_value={
-            "test_api_name_1": SmartboxResailer(
+            "test_api_name_1": SmartboxReseller(
                 name="Test API name",
                 api_url="test_api_name_1",
                 basic_auth="test_credentials",

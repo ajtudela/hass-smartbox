@@ -20,8 +20,8 @@ async def system_health_info(hass: HomeAssistant) -> dict[str, Any]:
         "api_health_check": (await config_entry.runtime_data.client.health_check())[
             "message"
         ],
-        "can_reach_web_resailer": system_health.async_check_can_reach_url(
-            hass, config_entry.runtime_data.client.resailer.web_url
+        "can_reach_web_reseller": system_health.async_check_can_reach_url(
+            hass, config_entry.runtime_data.client.reseller.web_url
         ),
     }
 

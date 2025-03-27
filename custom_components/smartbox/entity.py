@@ -27,10 +27,10 @@ class DefaultSmartBoxEntity(Entity):
         self._available = False
         self._attr_translation_key = self._attr_key
         self._attr_unique_id = self._node.node_id
-        self._resailer = self._node.session.resailer
-        self._configuration_url = f"{self._resailer.web_url}#/{self._node.device.home['id']}/dev/{self._device_id}/{self._node.node_type}/{self._node.addr}/setup"
+        self._reseller = self._node.session.reseller
+        self._configuration_url = f"{self._reseller.web_url}#/{self._node.device.home['id']}/dev/{self._device_id}/{self._node.node_type}/{self._node.addr}/setup"
         if entry.options.get(CONF_DISPLAY_ENTITY_PICTURES, False) is True:
-            self._attr_entity_picture = f"{self._resailer.web_url}img/favicon.ico"
+            self._attr_entity_picture = f"{self._reseller.web_url}img/favicon.ico"
 
     @property
     def unique_id(self) -> str:
@@ -43,7 +43,7 @@ class DefaultSmartBoxEntity(Entity):
         return DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
             name=self._node.name,
-            manufacturer=self._resailer.name,
+            manufacturer=self._reseller.name,
             model_id=str(self._node.device.model_id),
             sw_version=str(self._node.device.sw_version),
             serial_number=str(self._node.device.serial_number),

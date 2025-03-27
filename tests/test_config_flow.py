@@ -31,7 +31,7 @@ async def test_show_form(hass: HomeAssistant) -> None:
 
 
 async def test_integration_already_exists(
-    hass: HomeAssistant, mock_smartbox, resailer
+    hass: HomeAssistant, mock_smartbox, reseller
 ) -> None:
     """Test we only allow a single config flow."""
     await hass.config_entries.flow.async_init(
@@ -66,7 +66,7 @@ async def test_option_flow(hass: HomeAssistant, config_entry) -> None:
         assert config_entry.options[k] == v
 
 
-async def test_step_reauth(hass: HomeAssistant, mock_smartbox, resailer) -> None:
+async def test_step_reauth(hass: HomeAssistant, mock_smartbox, reseller) -> None:
     """Test the reauth flow."""
     entry = MockConfigEntry(
         domain=DOMAIN,

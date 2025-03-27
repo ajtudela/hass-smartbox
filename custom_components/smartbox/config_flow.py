@@ -17,7 +17,7 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
-from smartbox import AvailableResailers
+from smartbox import AvailableResellers
 import voluptuous as vol
 
 from . import (
@@ -58,7 +58,9 @@ OPTIONS_DATA_SCHEMA = {
         )
     ),
     vol.Required(CONF_DISPLAY_ENTITY_PICTURES, default=False): BooleanSelector(),
-    vol.Required(CONF_TIMEDELTA_POWER, default=DEFAULT_TIMEDELTA_POWER): cv.positive_int,
+    vol.Required(
+        CONF_TIMEDELTA_POWER, default=DEFAULT_TIMEDELTA_POWER
+    ): cv.positive_int,
 }
 
 
@@ -67,8 +69,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_API_NAME): SelectSelector(
             SelectSelectorConfig(
                 options=[
-                    SelectOptionDict(value=resailer.api_url, label=resailer.name)
-                    for resailer in AvailableResailers.resailers.values()
+                    SelectOptionDict(value=reseller.api_url, label=reseller.name)
+                    for reseller in AvailableResellers.resellers.values()
                 ],
                 mode=SelectSelectorMode.DROPDOWN,
             )
@@ -82,6 +84,7 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for test."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -103,11 +106,11 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                 placeholders["error"] = str(ex)
             else:
                 await self.async_set_unique_id(
-                    f"{AvailableResailers(api_url=user_input[CONF_API_NAME]).api_url}_{user_input[CONF_USERNAME]}"
+                    f"{AvailableResellers(api_url=user_input[CONF_API_NAME]).api_url}_{user_input[CONF_USERNAME]}"
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=f"{AvailableResailers(api_url=user_input[CONF_API_NAME]).name} {user_input[CONF_USERNAME]}",
+                    title=f"{AvailableResellers(api_url=user_input[CONF_API_NAME]).name} {user_input[CONF_USERNAME]}",
                     data=user_input,
                 )
         context = dict(self.context)
@@ -147,7 +150,7 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                 placeholders["error"] = str(ex)
             else:
                 await self.async_set_unique_id(
-                    f"{AvailableResailers(api_url=user_input[CONF_API_NAME]).api_url}_{user_input[CONF_USERNAME]}"
+                    f"{AvailableResellers(api_url=user_input[CONF_API_NAME]).api_url}_{user_input[CONF_USERNAME]}"
                 )
                 self._abort_if_unique_id_mismatch(reason="invalid_auth")
                 return self.async_update_reload_and_abort(

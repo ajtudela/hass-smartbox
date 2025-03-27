@@ -39,7 +39,7 @@
         "title": "[%key:common::config_flow::title%]",
         "data": {
           "history_consumption": "[%key:common::options::data::history_consumption%]",
-          "resailer_entity": "[%key:common::options::data::resailer_entity%]",
+          "reseller_entity": "[%key:common::options::data::reseller_entity%]",
           "timedelta_update_power": "[%key:common::options::data::timedelta_update_power%]"
         },
         "data_description": {

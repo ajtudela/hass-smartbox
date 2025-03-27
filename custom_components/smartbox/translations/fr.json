@@ -3,7 +3,7 @@
   "system_health": {
     "info": {
       "api_health_check": "Statut du serveur de l'API",
-      "can_reach_web_resailer": "Accès au portail web de votre fournisseurs",
+      "can_reach_web_reseller": "Accès au portail web de votre fournisseurs",
       "api_version": "Version de l'API"
     }
   },
@@ -43,7 +43,7 @@
         "title": "Options",
         "data": {
           "history_consumption": "Historique de consommation",
-          "resailer_entity": "Logo du revendeur pour les entités",
+          "reseller_entity": "Logo du revendeur pour les entités",
           "timedelta_update_power": "Délai de récupération des données de puissance (in sec)"
         },
         "data_description": {

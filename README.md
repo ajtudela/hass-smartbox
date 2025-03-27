@@ -32,7 +32,7 @@ Home Assistant integration for Haverland (and other brands) heating smartboxes.
 ## Configuration
 
 You will need the following items of information:
-* Name of your resailer
+* Name of your reseller
 * Your username and password used for the mobile app/web app.
 
 If there is an issue during the process or authentication, the errors will be displayed.
@@ -46,9 +46,9 @@ We are currently getting the [consumption](#consumption) of device throuw the AP
 * `auto` : every hour, we get the last 24 hours.
 * `off` : stop the automatic collect. We will still update the sensor every hour.
 
-#### Resailer logo
+#### Reseller logo
 By default, each sensor has in own icon depends on the type of the sensor.
-You can activate this option to display the logo of the resailer instead.
+You can activate this option to display the logo of the reseller instead.
 
 #### Timedelta between update power
 If you have a [Dedicated energy monitor](#dedicated-energy-monitor), we get the current power each 60 seconds by default.
@@ -112,7 +112,7 @@ You have two options:
 * Go to [![Open your Home Assistant instance and show your statistics developer tools.](https://my.home-assistant.io/badges/developer_statistics.svg)](https://my.home-assistant.io/redirect/developer_statistics/), select the total consumption entity, outliers and patch the negative value with 0.
 
 #### My Reseailer is not present in the list
-If you can't see you resailer which is using a smartbox you have to do an [Resailer Github issue].
+If you can't see you reseller which is using a smartbox you have to do an [Reseller Github issue].
 
 ## Debugging
 
@@ -163,7 +163,7 @@ Delmael [![Buy a coffee to delmael][buymeacoffee-shield]][buymeacoffee-delmael]
 [buymeacoffee-shield]: https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png
 [custom repository]: https://hacs.xyz/docs/faq/custom_repositories
 [Github issue]: https://github.com/ajtudela/hass-smartbox/issues
-[Resailer Github issue]: https://github.com/ajtudela/smartbox/issues/new?template=new-resailer.md
+[Reseller Github issue]: https://github.com/ajtudela/smartbox/issues/new?template=new-reseller.md
 [Home Assistant integration docs]: https://developers.home-assistant.io/docs/creating_integration_file_structure/#where-home-assistant-looks-for-integrations
 [Home Assistant logger docs]: https://www.home-assistant.io/integrations/logger/#viewing-logs
 [Home Assistant secrets management]: https://www.home-assistant.io/docs/configuration/secrets/
