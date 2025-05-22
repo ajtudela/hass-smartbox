@@ -196,8 +196,8 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
                     PRESET_COMFORT,
                     PRESET_ECO,
                     PRESET_FROST,
-                    PRESET_SCHEDULE,
                     PRESET_SELF_LEARN,
+                    PRESET_SCHEDULE,
                 ]
             )
         else:

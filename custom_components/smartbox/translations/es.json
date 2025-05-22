@@ -64,7 +64,7 @@
             "state": {
               "frost": "Anticongelante",
               "schedule": "Planificación",
-              "selflearn:": "Autoaprendizaje"
+              "self_learn": "Autoaprendizaje"
             }
           }
         }

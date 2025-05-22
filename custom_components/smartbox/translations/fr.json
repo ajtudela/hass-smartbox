@@ -61,7 +61,7 @@
             "state": {
               "frost": "Anti-gel",
               "schedule": "Planning",
-              "selflearn:": "Auto apprentissage"
+              "self_learn": "Auto apprentissage"
             }
           }
         }

@@ -61,7 +61,7 @@
             "state": {
               "frost": "Frost",
               "schedule": "Schedule",
-              "self_learn:": "Self-learning"
+              "self_learn": "Self-learning"
             }
           }
         }
