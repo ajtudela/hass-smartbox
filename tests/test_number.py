@@ -1,6 +1,7 @@
 from homeassistant.components.number import ATTR_VALUE, DOMAIN as NUMBER_DOMAIN
 from homeassistant.components.number.const import SERVICE_SET_VALUE
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
+from homeassistant.helpers.entity_component import async_update_entity
 
 from custom_components.smartbox.const import DOMAIN
 
@@ -67,9 +68,6 @@ async def test_power_limit(hass, mock_smartbox, config_entry):
     await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "500"
-
-
-from homeassistant.helpers.entity_component import async_update_entity
 
 
 async def test_boost_temperature(hass, mock_smartbox, config_entry):

@@ -617,6 +617,15 @@ async def test_update_samples(hass):
     }
     await node.update_samples()
     assert node._samples == [{"counter": 200}, {"counter": 300}]
+    node = SmartboxNode(
+        mock_device,
+        node_info,
+        mock_session,
+        initial_status,
+        initial_setup,
+        [],
+    )
+    assert node.total_energy is None
 
 
 async def test_update_power(hass):

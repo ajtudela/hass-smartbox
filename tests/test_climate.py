@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 from homeassistant.components.climate import HVACAction, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
-    ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
     ATTR_PRESET_MODE,
     DOMAIN as CLIMATE_DOMAIN,
@@ -28,6 +27,7 @@ from homeassistant.const import (
     SERVICE_TURN_ON,
     STATE_UNAVAILABLE,
 )
+from homeassistant.helpers.entity_component import async_update_entity
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -41,7 +41,6 @@ from custom_components.smartbox.const import (
 )
 
 from .mocks import (
-    active_or_charging_update,
     get_climate_entity_id,
     get_climate_entity_name,
     get_entity_id_from_unique_id,
@@ -690,52 +689,6 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
                 assert new_target_temp == pytest.approx(old_target_temp + 1)
 
 
-# async def test_hvac_action(hass, mock_smartbox, config_entry):
-#     assert await hass.config_entries.async_setup(config_entry.entry_id)
-#     await hass.async_block_till_done()
-#     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 7
-#     entries = hass.config_entries.async_entries(DOMAIN)
-#     assert len(entries) == 1
-
-#     assert DOMAIN in hass.config.components
-
-#     for mock_device in await mock_smartbox.session.get_devices():
-#         for mock_node in await mock_smartbox.session.get_nodes(mock_device["dev_id"]):
-#             if not is_heater_node(mock_node):
-#                 continue
-#             entity_id = get_climate_entity_id(mock_node)
-
-#             mock_smartbox.generate_socket_status_update(
-#                 mock_device,
-#                 mock_node,
-#                 active_or_charging_update(node_type=mock_node["type"], active=False),
-#             )
-#             await async_update_entity(hass, entity_id)
-#             state = hass.states.get(entity_id)
-#             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
-
-#             mock_smartbox.generate_socket_status_update(
-#                 mock_device,
-#                 mock_node,
-#                 active_or_charging_update(node_type=mock_node["type"], active=True),
-#             )
-#             await async_update_entity(hass, entity_id)
-#             state = hass.states.get(entity_id)
-#             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
-
-#             mock_smartbox.generate_socket_status_update(
-#                 mock_device,
-#                 mock_node,
-#                 active_or_charging_update(node_type=mock_node["type"], active=False),
-#             )
-#             await async_update_entity(hass, entity_id)
-#             state = hass.states.get(entity_id)
-#             assert state.attributes[ATTR_HVAC_ACTION] in [
-#                 HVACAction.OFF,
-#                 HVACAction.IDLE,
-#             ]
-
-
 async def test_unavailable_at_startup(hass, mock_smartbox_unavailable, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -854,9 +807,6 @@ async def test_turn_off(hass, mock_smartbox, config_entry):
                 assert not mock_node_status["on"]
             else:
                 assert mock_node_status["mode"] == "off"
-
-
-from homeassistant.helpers.entity_component import async_update_entity
 
 
 async def test_boost_preset(hass, mock_smartbox, config_entry):

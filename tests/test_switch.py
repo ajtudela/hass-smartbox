@@ -6,6 +6,7 @@ from homeassistant.components.switch import (
     SERVICE_TURN_ON,
 )
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
+from homeassistant.helpers.entity_component import async_update_entity
 
 from custom_components.smartbox.const import DOMAIN
 
@@ -181,9 +182,6 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
             await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
-
-
-from homeassistant.helpers.entity_component import async_update_entity
 
 
 async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):

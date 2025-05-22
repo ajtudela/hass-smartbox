@@ -39,6 +39,8 @@ def assert_log_message(
 
 def assert_no_log_errors(caplog, phase="call") -> None:
     errors = [
-        record for record in caplog.get_records("call") if record.levelno >= logging.ERROR
+        record
+        for record in caplog.get_records("call")
+        if record.levelno >= logging.ERROR
     ]
     assert not errors

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from dateutil import tz
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_LOCKED, STATE_UNAVAILABLE
+from homeassistant.helpers.entity_component import async_update_entity
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -295,9 +296,6 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
-
-
-from homeassistant.helpers.entity_component import async_update_entity
 
 
 @pytest.mark.asyncio
