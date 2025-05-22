@@ -88,7 +88,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
                 {"mtemp": str(float(mock_node_status["mtemp"]) + 1)},
             )
 
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             new_state = hass.states.get(entity_id)
             assert new_state.state != state.state
             _check_temp_state(hass, mock_node_status, new_state)
@@ -97,14 +97,14 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
             mock_node_status = mock_smartbox.generate_socket_node_unavailable(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == STATE_UNAVAILABLE
 
             mock_node_status = mock_smartbox.generate_new_socket_status(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
 
@@ -147,7 +147,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
                 mock_node,
                 active_or_charging_update(node_type=mock_node["type"], active=True),
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
@@ -161,7 +161,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
                 mock_node,
                 active_or_charging_update(node_type=mock_node["type"], active=False),
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
@@ -172,14 +172,14 @@ async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
             mock_node_status = mock_smartbox.generate_socket_node_unavailable(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == STATE_UNAVAILABLE
 
             mock_node_status = mock_smartbox.generate_new_socket_status(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
 
@@ -260,7 +260,7 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
                 mock_node,
                 active_or_charging_update(node_type=mock_node["type"], active=True),
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
@@ -274,7 +274,7 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             mock_smartbox.generate_socket_status_update(
                 mock_device, mock_node, {"charge_level": 5}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
@@ -285,16 +285,19 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             mock_node_status = mock_smartbox.generate_socket_node_unavailable(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == STATE_UNAVAILABLE
 
             mock_node_status = mock_smartbox.generate_new_socket_status(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
+
+
+from homeassistant.helpers.entity_component import async_update_entity
 
 
 @pytest.mark.asyncio

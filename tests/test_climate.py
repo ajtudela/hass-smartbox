@@ -125,7 +125,7 @@ async def test_basic_climate(hass, mock_smartbox, config_entry, caplog, recorder
                 {"mtemp": str(float(mock_node_status["mtemp"]) + 1)},
             )
 
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             new_state = hass.states.get(entity_id)
             assert (
                 new_state.attributes[ATTR_CURRENT_TEMPERATURE]
@@ -161,14 +161,14 @@ async def test_unavailable(hass, mock_smartbox, config_entry):
             mock_node_status = mock_smartbox.generate_socket_node_unavailable(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == STATE_UNAVAILABLE
 
             mock_node_status = mock_smartbox.generate_new_socket_status(
                 mock_device, mock_node
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             _check_state(hass, mock_node, mock_node_status, state)
 
@@ -212,7 +212,7 @@ async def test_away(hass, mock_smartbox, config_entry):
     # check all device_1's climate entities are away but device_2's are not
     for mock_node in await mock_smartbox.session.get_nodes(mock_device_1["dev_id"]):
         entity_id = get_climate_entity_id(mock_node)
-        await hass.helpers.entity_component.async_update_entity(entity_id)
+        await async_update_entity(hass, entity_id)
         state = hass.states.get(entity_id)
         assert state.attributes[ATTR_PRESET_MODE] == PRESET_AWAY
     # but all device_2's should still be home
@@ -221,7 +221,7 @@ async def test_away(hass, mock_smartbox, config_entry):
         if not is_heater_node(mock_node):
             continue
         entity_id = get_climate_entity_id(mock_node)
-        await hass.helpers.entity_component.async_update_entity(entity_id)
+        await async_update_entity(hass, entity_id)
         state = hass.states.get(entity_id)
         mock_node_status = await mock_smartbox.session.get_status(
             mock_device_2["dev_id"], mock_node
@@ -262,7 +262,7 @@ async def test_away_preset(hass, mock_smartbox, config_entry):
     # check all device_1's climate entities are away but device_2's are not
     for mock_node in await mock_smartbox.session.get_nodes(mock_device_1["dev_id"]):
         entity_id = get_climate_entity_id(mock_node)
-        await hass.helpers.entity_component.async_update_entity(entity_id)
+        await async_update_entity(hass, entity_id)
         state = hass.states.get(entity_id)
         assert state.attributes[ATTR_PRESET_MODE] == PRESET_AWAY
     # but all device_2's should still be home
@@ -271,7 +271,7 @@ async def test_away_preset(hass, mock_smartbox, config_entry):
         if not is_heater_node(mock_node):
             continue
         entity_id = get_climate_entity_id(mock_node)
-        await hass.helpers.entity_component.async_update_entity(entity_id)
+        await async_update_entity(hass, entity_id)
         state = hass.states.get(entity_id)
         mock_node_status = await mock_smartbox.session.get_status(
             mock_device_2["dev_id"], mock_node
@@ -300,7 +300,7 @@ async def test_away_preset(hass, mock_smartbox, config_entry):
             if not is_heater_node(mock_node):
                 continue
             entity_id = get_climate_entity_id(mock_node)
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
@@ -341,7 +341,7 @@ async def test_schedule_preset(hass, mock_smartbox, config_entry):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_1)
+    await async_update_entity(hass, entity_id_device_2_node_1)
     state = hass.states.get(entity_id_device_2_node_1)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_SCHEDULE
     mock_node_status = await mock_smartbox.session.get_status(
@@ -379,7 +379,7 @@ async def test_self_learn_preset(hass, mock_smartbox, config_entry):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_1)
+    await async_update_entity(hass, entity_id_device_2_node_1)
     state = hass.states.get(entity_id_device_2_node_1)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_SELF_LEARN
     mock_node_status = await mock_smartbox.session.get_status(
@@ -417,7 +417,7 @@ async def test_activity_preset(hass, mock_smartbox, config_entry):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_1)
+    await async_update_entity(hass, entity_id_device_2_node_1)
     state = hass.states.get(entity_id_device_2_node_1)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_ACTIVITY
     mock_node_status = await mock_smartbox.session.get_status(
@@ -461,7 +461,7 @@ async def test_comfort_preset(hass, mock_smartbox):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_2)
+    await async_update_entity(hass, entity_id_device_2_node_2)
     state = hass.states.get(entity_id_device_2_node_2)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_COMFORT
     mock_node_status = await mock_smartbox.session.get_status(
@@ -506,7 +506,7 @@ async def test_eco_preset(hass, mock_smartbox):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_1)
+    await async_update_entity(hass, entity_id_device_2_node_1)
     state = hass.states.get(entity_id_device_2_node_1)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_ECO
     mock_node_status = await mock_smartbox.session.get_status(
@@ -551,7 +551,7 @@ async def test_frost_preset(hass, mock_smartbox):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_2)
+    await async_update_entity(hass, entity_id_device_2_node_2)
     state = hass.states.get(entity_id_device_2_node_2)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_FROST
     mock_node_status = await mock_smartbox.session.get_status(
@@ -602,7 +602,7 @@ async def test_set_hvac_mode(hass, mock_smartbox, config_entry):
             if not is_heater_node(mock_node):
                 continue
             entity_id = get_climate_entity_id(mock_node)
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == HVACMode.HEAT
             mock_node_status = await mock_smartbox.session.get_status(
@@ -624,7 +624,7 @@ async def test_set_hvac_mode(hass, mock_smartbox, config_entry):
             if not is_heater_node(mock_node):
                 continue
             entity_id = get_climate_entity_id(mock_node)
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             # Ici si il est en boost ça reste en ON?
             assert state.state == HVACMode.OFF
@@ -684,7 +684,7 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
                     blocking=True,
                 )
 
-                await hass.helpers.entity_component.async_update_entity(entity_id)
+                await async_update_entity(hass, entity_id)
                 state = hass.states.get(entity_id)
                 new_target_temp = state.attributes[ATTR_TEMPERATURE]
                 assert new_target_temp == pytest.approx(old_target_temp + 1)
@@ -710,7 +710,7 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
 #                 mock_node,
 #                 active_or_charging_update(node_type=mock_node["type"], active=False),
 #             )
-#             await hass.helpers.entity_component.async_update_entity(entity_id)
+#             await async_update_entity(hass, entity_id)
 #             state = hass.states.get(entity_id)
 #             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
 
@@ -719,7 +719,7 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
 #                 mock_node,
 #                 active_or_charging_update(node_type=mock_node["type"], active=True),
 #             )
-#             await hass.helpers.entity_component.async_update_entity(entity_id)
+#             await async_update_entity(hass, entity_id)
 #             state = hass.states.get(entity_id)
 #             assert state.attributes[ATTR_HVAC_ACTION] == HVACAction.HEATING
 
@@ -728,7 +728,7 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
 #                 mock_node,
 #                 active_or_charging_update(node_type=mock_node["type"], active=False),
 #             )
-#             await hass.helpers.entity_component.async_update_entity(entity_id)
+#             await async_update_entity(hass, entity_id)
 #             state = hass.states.get(entity_id)
 #             assert state.attributes[ATTR_HVAC_ACTION] in [
 #                 HVACAction.OFF,
@@ -779,7 +779,7 @@ async def test_turn_on(hass, mock_smartbox, config_entry):
                 blocking=True,
             )
 
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == HVACMode.OFF
             # await async_turn_off
@@ -795,7 +795,7 @@ async def test_turn_on(hass, mock_smartbox, config_entry):
                 {ATTR_HVAC_MODE: HVACMode.AUTO, ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == HVACMode.AUTO
             mock_node_status = await mock_smartbox.session.get_status(
@@ -828,7 +828,7 @@ async def test_turn_off(hass, mock_smartbox, config_entry):
                 blocking=True,
             )
 
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == HVACMode.AUTO
             await hass.services.async_call(
@@ -844,7 +844,7 @@ async def test_turn_off(hass, mock_smartbox, config_entry):
                 blocking=True,
             )
 
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == HVACMode.OFF
             mock_node_status = await mock_smartbox.session.get_status(
@@ -854,6 +854,9 @@ async def test_turn_off(hass, mock_smartbox, config_entry):
                 assert not mock_node_status["on"]
             else:
                 assert mock_node_status["mode"] == "off"
+
+
+from homeassistant.helpers.entity_component import async_update_entity
 
 
 async def test_boost_preset(hass, mock_smartbox, config_entry):
@@ -885,7 +888,7 @@ async def test_boost_preset(hass, mock_smartbox, config_entry):
         blocking=True,
     )
 
-    await hass.helpers.entity_component.async_update_entity(entity_id_device_2_node_2)
+    await async_update_entity(hass, entity_id_device_2_node_2)
     state = hass.states.get(entity_id_device_2_node_2)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_BOOST
     mock_node_status = await mock_smartbox.session.get_status(

@@ -57,7 +57,7 @@ async def test_away_status(hass, mock_smartbox, config_entry):
     mock_smartbox.dev_data_update(mock_device_1, {"away_status": {"away": True}})
 
     entity_id = get_away_status_switch_entity_id(mock_node_1)
-    await hass.helpers.entity_component.async_update_entity(entity_id)
+    await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "on"
 
@@ -65,7 +65,7 @@ async def test_away_status(hass, mock_smartbox, config_entry):
     mock_node_2 = (await mock_smartbox.session.get_nodes(mock_device_2["dev_id"]))[0]
     mock_smartbox.dev_data_update(mock_device_1, {"away_status": {"away": False}})
     entity_id = get_away_status_switch_entity_id(mock_node_2)
-    await hass.helpers.entity_component.async_update_entity(entity_id)
+    await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "off"
 
@@ -77,7 +77,7 @@ async def test_away_status(hass, mock_smartbox, config_entry):
         {ATTR_ENTITY_ID: entity_id},
         blocking=True,
     )
-    await hass.helpers.entity_component.async_update_entity(entity_id)
+    await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "off"
 
@@ -89,7 +89,7 @@ async def test_away_status(hass, mock_smartbox, config_entry):
         {ATTR_ENTITY_ID: entity_id},
         blocking=True,
     )
-    await hass.helpers.entity_component.async_update_entity(entity_id)
+    await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
     assert state.state == "on"
 
@@ -148,7 +148,7 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_setup_update(
                 mock_device, mock_node, {"window_mode_enabled": True}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -156,7 +156,7 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_setup_update(
                 mock_device, mock_node, {"window_mode_enabled": False}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
 
@@ -167,7 +167,7 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -178,9 +178,12 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
+
+
+from homeassistant.helpers.entity_component import async_update_entity
 
 
 async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
@@ -240,7 +243,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_setup_update(
                 mock_device, mock_node, {"true_radiant_enabled": True}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -248,7 +251,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_setup_update(
                 mock_device, mock_node, {"true_radiant_enabled": False}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
 
@@ -259,7 +262,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -270,7 +273,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
 
@@ -329,7 +332,7 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_status_update(
                 mock_device, mock_node, {"boost": True}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -337,7 +340,7 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
             mock_smartbox.generate_socket_status_update(
                 mock_device, mock_node, {"boost": False}
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
 
@@ -348,7 +351,7 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "on"
 
@@ -359,6 +362,6 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
                 {ATTR_ENTITY_ID: entity_id},
                 blocking=True,
             )
-            await hass.helpers.entity_component.async_update_entity(entity_id)
+            await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state == "off"
