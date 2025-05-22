@@ -54,6 +54,19 @@
     }
   },
   "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "frost": "Frost",
+              "schedule": "Schedule",
+              "self_learn:": "Self-learning"
+            }
+          }
+        }
+      }
+    },
     "sensor": {
       "charge_level": {
         "name": "Charge Level"

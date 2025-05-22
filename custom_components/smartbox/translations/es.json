@@ -57,6 +57,19 @@
     }
   },
   "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "frost": "Anticongelante",
+              "schedule": "Planificación",
+              "selflearn:": "Autoaprendizaje"
+            }
+          }
+        }
+      }
+    },
     "sensor": {
       "charge_level": {
         "name": "Nivel de carga"

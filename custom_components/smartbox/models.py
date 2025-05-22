@@ -442,6 +442,8 @@ class SmartboxNode:
     @property
     def total_energy(self) -> float | None:
         """Get the energy used."""
+        if not self._samples:
+            return None
         return self._samples[-1]["counter"]
 
     @property

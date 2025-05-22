@@ -159,6 +159,12 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
             _check_status_key("mode", self._node.node_type, self._status)
             mode = self._status["mode"]
+            if mode == "auto":
+                return PRESET_SCHEDULE
+            if mode == "presence":
+                return PRESET_ACTIVITY
+            if mode == "self_learn":
+                return PRESET_SELF_LEARN
             if mode == "manual":
                 _check_status_key("selected_temp", self._node.node_type, self._status)
                 selected_temp = self._status["selected_temp"]
@@ -173,12 +179,6 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
                     f"{self._node.node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
                 )
                 raise ValueError(msg)
-            if mode == "auto":
-                return PRESET_SCHEDULE
-            if mode == "presence":
-                return PRESET_ACTIVITY
-            if mode == "self_learn":
-                return PRESET_SELF_LEARN
             msg = f"Unknown smartbox node mode {mode}"
             raise ValueError(msg)
         return PRESET_HOME

@@ -1,0 +1,17 @@
+{
+  "entity": {
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "frost": "mdi:snowflake",
+              "self_learn:": "mdi:brain",
+              "schedule": "mdi:calendar-clock-outline"
+            }
+          }
+        }
+      }
+    }
+  }
+}

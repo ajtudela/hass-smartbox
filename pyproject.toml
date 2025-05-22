@@ -1,6 +1,6 @@
 [project]
 name = "hass-smartbox"
-version = "2.1.4"
+version = "2.1.5"
 description = "Home Assistant integration for Smartbox."
 readme = "README.md"
 requires-python = ">=3.13"

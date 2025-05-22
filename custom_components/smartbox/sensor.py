@@ -203,7 +203,7 @@ class PowerSensor(SmartboxSensorBase):
             self._status["power"]
             if (
                 self._node.node_type == SmartboxNodeType.PMO
-                or self._node.is_heating(self._status)
+                or ("power" in self._status and self._node.is_heating(self._status))
             )
             else 0
         )
