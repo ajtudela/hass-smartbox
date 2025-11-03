@@ -10,8 +10,8 @@ from dateutil import tz
 from homeassistant.components.recorder import DOMAIN as RECORDER_DOMAIN, get_instance
 from homeassistant.components.recorder.models.statistics import (
     StatisticData,
-    StatisticMetaData,
     StatisticMeanType,
+    StatisticMetaData,
 )
 from homeassistant.components.recorder.statistics import (
     async_import_statistics,
@@ -339,7 +339,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                 unit_of_measurement=self.native_unit_of_measurement,
             )
             _LOGGER.debug("Insert statistics: %s %s", metadata, statistics)
-            async_import_statistics(self.hass, metadata, statistics, )
+            async_import_statistics(self.hass, metadata, statistics )
 
 
 class ChargeLevelSensor(SmartboxSensorBase):
