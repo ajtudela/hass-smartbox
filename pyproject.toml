@@ -17,18 +17,18 @@ classifiers = [
 license = {file = "LICENSE"}
 dependencies = [
     "homeassistant>=2025.2.5",
-    "smartbox>=2.3.0,<2.4.0",
+    "smartbox>=2.3.1,<2.4.0",
 ]
 
 [dependency-groups]
 dev = [
     "coverage",
     "homeassistant>=2025.2.5",
-    "homeassistant-stubs>=2025.1.0",
+    "homeassistant-stubs",
     "pytest",
     "pytest-aiohttp",
     "pytest-cov",
-    "pytest-homeassistant-custom-component>=0.13.210",
+    "pytest-homeassistant-custom-component",
     "pytest-mock",
     "pytest-sugar",
     "tox",
