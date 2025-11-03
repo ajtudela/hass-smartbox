@@ -11,6 +11,7 @@ from homeassistant.components.recorder import DOMAIN as RECORDER_DOMAIN, get_ins
 from homeassistant.components.recorder.models.statistics import (
     StatisticData,
     StatisticMetaData,
+    StatisticMeanType,
 )
 from homeassistant.components.recorder.statistics import (
     async_import_statistics,
@@ -329,7 +330,8 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                 )
         if statistics and history_status != HistoryConsumptionStatus.OFF:
             metadata: StatisticMetaData = StatisticMetaData(
-                has_mean=False,
+                mean_type=StatisticMeanType.NONE,
+                unit_class = None,
                 has_sum=True,
                 source=RECORDER_DOMAIN,
                 name=statistic_id,
@@ -337,7 +339,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                 unit_of_measurement=self.native_unit_of_measurement,
             )
             _LOGGER.debug("Insert statistics: %s %s", metadata, statistics)
-            async_import_statistics(self.hass, metadata, statistics)
+            async_import_statistics(self.hass, metadata, statistics, )
 
 
 class ChargeLevelSensor(SmartboxSensorBase):

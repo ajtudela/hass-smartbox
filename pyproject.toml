@@ -1,6 +1,6 @@
 [project]
 name = "hass-smartbox"
-version = "2.1.5"
+version = "2.2.0"
 description = "Home Assistant integration for Smartbox."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -17,24 +17,24 @@ classifiers = [
 license = {file = "LICENSE"}
 dependencies = [
     "homeassistant>=2025.2.5",
-    "smartbox>=2.2.0,<2.3.0",
+    "smartbox>=2.3.0,<2.4.0",
 ]
 
 [dependency-groups]
 dev = [
-    "coverage>=7.6.8",
+    "coverage",
     "homeassistant>=2025.2.5",
     "homeassistant-stubs>=2025.1.0",
-    "pytest>=8.3.4",
-    "pytest-aiohttp>=1.0.5",
-    "pytest-cov>=6.0.0",
+    "pytest",
+    "pytest-aiohttp",
+    "pytest-cov",
     "pytest-homeassistant-custom-component>=0.13.210",
-    "pytest-mock>=3.14.0",
-    "pytest-sugar>=1.0.0",
-    "tox>=4.24.1",
-    "ruff>=0.9.4",
-    "types-python-dateutil>=2.9.0.20241206",
-    "mypy>=1.14.1",
+    "pytest-mock",
+    "pytest-sugar",
+    "tox",
+    "ruff",
+    "types-python-dateutil",
+    "mypy",
 
 ]
 
