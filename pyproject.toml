@@ -3,7 +3,7 @@ name = "hass-smartbox"
 version = "2.2.0"
 description = "Home Assistant integration for Smartbox."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13.2"
 authors = [
   { name="Alberto Tudela", email="ajtudela@gmail.com" },
   { name="Delmael", email="delmael@outlook.com" },
@@ -16,26 +16,25 @@ classifiers = [
 ]
 license = {file = "LICENSE"}
 dependencies = [
-    "homeassistant>=2025.2.5",
+    "homeassistant>=2025.11.0",
     "smartbox>=2.3.1,<2.4.0",
 ]
 
 [dependency-groups]
 dev = [
-    "coverage",
-    "homeassistant>=2025.2.5",
-    "homeassistant-stubs",
-    "pytest",
-    "pytest-aiohttp",
-    "pytest-cov",
-    "pytest-homeassistant-custom-component",
-    "pytest-mock",
-    "pytest-sugar",
-    "tox",
-    "ruff",
-    "types-python-dateutil",
-    "mypy",
-
+    "coverage>=7.6.8",
+    "homeassistant>=2025.11.0",
+    "homeassistant-stubs>=2025.11.0",
+    "pytest>=8.3.4",
+    "pytest-aiohttp>=1.0.5",
+    "pytest-cov>=6.0.0",
+    "pytest-homeassistant-custom-component>=0.13.210,<=0.14.0",
+    "pytest-mock>=3.14.0",
+    "pytest-sugar>=1.0.0",
+    "tox>=4.24.1",
+    "ruff>=0.9.4",
+    "types-python-dateutil>=2.9.0.20241206",
+    "mypy>=1.14.1",
 ]
 
 [project.urls]
@@ -112,10 +111,10 @@ exclude_also = [
 ]
 
 [tool.tox]
-env_list = ["3.13", "3.14"]
+env_list = ["3.13"]
 
 [tool.tox.env_run_base]
+isolated_build = true
 description = "Run test under {base_python}"
 dependency_groups = ["dev"]
 commands = [["python", "-m", "pytest", "--cov=custom_components.smartbox", "--cov-append", "--cov-report=term", "--cov-report=xml", "--junitxml=junit.xml"]]
-
