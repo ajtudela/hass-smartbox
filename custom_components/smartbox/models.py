@@ -682,7 +682,7 @@ def set_preset_mode_status_update(
 
 def get_factory_options(node: SmartboxNode | MagicMock) -> FactoryOptionsDict:
     """Get the factory options."""
-    return cast(FactoryOptionsDict, node.setup.get("factory_options", {}))
+    return cast("FactoryOptionsDict", node.setup.get("factory_options", {}))
 
 
 def window_mode_available(node: SmartboxNode | MagicMock) -> bool:
