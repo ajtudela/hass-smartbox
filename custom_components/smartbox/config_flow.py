@@ -69,8 +69,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_API_NAME): SelectSelector(
             SelectSelectorConfig(
                 options=[
-                    SelectOptionDict(value=reseller.api_url, label=reseller.name)
-                    for reseller in AvailableResellers.resellers.values()
+                    SelectOptionDict(value=key, label=reseller.name)
+                    for key, reseller in AvailableResellers.resellers.items()
                 ],
                 mode=SelectSelectorMode.DROPDOWN,
             )
