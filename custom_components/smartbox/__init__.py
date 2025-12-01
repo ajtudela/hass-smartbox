@@ -57,14 +57,11 @@ async def create_smartbox_session_from_entry(
             password=data[CONF_PASSWORD],
             websession=websession,
         )
-        print(data[CONF_API_NAME])
         await session.health_check()
         await session.check_refresh_auth()
     except APIUnavailableError as ex:
         raise APIUnavailableError(ex) from ex
     except InvalidAuthError as ex:
-        print(data[CONF_API_NAME])
-        print(ex)
         raise InvalidAuthError(ex) from ex
     except SmartboxError as ex:
         raise SmartboxError(ex) from ex
