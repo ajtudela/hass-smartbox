@@ -268,9 +268,9 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             )
             assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
 
-            # Calculate expected charge level based on storage heater model type
-            # Model 1C storage heaters use current_charge_per
-            # Other storage heater models use charge_level directly
+            # Calculate expected charge level based on heater model type
+            # Model 1C (storage heaters) use current_charge_per
+            # Other heater models use charge_level directly
 
             # Extract model code from version.pid (preferred) or product_id (fallback)
             version_info = mock_node.get("version", {})
@@ -294,14 +294,14 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             assert int(state.state) == pytest.approx(int(expected_charge))
 
             # Update charge level via socket
-            # Use appropriate field based on storage heater model type
+            # Use appropriate field based on heater model type
             if model_code == "1C":
-                # Model 1C storage heaters: update current_charge_per
+                # Model 1C heaters: update current_charge_per
                 mock_smartbox.generate_socket_status_update(
                     mock_device, mock_node, {"current_charge_per": 5}
                 )
             else:
-                # Other storage heater models: update charge_level directly
+                # Other heater models: update charge_level directly
                 mock_smartbox.generate_socket_status_update(
                     mock_device, mock_node, {"charge_level": 5}
                 )

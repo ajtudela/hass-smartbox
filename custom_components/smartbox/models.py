@@ -319,7 +319,7 @@ class SmartboxNode:
         otherwise from product_id. For example: "XX1CXX" -> "1C" or "081C" -> "1C"
         This mirrors the behaviour used in the official web app.
 
-        This is used to identify specific storage heater models that have
+        This is used to identify specific heater models that have
         different data structures or behaviors.
         """
         min_length = 4
