@@ -308,6 +308,39 @@ class SmartboxNode:
         return self._node_info["addr"]
 
     @property
+    def product_id(self) -> str:
+        """Return the product id of the node."""
+        return self._node_info.get("product_id", "")
+
+    def get_model_code(self) -> str:
+        """Extract the model code from version.pid or product_id.
+
+        Returns characters 3-4 (index 2-3) from version.pid if available,
+        otherwise from product_id. For example: "XX1CXX" -> "1C" or "081C" -> "1C"
+        This mirrors the behaviour used in the official web app.
+
+        This is used to identify specific storage heater models that have
+        different data structures or behaviors.
+        """
+        min_length = 4
+        model_code_start = 2
+        model_code_end = 4
+
+        version_info = self._node_info.get("version", {})
+        if isinstance(version_info, dict):
+            pid = version_info.get("pid", "")
+            if pid:
+                pid_upper = pid.upper() if pid else ""
+                if len(pid_upper) >= min_length:
+                    return pid_upper[model_code_start:model_code_end]
+
+        product_id = self.product_id.upper() if self.product_id else ""
+        if len(product_id) >= min_length:
+            return product_id[model_code_start:model_code_end]
+
+        return ""
+
+    @property
     def status(self) -> StatusDict:
         """Return the status of node."""
         return self._status

@@ -267,19 +267,47 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
                 mock_device["dev_id"], mock_node
             )
             assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
-            assert int(state.state) == pytest.approx(
-                int(mock_node_status["charge_level"])
-            )
+
+            # Calculate expected charge level based on storage heater model type
+            # Model 1C storage heaters use current_charge_per
+            # Other storage heater models use charge_level directly
+
+            # Extract model code from version.pid (preferred) or product_id (fallback)
+            version_info = mock_node.get("version", {})
+            model_code = ""
+            if isinstance(version_info, dict):
+                pid = version_info.get("pid", "")
+                if pid and len(pid) >= 4:
+                    model_code = pid.upper()[2:4]
+
+            if not model_code:
+                # Fallback to product_id
+                product_id = mock_node.get("product_id", "").upper()
+                model_code = product_id[2:4] if len(product_id) >= 4 else ""
+
+            if model_code == "1C":
+                # Model 1C: use current_charge_per field
+                expected_charge = mock_node_status.get("current_charge_per", 0)
+            else:
+                expected_charge = mock_node_status.get("charge_level", 0)
+
+            assert int(state.state) == pytest.approx(int(expected_charge))
 
             # Update charge level via socket
-            mock_smartbox.generate_socket_status_update(
-                mock_device, mock_node, {"charge_level": 5}
-            )
+            # Use appropriate field based on storage heater model type
+            if model_code == "1C":
+                # Model 1C storage heaters: update current_charge_per
+                mock_smartbox.generate_socket_status_update(
+                    mock_device, mock_node, {"current_charge_per": 5}
+                )
+            else:
+                # Other storage heater models: update charge_level directly
+                mock_smartbox.generate_socket_status_update(
+                    mock_device, mock_node, {"charge_level": 5}
+                )
+
             await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
-            mock_node_status = await mock_smartbox.session.get_status(
-                mock_device["dev_id"], mock_node
-            )
             assert int(state.state) == 5
 
             # test unavailable

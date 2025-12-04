@@ -63,6 +63,9 @@ MOCK_SMARTBOX_NODE_INFO = {
             "product_id": "product_id_1_1",
             "fw_version": "fw_version_1_1",
             "serial_id": "serial_id_1_1",
+            "version": {
+                "pid": "081c",
+            },
         },
     ],
     "device_2": [
@@ -235,7 +238,9 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "locked": False,
             # acm nodes have a 'charging' state rather than 'active'
             "charging": True,
-            "charge_level": 2,
+            # Model 1C uses current_charge_per instead of charge_level
+            "current_charge_per": 15,
+            "target_charge_per": 25,
             "power": "620",
             "mode": "auto",
         },

@@ -353,7 +353,17 @@ class ChargeLevelSensor(SmartboxSensorBase):
     @property
     def native_value(self) -> int:
         """Return the native value of the sensor."""
-        return self._status["charge_level"]
+        # Different storage heater models use different field names for charge level
+        # Model 1C storage heaters use 'current_charge_per'
+        # Other storage heater models use 'charge_level' directly
+        model_code = self._node.get_model_code()
+
+        if model_code == "1C":
+            # Model 1C storage heaters: use current_charge_per field
+            return self._status.get("current_charge_per", 0)
+
+        # Default for other storage heater models: use charge_level field
+        return self._status.get("charge_level", 0)
 
 
 class BoostEndTimeSensor(SmartboxSensorBase):
