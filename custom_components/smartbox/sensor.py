@@ -343,7 +343,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
 
 
 class ChargeLevelSensor(SmartboxSensorBase):
-    """Smartbox heater charge level sensor."""
+    """Smartbox storage heater charge level sensor."""
 
     _attr_key = "charge_level"
     device_class = SensorDeviceClass.BATTERY
