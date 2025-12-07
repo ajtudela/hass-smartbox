@@ -102,6 +102,7 @@ class SmartboxDevice:
         self.update_manager.subscribe_to_node_setup(self._node_setup_update)
         self.update_manager.subscribe_to_device_power_limit(self._power_limit_update)
         self.update_manager.subscribe_to_node_status(self._node_status_update)
+        self.update_manager.subscribe_to_node_version(self._node_version_update)
 
         _LOGGER.debug("Starting UpdateManager task for device %s", self.dev_id)
         self._watchdog_task = asyncio.create_task(self.update_manager.run())
@@ -166,6 +167,22 @@ class SmartboxDevice:
         else:
             _LOGGER.error(
                 "Received setup update for unknown node %s %s", node_type, addr
+            )
+
+    def _node_version_update(
+        self, node_type: str, addr: int, node_version: dict[str, str]
+    ) -> None:
+        _LOGGER.debug("Node version update: %s", node_version)
+        if (node_type, addr) in self._nodes:
+            node: SmartboxNode | None = self._nodes.get((node_type, addr), None)
+            if node is not None and node.version != node_version:
+                node.update_version(node_version)
+                async_dispatcher_send(
+                    self._hass, f"{DOMAIN}_{node.node_id}_version", node_version
+                )
+        else:
+            _LOGGER.error(
+                "Received version update for unknown node %s %s", node_type, addr
             )
 
     @property
@@ -246,6 +263,7 @@ class SmartboxNode:
         status: StatusDict,
         setup: SetupDict,
         samples: SamplesDict,
+        version: dict[str, str] | None = None,
     ) -> None:
         """Initialise a smartbox node."""
         self._device = device
@@ -254,6 +272,7 @@ class SmartboxNode:
         self._status = status
         self._setup = setup
         self._samples = samples
+        self._version = version or {}
 
     @classmethod
     async def create(
@@ -280,7 +299,9 @@ class SmartboxNode:
                 int(time.time()),
             )
         )["samples"]
-        return cls(device, node_info, session, status, setup, samples)
+        # Get version info (includes PID)
+        version: dict[str, str] = node_info.get("version", {})
+        return cls(device, node_info, session, status, setup, samples, version)
 
     @property
     def node_info(self) -> Node:
@@ -326,6 +347,32 @@ class SmartboxNode:
         """Update setup."""
         _LOGGER.debug("Updating node %s setup: %s", self.name, setup)
         self._setup = setup
+
+    @property
+    def version(self) -> dict[str, str]:
+        """Version info of node (includes PID)."""
+        return self._version
+
+    def update_version(self, version: dict[str, str]) -> None:
+        """Update version."""
+        _LOGGER.debug("Updating node %s version: %s", self.name, version)
+        self._version = version
+
+    @property
+    def pid(self) -> str | None:
+        """Product ID of the node."""
+        return self._version.get("pid")
+
+    def get_model_code(self) -> str | None:
+        """Get characters 2-4 of the PID (model code).
+        
+        Matches official app: ((data.version || {}).pid || '').toUpperCase().slice(2, 4)
+        For PID '081c', this returns '1C'.
+        """
+        pid = self.pid
+        if pid and len(pid) >= 4:
+            return pid[2:4].upper()
+        return None
 
     async def set_status(self, **status_args: StatusDict) -> StatusDict:
         """Set status."""

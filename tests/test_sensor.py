@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from dateutil import tz
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
@@ -296,6 +296,68 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_charge_level_with_pid_1c(hass, config_entry):
+    """Test charge level sensor uses current_charge_per for PID ending in 1C."""
+    from custom_components.smartbox.sensor import ChargeLevelSensor
+
+    # Mock node with PID ending in 1C (e.g., 081c)
+    mock_node = MagicMock()
+    mock_node.name = "Test Storage Heater"
+    mock_node.get_model_code.return_value = "1C"
+    mock_node.status = {
+        "current_charge_per": 75,
+        "locked": False,
+    }
+
+    sensor = ChargeLevelSensor(mock_node, config_entry)
+    sensor._status = mock_node.status
+
+    # Should use current_charge_per for model code 1C
+    assert sensor.native_value == 75
+
+
+@pytest.mark.asyncio
+async def test_charge_level_with_other_pid(hass, config_entry):
+    """Test charge level sensor uses charge_level for other PIDs."""
+    from custom_components.smartbox.sensor import ChargeLevelSensor
+
+    # Mock node with different PID
+    mock_node = MagicMock()
+    mock_node.name = "Test Storage Heater"
+    mock_node.get_model_code.return_value = "2A"
+    mock_node.status = {
+        "charge_level": 50,
+        "locked": False,
+    }
+
+    sensor = ChargeLevelSensor(mock_node, config_entry)
+    sensor._status = mock_node.status
+
+    # Should use charge_level for other model codes
+    assert sensor.native_value == 50
+
+
+@pytest.mark.asyncio
+async def test_charge_level_missing_field(hass, config_entry):
+    """Test charge level sensor returns 0 when field is missing."""
+    from custom_components.smartbox.sensor import ChargeLevelSensor
+
+    # Mock node with PID 1C but missing current_charge_per
+    mock_node = MagicMock()
+    mock_node.name = "Test Storage Heater"
+    mock_node.get_model_code.return_value = "1C"
+    mock_node.status = {
+        "locked": False,
+    }
+
+    sensor = ChargeLevelSensor(mock_node, config_entry)
+    sensor._status = mock_node.status
+
+    # Should return 0 when field is missing
+    assert sensor.native_value == 0
 
 
 @pytest.mark.asyncio
