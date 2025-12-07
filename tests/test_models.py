@@ -724,3 +724,77 @@ async def test_remaining_boost_time(hass):
     boost_end_datetime = today.replace(hour=0, minute=30).astimezone(tz.tzlocal())
     expected_remaining_time = (boost_end_datetime - today).total_seconds()
     assert node.remaining_boost_time == expected_remaining_time
+
+
+async def test_get_model_code():
+    """Test get_model_code extracts correct characters from PID."""
+    mock_device = MagicMock()
+    mock_session = MagicMock()
+    node_info = {"name": "Test Node", "addr": 1, "type": SmartboxNodeType.ACM}
+    initial_status = {"mode": "auto"}
+    initial_setup = {}
+    node_sample = []
+
+    # Test with PID 081c - should return 1C
+    node = SmartboxNode(
+        mock_device,
+        node_info,
+        mock_session,
+        initial_status,
+        initial_setup,
+        node_sample,
+        version={"pid": "081c", "fw_version": "1.6", "hw_version": "1.0", "uid": "test"},
+    )
+    assert node.get_model_code() == "1C"
+
+    # Test with PID 0217 - should return 17
+    node._version = {"pid": "0217", "fw_version": "1.0", "hw_version": "1.0", "uid": "test"}
+    assert node.get_model_code() == "17"
+
+    # Test with PID 082a - should return 2A
+    node._version = {"pid": "082a", "fw_version": "1.0", "hw_version": "1.0", "uid": "test"}
+    assert node.get_model_code() == "2A"
+
+    # Test with short PID (less than 4 chars) - should return None
+    node._version = {"pid": "08", "fw_version": "1.0", "hw_version": "1.0", "uid": "test"}
+    assert node.get_model_code() is None
+
+    # Test with no PID - should return None
+    node._version = {}
+    assert node.get_model_code() is None
+
+    # Test with None version - should return None
+    node._version = None
+    node._version = {}
+    assert node.get_model_code() is None
+
+
+async def test_node_version_property():
+    """Test node version property and update_version method."""
+    mock_device = MagicMock()
+    mock_session = MagicMock()
+    node_info = {"name": "Test Node", "addr": 1, "type": SmartboxNodeType.ACM}
+    initial_status = {"mode": "auto"}
+    initial_setup = {}
+    node_sample = []
+    version_data = {"pid": "081c", "fw_version": "1.6", "hw_version": "1.0", "uid": "test123"}
+
+    node = SmartboxNode(
+        mock_device,
+        node_info,
+        mock_session,
+        initial_status,
+        initial_setup,
+        node_sample,
+        version=version_data,
+    )
+
+    # Test version property
+    assert node.version == version_data
+    assert node.pid == "081c"
+
+    # Test update_version
+    new_version = {"pid": "081c", "fw_version": "1.7", "hw_version": "1.0", "uid": "test123"}
+    node.update_version(new_version)
+    assert node.version == new_version
+    assert node.pid == "081c"
