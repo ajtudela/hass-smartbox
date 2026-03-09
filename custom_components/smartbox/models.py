@@ -40,7 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 FactoryOptionsDict = dict[str, bool]
 SetupDict = dict[str, Any]
 StatusDict = dict[str, Any]
-SamplesDict = dict[str, Any]
+SamplesDict = list[dict[str, Any]]
 Node = dict[str, Any]
 Device = dict[str, Any]
 
@@ -59,7 +59,7 @@ class SmartboxDevice:
         self._session = session
         self._away: bool = False
         self._power_limit: int = 0
-        self._nodes = {}
+        self._nodes: dict[tuple[str, int | str], SmartboxNode] = {}
         self._watchdog_task: asyncio.Task | None = None
         self._hass = hass
         self._connected_status: bool | None = None
@@ -74,23 +74,22 @@ class SmartboxDevice:
         device: Device,
         session: AsyncSmartboxSession | MagicMock,
         hass: HomeAssistant,
-    ) -> None:
+    ) -> "SmartboxDevice":
         """Initilaise nodes."""
         self = cls(device=device, session=session, hass=hass)
         # Would do in __init__, but needs to be a coroutine
-        self._connected_status = (
-            await self._session.get_device_connected(self.dev_id)
+        self._connected_status = cast(
+            "dict[str, bool]", (await self._session.get_device_connected(self.dev_id))
         )["connected"]
-        session_nodes: list[Node] = await self._session.get_nodes(self.dev_id)
+        self._away = cast(
+            "dict[str, bool]", (await self._session.get_device_away_status(self.dev_id))
+        )["away"]
+
+        session_nodes = cast("list[Node]", await self._session.get_nodes(self.dev_id))
+        if any(n.get("type") == SmartboxNodeType.PMO for n in session_nodes):
+            self._power_limit = await self._session.get_device_power_limit(self.dev_id)
 
         for node_info in session_nodes:
-            if node_info["type"] == SmartboxNodeType.PMO:
-                self._power_limit = await self._session.get_device_power_limit(
-                    self.dev_id
-                )
-            self._away = (await self._session.get_device_away_status(self.dev_id))[
-                "away"
-            ]
             node: SmartboxNode = await SmartboxNode.create(
                 device=self, node_info=node_info, session=self._session
             )
@@ -106,6 +105,18 @@ class SmartboxDevice:
         _LOGGER.debug("Starting UpdateManager task for device %s", self.dev_id)
         self._watchdog_task = asyncio.create_task(self.update_manager.run())
         return self
+
+    async def cancel(self) -> None:
+        """Cancel the watchdog task and disconnect."""
+        await self.update_manager.cancel()
+
+        if self._watchdog_task and not self._watchdog_task.done():
+            _LOGGER.warning(
+                "Annulation forcée de la tâche watchdog pour le device %s", self.dev_id
+            )
+            self._watchdog_task.cancel()
+            await self._watchdog_task
+
 
     def _connected(self, connected: bool) -> None:
         _LOGGER.debug("Connected connected update: %s", connected)
@@ -192,7 +203,7 @@ class SmartboxDevice:
         """Return all nodes."""
         for item in self._nodes:
             _LOGGER.debug("Get_nodes: %s", item)
-        return self._nodes.values()
+        return list(self._nodes.values())
 
     @property
     def name(self) -> str:
@@ -261,24 +272,32 @@ class SmartboxNode:
         device: SmartboxDevice | MagicMock,
         session: AsyncSmartboxSession | MagicMock,
         node_info: Node,
-    ) -> None:
+    ) -> "SmartboxNode":
         """Create a smartbox node."""
+        status: StatusDict
         if node_info["type"] != SmartboxNodeType.PMO:
-            status: StatusDict = await session.get_node_status(device.dev_id, node_info)
+            status = cast(
+                "StatusDict", await session.get_node_status(device.dev_id, node_info)
+            )
         else:
-            status: StatusDict = {
+            status = {
                 "sync_status": "ok",
                 "locked": False,
                 "power": await session.get_device_power_limit(device.dev_id, node_info),
             }
-        setup: SetupDict = await session.get_node_setup(device.dev_id, node_info)
-        samples: SamplesDict = (
-            await session.get_node_samples(
-                device.dev_id,
-                node_info,
-                int(time.time() - (3600 * 3)),
-                int(time.time()),
-            )
+        setup: SetupDict = cast(
+            "SetupDict", await session.get_node_setup(device.dev_id, node_info)
+        )
+        samples: SamplesDict = cast(
+            "dict[str, Any]",
+            (
+                await session.get_node_samples(
+                    device.dev_id,
+                    node_info,
+                    int(time.time() - (3600 * 3)),
+                    int(time.time()),
+                )
+            ),
         )["samples"]
         return cls(device, node_info, session, status, setup, samples)
 
@@ -295,7 +314,7 @@ class SmartboxNode:
     @property
     def name(self) -> str:
         """Return the name of the node."""
-        return self._node_info["name"] if self._node_info["name"] else self.device.name
+        return self._node_info["name"] or self.device.name
 
     @property
     def node_type(self) -> str:
@@ -327,7 +346,7 @@ class SmartboxNode:
         _LOGGER.debug("Updating node %s setup: %s", self.name, setup)
         self._setup = setup
 
-    async def set_status(self, **status_args: StatusDict) -> StatusDict:
+    async def set_status(self, **status_args: Any) -> StatusDict: # noqa: ANN401
         """Set status."""
         await self._session.set_node_status(
             self._device.dev_id, self._node_info, status_args
@@ -431,11 +450,14 @@ class SmartboxNode:
     async def get_samples(self, start_time: int, end_time: int) -> SamplesDict:
         """Update the samples."""
         return (
-            await self._session.get_node_samples(
-                self.device.dev_id,
-                self._node_info,
-                start_time,
-                end_time,
+            cast(
+                "dict[str,Any]",
+                await self._session.get_node_samples(
+                    self.device.dev_id,
+                    self._node_info,
+                    start_time,
+                    end_time,
+                ),
             )
         )["samples"]
 
@@ -498,7 +520,7 @@ class SmartboxNode:
         boost_end_datetime = today.replace(
             hour=boost_end_hour, minute=boost_end_min
         ).astimezone(tz.tzlocal())
-        return (boost_end_datetime - today).total_seconds()
+        return int((boost_end_datetime - today).total_seconds())
 
 
 def get_temperature_unit(status: StatusDict) -> None | UnitOfTemperature:
@@ -518,7 +540,7 @@ async def get_devices(
     session: AsyncSmartboxSession | MagicMock, hass: HomeAssistant
 ) -> list[SmartboxDevice]:
     """Get the devices."""
-    homes: list[dict[str, Any]] = await session.get_homes()
+    homes: list[dict[str, Any]] = cast("list[dict[str, Any]]", await session.get_homes())
     devices: list[SmartboxDevice] = []
     for home in homes:
         _home = home.copy()

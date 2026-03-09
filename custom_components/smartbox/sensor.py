@@ -241,7 +241,6 @@ class TotalConsumptionSensor(SmartboxSensorBase):
     async def async_update(self) -> None:
         """Get the latest data."""
         await self._node.update_samples()
-        self._attr_state = self._node.total_energy
         await self._adjust_short_term_statistics()
 
     async def async_added_to_hass(self) -> None:
@@ -264,27 +263,29 @@ class TotalConsumptionSensor(SmartboxSensorBase):
 
     async def _adjust_short_term_statistics(self) -> None:
         """Adjust the short term statistics for the sensor."""
-        if (
-            last_stat := await get_instance(self.hass).async_add_executor_job(
-                get_last_short_term_statistics,
-                self.hass,
-                1,
-                self.entity_id,
-                True,  # noqa: FBT003
-                {"sum", "state"},
-            )
-        ) and (
-            last_stat[self.entity_id][0]["sum"] != last_stat[self.entity_id][0]["state"]
+        if last_stat := await get_instance(self.hass).async_add_executor_job(
+            get_last_short_term_statistics,
+            self.hass,
+            1,
+            self.entity_id,
+            True,  # noqa: FBT003
+            {"sum", "state"},
         ):
-            get_instance(self.hass).async_adjust_statistics(
-                statistic_id=self.entity_id,
-                start_time=datetime.fromtimestamp(
-                    last_stat[self.entity_id][0]["start"], tz.tzlocal()
-                ),
-                sum_adjustment=last_stat[self.entity_id][0]["state"]
-                - last_stat[self.entity_id][0]["sum"],
-                adjustment_unit=self.native_unit_of_measurement,
-            )
+            state_value = last_stat[self.entity_id][0]["state"]
+            sum_value = last_stat[self.entity_id][0]["sum"]
+            if (
+                state_value is not None
+                and sum_value is not None
+                and (sum_value != state_value)
+            ):
+                get_instance(self.hass).async_adjust_statistics(
+                    statistic_id=self.entity_id,
+                    start_time=datetime.fromtimestamp(
+                        last_stat[self.entity_id][0]["start"], tz.tzlocal()
+                    ),
+                    sum_adjustment=state_value - sum_value,
+                    adjustment_unit=self.native_unit_of_measurement,
+                )
 
     async def update_statistics(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003, ARG002
         """Update statistics from samples."""
@@ -331,7 +332,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
         if statistics and history_status != HistoryConsumptionStatus.OFF:
             metadata: StatisticMetaData = StatisticMetaData(
                 mean_type=StatisticMeanType.NONE,
-                unit_class = None,
+                unit_class=None,
                 has_sum=True,
                 source=RECORDER_DOMAIN,
                 name=statistic_id,
@@ -339,7 +340,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                 unit_of_measurement=self.native_unit_of_measurement,
             )
             _LOGGER.debug("Insert statistics: %s %s", metadata, statistics)
-            async_import_statistics(self.hass, metadata, statistics )
+            async_import_statistics(self.hass, metadata, statistics)
 
 
 class ChargeLevelSensor(SmartboxSensorBase):

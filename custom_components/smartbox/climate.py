@@ -149,6 +149,21 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             status_args["boost"] = False
         await self._node.set_status(**status_args)
 
+    def _preset_mode_for_manual(self, mode: str) -> str:
+        _check_status_key("selected_temp", self._node.node_type, self._status)
+        selected_temp = self._status["selected_temp"]
+        if selected_temp == "comfort":
+            return PRESET_COMFORT
+        if selected_temp == "eco":
+            return PRESET_ECO
+        if selected_temp == "ice":
+            return PRESET_FROST
+        msg = (
+            f"'Unexpected 'selected_temp' value {'selected_temp'} found for "
+            f"{self._node.node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
+        )
+        raise ValueError(msg)
+
     @property
     def preset_mode(self) -> str:  # noqa: PLR0911
         """Get preset mode."""
@@ -166,19 +181,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             if mode == "self_learn":
                 return PRESET_SELF_LEARN
             if mode == "manual":
-                _check_status_key("selected_temp", self._node.node_type, self._status)
-                selected_temp = self._status["selected_temp"]
-                if selected_temp == "comfort":
-                    return PRESET_COMFORT
-                if selected_temp == "eco":
-                    return PRESET_ECO
-                if selected_temp == "ice":
-                    return PRESET_FROST
-                msg = (
-                    f"'Unexpected 'selected_temp' value {'selected_temp'} found for "
-                    f"{self._node.node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
-                )
-                raise ValueError(msg)
+                return self._preset_mode_for_manual(mode)
             msg = f"Unknown smartbox node mode {mode}"
             raise ValueError(msg)
         return PRESET_HOME

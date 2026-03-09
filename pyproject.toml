@@ -1,9 +1,9 @@
 [project]
 name = "hass-smartbox"
-version = "2.2.1"
+version = "2.3.0"
 description = "Home Assistant integration for Smartbox."
 readme = "README.md"
-requires-python = ">=3.13.2"
+requires-python = ">=3.14.2"
 authors = [
   { name="Alberto Tudela", email="ajtudela@gmail.com" },
   { name="Delmael", email="delmael@outlook.com" },
@@ -16,19 +16,17 @@ classifiers = [
 ]
 license = {file = "LICENSE"}
 dependencies = [
-    "homeassistant>=2025.11.0",
-    "smartbox>=2.3.2,<2.4.0",
+    "homeassistant>=2026.2.3",
+    "smartbox>=2.5.0,<2.6.0",
 ]
 
 [dependency-groups]
 dev = [
     "coverage>=7.6.8",
-    "homeassistant>=2025.11.0",
-    "homeassistant-stubs>=2025.11.0",
     "pytest>=8.3.4",
     "pytest-aiohttp>=1.0.5",
     "pytest-cov>=6.0.0",
-    "pytest-homeassistant-custom-component>=0.13.210,<=0.14.0",
+    "pytest-homeassistant-custom-component>=0.13.317,<=0.14.0",
     "pytest-mock>=3.14.0",
     "pytest-sugar>=1.0.0",
     "tox>=4.24.1",
@@ -44,6 +42,7 @@ Issues = "https://github.com/ajtudela/hass-smartbox/issues"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
 
 [tool.mypy]
 warn_unused_configs = true
@@ -77,7 +76,7 @@ combine-as-imports = true
 split-on-trailing-comma = false
 
 [tool.ruff.lint.mccabe]
-max-complexity = 25
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
@@ -111,10 +110,16 @@ exclude_also = [
 ]
 
 [tool.tox]
-env_list = ["3.13"]
+env_list = ["3.14"]
 
 [tool.tox.env_run_base]
 isolated_build = true
 description = "Run test under {base_python}"
 dependency_groups = ["dev"]
 commands = [["python", "-m", "pytest", "--cov=custom_components.smartbox", "--cov-append", "--cov-report=term", "--cov-report=xml", "--junitxml=junit.xml"]]
+
+[tool.sonar]
+"sonar.python.version" = "3.14"
+"python.coverage.reportPaths" = "coverage.xml"
+"sonar.tests" = "tests"
+"python.xunit.reportPath" = "junit.xml"
