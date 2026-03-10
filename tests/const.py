@@ -17,7 +17,7 @@ MOCK_SMARTBOX_CONFIG = {
     }
 }
 
-MOCK_SESSION_CONFIG:dict[str, dict[str, Any]] = {DOMAIN: {}}
+MOCK_SESSION_CONFIG: dict[str, dict[str, Any]] = {DOMAIN: {}}
 
 
 MOCK_SMARTBOX_DEVICE_INFO = {

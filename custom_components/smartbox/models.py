@@ -117,7 +117,6 @@ class SmartboxDevice:
             self._watchdog_task.cancel()
             await self._watchdog_task
 
-
     def _connected(self, connected: bool) -> None:
         _LOGGER.debug("Connected connected update: %s", connected)
         self._connected_status = connected
@@ -346,7 +345,7 @@ class SmartboxNode:
         _LOGGER.debug("Updating node %s setup: %s", self.name, setup)
         self._setup = setup
 
-    async def set_status(self, **status_args: Any) -> StatusDict: # noqa: ANN401
+    async def set_status(self, **status_args: Any) -> StatusDict:  # noqa: ANN401
         """Set status."""
         await self._session.set_node_status(
             self._device.dev_id, self._node_info, status_args
@@ -540,7 +539,9 @@ async def get_devices(
     session: AsyncSmartboxSession | MagicMock, hass: HomeAssistant
 ) -> list[SmartboxDevice]:
     """Get the devices."""
-    homes: list[dict[str, Any]] = cast("list[dict[str, Any]]", await session.get_homes())
+    homes: list[dict[str, Any]] = cast(
+        "list[dict[str, Any]]", await session.get_homes()
+    )
     devices: list[SmartboxDevice] = []
     for home in homes:
         _home = home.copy()
