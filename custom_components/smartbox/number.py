@@ -49,7 +49,7 @@ async def async_setup_entry(
         update_before_add=True,
     )
     # Add boost temperature and duration entities for each heater
-    boost_entities = []
+    boost_entities: list[ConfigBoostDuration | ConfigBoostTemperature] = []
     boost_entities.extend(
         [
             ConfigBoostTemperature(node, entry)
@@ -68,31 +68,33 @@ async def async_setup_entry(
 
     async def handle_set_boost_params(call: ServiceCall) -> None:  # pragma: no cover
         """Handle the service call."""
-        areas: list = call.data.get(ATTR_AREA_ID, [])
         devices: list = call.data.get(ATTR_DEVICE_ID, [])
         entities: list = call.data.get(ATTR_ENTITY_ID, [])
-        for area in areas:
+        for area in call.data.get(ATTR_AREA_ID, []):
             for device in dr.async_entries_for_area(dr.async_get(hass), area):
                 if device.id not in devices:
                     devices.append(device.id)
-        for device in devices:
-            for entity in er.async_entries_for_device(er.async_get(hass), device):
-                if entity.id not in entities:
-                    entities.append(entity.entity_id)
-        for _entity in entities:
-            entity = next(
-                (e for e in boost_entities if e.entity_id == _entity),
-                None,
-            )
-            if entity is not None:
-                if (
-                    boost_temp := call.data.get(ATTR_TEMPERATURE, False)
-                ) and entity.device_class == ATTR_TEMPERATURE:
-                    await entity.async_set_native_value(boost_temp)
-                if (
-                    boost_time := call.data.get(ATTR_DURATION, False)
-                ) and entity.device_class == ATTR_DURATION:
-                    await entity.async_set_native_value(boost_time)
+                    for entity in er.async_entries_for_device(
+                        er.async_get(hass), device.id
+                    ):
+                        if entity.id not in entities:
+                            _entity = next(
+                                (
+                                    e
+                                    for e in boost_entities
+                                    if e.entity_id == entity.entity_id
+                                ),
+                                None,
+                            )
+                            if _entity is not None:
+                                if (
+                                    boost_temp := call.data.get(ATTR_TEMPERATURE, False)
+                                ) and _entity.device_class == ATTR_TEMPERATURE:
+                                    await _entity.async_set_native_value(boost_temp)
+                                if (
+                                    boost_time := call.data.get(ATTR_DURATION, False)
+                                ) and _entity.device_class == ATTR_DURATION:
+                                    await _entity.async_set_native_value(boost_time)
 
     hass.services.async_register(
         DOMAIN,
@@ -154,7 +156,7 @@ class ConfigBoostTemperature(SmartBoxNodeEntity, NumberEntity):
     @property
     def native_unit_of_measurement(self) -> str:
         """Return the unit of measurement."""
-        if unit := get_temperature_unit(self._status) is not None:
+        if (unit := get_temperature_unit(self._status)) is not None:
             return unit
         return UnitOfTemperature.CELSIUS
 

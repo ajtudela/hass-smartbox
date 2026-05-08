@@ -17,7 +17,7 @@ MOCK_SMARTBOX_CONFIG = {
     }
 }
 
-MOCK_SESSION_CONFIG = {DOMAIN: {}}
+MOCK_SESSION_CONFIG: dict[str, dict[str, Any]] = {DOMAIN: {}}
 
 
 MOCK_SMARTBOX_DEVICE_INFO = {
@@ -191,12 +191,12 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
-MOCK_SMARTBOX_NODE_AWAY: dict[str, list[dict[str, Any]]] = {
+MOCK_SMARTBOX_NODE_AWAY: dict[str, dict[str, Any]] = {
     "device_1": {"enabled": True, "away": True, "forced": True},
     "device_2": {"enabled": False, "away": False, "forced": False},
 }
 
-MOCK_SMARTBOX_DEVICE_POWER: dict[str, list[dict[str, Any]]] = {
+MOCK_SMARTBOX_DEVICE_POWER: dict[str, int] = {
     "device_1": 1500,
     "device_2": 1000,
 }

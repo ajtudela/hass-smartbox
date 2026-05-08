@@ -15,7 +15,7 @@ from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
 from .const import CONF_API_NAME
 from .models import SmartboxDevice, SmartboxNode, get_devices
 
-__version__ = "2.1.2"
+__version__ = "2.3.0"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> bool:
     """Unload a config entry."""
     for device in entry.runtime_data.devices:
-        await device.update_manager.cancel()
+        await device.cancel()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 

@@ -90,6 +90,60 @@ async def test_smartbox_device_connected_updates(hass):
         assert not device.connected
 
 
+async def test_cancel(hass, caplog):
+    dev_id = "device_1"
+    mock_session = MagicMock()
+
+    class _MockTask:
+        """Minimal asyncio.Task stand-in: sync done()/cancel(), immediately awaitable."""
+
+        def __init__(self, is_done: bool) -> None:
+            self._done = is_done
+            self.cancel = MagicMock()
+
+        def done(self) -> bool:
+            return self._done
+
+        def __await__(self):
+            return iter([])
+
+    with patch(
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        new_callable=NonCallableMock,
+    ):
+        # No watchdog task: only update_manager.cancel() is called
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = None
+        await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+
+        # Watchdog task already done: no forced cancellation, no warning
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = _MockTask(is_done=True)
+        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+            await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+        device._watchdog_task.cancel.assert_not_called()
+        assert not caplog.records
+
+        # Watchdog task still running: forced cancellation and warning logged
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = _MockTask(is_done=False)
+        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+            await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+        device._watchdog_task.cancel.assert_called_once()
+        assert_log_message(
+            caplog,
+            "custom_components.smartbox.models",
+            logging.WARNING,
+            f"Annulation forcée de la tâche watchdog pour le device {dev_id}",
+        )
+
+
 async def test_smartbox_device_node_status_update(hass, caplog):
     """Independently test node status updates usually called by UpdateManager."""
     dev_id = "device_1"
@@ -207,6 +261,7 @@ async def test_smartbox_node(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.node_id == f"{dev_id}_{node_addr}"
     assert node.name == node_name
@@ -563,6 +618,30 @@ def test_get_temperature_unit():
     assert "Unknown temp unit K" in exc_info.exconly()
 
 
+def test_version_and_get_model_code():
+    node = object.__new__(SmartboxNode)
+
+    node._version = {"pid": "081c", "hw_version": "2.3"}
+    assert node.version == {"pid": "081c", "hw_version": "2.3"}
+    assert node.pid == "081c"
+    assert node.hw_version == "2.3"
+    assert node.get_model_code() == "1C"
+
+    node._version = {"pid": "ab"}
+    assert node.get_model_code() == "AB"
+
+    node._version = {"pid": "x"}
+    assert node.get_model_code() is None
+
+    node._version = {"pid": ""}
+    assert node.get_model_code() is None
+
+    node._version = {}
+    assert node.pid is None
+    assert node.hw_version is None
+    assert node.get_model_code() is None
+
+
 async def test_update_samples(hass):
     dev_id = "test_device_id_1"
     mock_device = AsyncMock()
@@ -590,6 +669,7 @@ async def test_update_samples(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.total_energy == 247426
     # Test case where get_samples returns less than 2 samples
@@ -624,6 +704,7 @@ async def test_update_samples(hass):
         initial_status,
         initial_setup,
         [],
+        {},
     )
     assert node.total_energy is None
 
@@ -652,6 +733,7 @@ async def test_update_power(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.status["power"] == 4500
     # Test case where get_samples returns less than 2 samples
@@ -704,6 +786,7 @@ async def test_remaining_boost_time(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
 
     assert node.boost_end_min == 90

@@ -93,16 +93,19 @@ async def test_boost_temperature(hass, mock_smartbox, config_entry):
     )
     unique_id = get_node_unique_id(mock_device, mock_node, "config_boost_temperature")
     assert entity_id == get_entity_id_from_unique_id(hass, NUMBER_DOMAIN, unique_id)
+    min_val = state.attributes.get("min")
+    max_val = state.attributes.get("max")
+    test_value = round((min_val + max_val) / 2, 1)
+
     await hass.services.async_call(
         NUMBER_DOMAIN,
         SERVICE_SET_VALUE,
-        {ATTR_ENTITY_ID: entity_id, ATTR_VALUE: 25.0},
+        {ATTR_ENTITY_ID: entity_id, ATTR_VALUE: test_value},
         blocking=True,
     )
-    # Faut simuler le retour de la websocket
     await async_update_entity(hass, entity_id)
     state = hass.states.get(entity_id)
-    assert state.state == "25.0"
+    assert state.state == str(test_value)
 
 
 async def test_boost_duration(hass, mock_smartbox, config_entry):

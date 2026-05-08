@@ -1,9 +1,14 @@
 """Config flow for Smartbox."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigFlow,
+    ConfigFlowContext,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
@@ -115,7 +120,7 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         context = dict(self.context)
         context["title_placeholders"] = placeholders
-        self.context = context
+        self.context = cast("ConfigFlowContext", context)
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
