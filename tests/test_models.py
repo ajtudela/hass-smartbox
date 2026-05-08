@@ -207,6 +207,7 @@ async def test_smartbox_node(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.node_id == f"{dev_id}_{node_addr}"
     assert node.name == node_name
@@ -590,6 +591,7 @@ async def test_update_samples(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.total_energy == 247426
     # Test case where get_samples returns less than 2 samples
@@ -624,6 +626,7 @@ async def test_update_samples(hass):
         initial_status,
         initial_setup,
         [],
+        {},
     )
     assert node.total_energy is None
 
@@ -652,6 +655,7 @@ async def test_update_power(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
     assert node.status["power"] == 4500
     # Test case where get_samples returns less than 2 samples
@@ -704,6 +708,7 @@ async def test_remaining_boost_time(hass):
         initial_status,
         initial_setup,
         node_sample,
+        {},
     )
 
     assert node.boost_end_min == 90

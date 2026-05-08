@@ -263,6 +263,12 @@ class MockSmartbox:
 
         mock_session.get_device_away_status = get_device_away_status
 
+        async def get_node_version(dev_id, node):
+            node_info = self._node_info[dev_id][node["addr"]]
+            return {"hw_version": node_info.get("fw_version"), "pid": node_info.get("product_id")}
+
+        mock_session.get_node_version = get_node_version
+
         async def set_setup(dev_id, node, setup_updates):
             self._socket_node_setup[dev_id][node["addr"]].update(setup_updates)
             self._session_node_setup = self._socket_node_setup
