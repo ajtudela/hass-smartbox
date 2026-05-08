@@ -16,7 +16,7 @@ classifiers = [
 ]
 license = {file = "LICENSE"}
 dependencies = [
-    "homeassistant>=2026.2.3",
+    "homeassistant>=2026.5.0",
     "smartbox>=2.5.1,<2.6.0",
 ]
 
