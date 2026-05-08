@@ -1,7 +1,7 @@
 from datetime import datetime
 import logging
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from dateutil import tz
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
@@ -18,6 +18,7 @@ from custom_components.smartbox.const import (
 )
 from custom_components.smartbox.sensor import (
     BoostEndTimeSensor,
+    ChargeLevelSensor,
     PowerSensor,
     TotalConsumptionSensor,
 )
@@ -296,6 +297,23 @@ async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_ent
             await async_update_entity(hass, entity_id)
             state = hass.states.get(entity_id)
             assert state.state != STATE_UNAVAILABLE
+
+
+def test_charge_level_sensor_model_1c():
+    """Test that model code 1C uses current_charge_per instead of charge_level."""
+    sensor = object.__new__(ChargeLevelSensor)
+    sensor._node = MagicMock()
+    sensor._node.get_model_code.return_value = "1C"
+
+    sensor._status = {"current_charge_per": 75, "charge_level": 3}
+    assert sensor.native_value == 75
+
+    sensor._status = {"charge_level": 3}
+    assert sensor.native_value == 0
+
+    sensor._node.get_model_code.return_value = None
+    sensor._status = {"current_charge_per": 75, "charge_level": 3}
+    assert sensor.native_value == 3
 
 
 @pytest.mark.asyncio

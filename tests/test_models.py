@@ -564,6 +564,30 @@ def test_get_temperature_unit():
     assert "Unknown temp unit K" in exc_info.exconly()
 
 
+def test_version_and_get_model_code():
+    node = object.__new__(SmartboxNode)
+
+    node._version = {"pid": "081c", "hw_version": "2.3"}
+    assert node.version == {"pid": "081c", "hw_version": "2.3"}
+    assert node.pid == "081c"
+    assert node.hw_version == "2.3"
+    assert node.get_model_code() == "1C"
+
+    node._version = {"pid": "ab"}
+    assert node.get_model_code() == "AB"
+
+    node._version = {"pid": "x"}
+    assert node.get_model_code() is None
+
+    node._version = {"pid": ""}
+    assert node.get_model_code() is None
+
+    node._version = {}
+    assert node.pid is None
+    assert node.hw_version is None
+    assert node.get_model_code() is None
+
+
 async def test_update_samples(hass):
     dev_id = "test_device_id_1"
     mock_device = AsyncMock()
