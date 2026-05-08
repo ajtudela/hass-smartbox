@@ -90,6 +90,60 @@ async def test_smartbox_device_connected_updates(hass):
         assert not device.connected
 
 
+async def test_cancel(hass, caplog):
+    dev_id = "device_1"
+    mock_session = MagicMock()
+
+    class _MockTask:
+        """Minimal asyncio.Task stand-in: sync done()/cancel(), immediately awaitable."""
+
+        def __init__(self, is_done: bool) -> None:
+            self._done = is_done
+            self.cancel = MagicMock()
+
+        def done(self) -> bool:
+            return self._done
+
+        def __await__(self):
+            return iter([])
+
+    with patch(
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        new_callable=NonCallableMock,
+    ):
+        # No watchdog task: only update_manager.cancel() is called
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = None
+        await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+
+        # Watchdog task already done: no forced cancellation, no warning
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = _MockTask(is_done=True)
+        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+            await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+        device._watchdog_task.cancel.assert_not_called()
+        assert not caplog.records
+
+        # Watchdog task still running: forced cancellation and warning logged
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
+        device.update_manager = AsyncMock()
+        device._watchdog_task = _MockTask(is_done=False)
+        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+            await device.cancel()
+        device.update_manager.cancel.assert_awaited_once()
+        device._watchdog_task.cancel.assert_called_once()
+        assert_log_message(
+            caplog,
+            "custom_components.smartbox.models",
+            logging.WARNING,
+            f"Annulation forcée de la tâche watchdog pour le device {dev_id}",
+        )
+
+
 async def test_smartbox_device_node_status_update(hass, caplog):
     """Independently test node status updates usually called by UpdateManager."""
     dev_id = "device_1"
