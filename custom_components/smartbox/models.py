@@ -256,6 +256,7 @@ class SmartboxNode:
         status: StatusDict,
         setup: SetupDict,
         samples: SamplesDict,
+        version: dict[str, str],
     ) -> None:
         """Initialise a smartbox node."""
         self._device = device
@@ -264,6 +265,7 @@ class SmartboxNode:
         self._status = status
         self._setup = setup
         self._samples = samples
+        self._version = version
 
     @classmethod
     async def create(
@@ -298,7 +300,8 @@ class SmartboxNode:
                 )
             ),
         )["samples"]
-        return cls(device, node_info, session, status, setup, samples)
+        version: dict[str, str] = cast("dict[str, str]", await session.get_node_version(device.dev_id, node_info))
+        return cls(device, node_info, session, status, setup, samples, version)
 
     @property
     def node_info(self) -> Node:
@@ -329,6 +332,32 @@ class SmartboxNode:
     def status(self) -> StatusDict:
         """Return the status of node."""
         return self._status
+    @property
+    def version(self) -> dict[str, str]:
+        """Version info of node (includes PID)."""
+        return self._version
+
+    @property
+    def hw_version(self) -> str | None:
+        """Product ID of the node."""
+        return self._version.get("hw_version")
+
+    @property
+    def pid(self) -> str | None:
+        """Product ID of the node."""
+        return self._version.get("pid")
+
+    def get_model_code(self) -> str | None:
+        """Get characters 2-4 of the PID (model code).
+
+        Matches official app: ((data.version || {}).pid || '').toUpperCase().slice(2, 4)
+        For PID '081c', this returns '1C'.
+        """
+        pid_min_length = 2
+        pid = self.pid
+        if pid and len(pid) >= pid_min_length:
+            return pid[-pid_min_length:].upper()
+        return None
 
     def update_status(self, status: StatusDict) -> None:
         """Update status."""

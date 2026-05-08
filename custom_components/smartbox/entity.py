@@ -46,6 +46,7 @@ class DefaultSmartBoxEntity(Entity):
             manufacturer=self._reseller.name,
             model_id=str(self._node.device.model_id),
             sw_version=str(self._node.device.sw_version),
+            hw_version=str(self._node.hw_version),
             serial_number=str(self._node.device.serial_number),
             configuration_url=self._configuration_url,
         )
