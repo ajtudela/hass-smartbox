@@ -336,7 +336,6 @@ async def _supervise_ws_user_socket(
             # below gets a fresh reload.
             if _handle_ws_user_unsupported(hass, entry):
                 return
-            restarts = await _ws_user_restart_pause(run_started, restarts)
         except InvalidAuthError:
             _signal_reauth()
             return

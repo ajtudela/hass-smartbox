@@ -225,6 +225,28 @@ async def test_ws_user_restart_pause_resets_after_long_run(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_supervisor_pauses_once_after_refused_reload(monkeypatch):
+    """A refused reload backs off once per failed run, not twice."""
+    sock = MagicMock()
+    sock.run = AsyncMock(side_effect=[WsUserUnsupportedError("gone"), None])
+    entry = SimpleNamespace(
+        entry_id="entry_1", runtime_data=SimpleNamespace(ws_user_socket=sock)
+    )
+    monkeypatch.setattr(
+        smartbox_init, "_handle_ws_user_unsupported", lambda _hass, _entry: False
+    )
+    pauses = []
+
+    async def fake_pause(_run_started, restarts):
+        pauses.append(restarts)
+        return restarts + 1
+
+    monkeypatch.setattr(smartbox_init, "_ws_user_restart_pause", fake_pause)
+    await asyncio.wait_for(_supervise_ws_user_socket(SimpleNamespace(), entry), 2)
+    assert pauses == [0]
+
+
+@pytest.mark.asyncio
 async def test_supervisor_reauth_on_invalid_auth(monkeypatch):
     """Rejected credentials dispatch per-device reauth and stop."""
     sock = MagicMock()
