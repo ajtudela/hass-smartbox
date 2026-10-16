@@ -36,8 +36,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jandado/hass-smartbox"
-Issues = "https://github.com/jandado/hass-smartbox/issues"
+Homepage = "https://github.com/ajtudela/hass-smartbox"
+Issues = "https://github.com/ajtudela/hass-smartbox/issues"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

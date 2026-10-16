@@ -30,7 +30,11 @@ jobs:
       - name: Install the project
         run: uv sync --all-extras --dev
       - name: Lint with ruff
-        run: uv run ruff check custom_components
+        run: uv run ruff check .
+      - name: Check formatting with ruff
+        run: uv run ruff format --check .
+      - name: Type check with mypy
+        run: uv run mypy custom_components
 
   build:
     runs-on: ubuntu-latest
