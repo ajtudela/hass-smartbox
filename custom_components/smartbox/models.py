@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
+_NODE_CREATE_CONCURRENCY = 3
 
 # Upper bound for websocket teardown (cancel + watchdog exit). Unload/reload
 # and the HA-stop hook must always complete promptly even if the websocket
@@ -155,11 +156,17 @@ class SmartboxDevice:
         if self._power_limit != 0:
             self._last_nonzero_power_limit = self._power_limit
 
-        for node_info in session_nodes:
-            node: SmartboxNode = await SmartboxNode.create(
-                device=self, node_info=node_info, session=self._session
-            )
+        # Bounded concurrency: a box with many nodes must not burst the
+        # cloud API with one request per node at once.
+        semaphore = asyncio.Semaphore(_NODE_CREATE_CONCURRENCY)
 
+        async def create_node(node_info: Node) -> SmartboxNode:
+            async with semaphore:
+                return await SmartboxNode.create(
+                    device=self, node_info=node_info, session=self._session
+                )
+
+        for node in await asyncio.gather(*(create_node(n) for n in session_nodes)):
             self._nodes[(node.node_type, node.addr)] = node
         _LOGGER.debug("Creating SocketSession for device %s", self.dev_id)
         self.update_manager.subscribe_to_device_connected(self._connected)
@@ -563,36 +570,34 @@ class SmartboxNode:
         node_info: Node,
     ) -> SmartboxNode:
         """Create a smartbox node."""
-        status: StatusDict
-        if node_info["type"] != SmartboxNodeType.PMO:
-            status = cast(
-                "StatusDict", await session.get_node_status(device.dev_id, node_info)
-            )
-        else:
-            status = {
+        async def get_status() -> StatusDict:
+            if node_info["type"] != SmartboxNodeType.PMO:
+                return cast(
+                    "StatusDict",
+                    await session.get_node_status(device.dev_id, node_info),
+                )
+            return {
                 "sync_status": "ok",
                 "locked": False,
                 "power": await session.get_device_power_limit(device.dev_id, node_info),
             }
-        setup: SetupDict = cast(
-            "SetupDict", await session.get_node_setup(device.dev_id, node_info)
-        )
-        samples: SamplesDict = cast(
-            "dict[str, Any]",
-            (
+
+        async def get_samples() -> SamplesDict:
+            return cast(
+                "dict[str, Any]",
                 await session.get_node_samples(
                     device.dev_id,
                     node_info,
                     int(time.time() - (3600 * 3)),
                     int(time.time()),
-                )
-            ),
-        )["samples"]
-        version: dict[str, str] = cast("dict[str, str]", await session.get_node_version(device.dev_id, node_info))
-        prog: ProgDict | None = None
-        if node_info["type"] in HEATER_NODE_TYPES:
+                ),
+            )["samples"]
+
+        async def get_prog() -> ProgDict | None:
+            if node_info["type"] not in HEATER_NODE_TYPES:
+                return None
             try:
-                prog = _normalize_prog(
+                return _normalize_prog(
                     await session.get_node_prog(device.dev_id, node_info)
                 )
             except APIUnavailableError:
@@ -600,7 +605,22 @@ class SmartboxNode:
                 raise
             except SmartboxError:
                 # No schedule support (unverified on non-htr families).
-                _LOGGER.debug("Node %s does not support a schedule", node_info.get("name"))
+                _LOGGER.debug(
+                    "Node %s does not support a schedule", node_info.get("name")
+                )
+                return None
+
+        # The five reads are independent: issue them together instead of
+        # paying five sequential round trips per node.
+        status, setup, samples, version, prog = await asyncio.gather(
+            get_status(),
+            session.get_node_setup(device.dev_id, node_info),
+            get_samples(),
+            session.get_node_version(device.dev_id, node_info),
+            get_prog(),
+        )
+        setup = cast("SetupDict", setup)
+        version = cast("dict[str, str]", version)
         node = cls(device, node_info, session, status, setup, samples, version, prog)
         node.update_availability(status.get("sync_status", "ok") == "ok")
         return node

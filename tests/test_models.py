@@ -1463,3 +1463,33 @@ def test_unknown_mode_warns_only_once(caplog):
     for _ in range(3):
         assert get_hvac_mode(SmartboxNodeType.HTR, {"mode": "brand_new"}) is None
     assert caplog.text.count("Unknown smartbox node mode 'brand_new'") == 1
+
+
+async def test_node_create_issues_reads_concurrently(hass):
+    """The independent node reads overlap instead of running one by one."""
+    in_flight = 0
+    peak = 0
+
+    async def slow(*_args, **_kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return {"sync_status": "ok", "samples": [], "mode": "auto"}
+
+    session = MagicMock()
+    for name in (
+        "get_node_status",
+        "get_node_setup",
+        "get_node_samples",
+        "get_node_version",
+        "get_node_prog",
+    ):
+        setattr(session, name, slow)
+    device = MagicMock(dev_id="device_1")
+    node_info = {"addr": 1, "name": "n", "type": SmartboxNodeType.ACM}
+
+    await SmartboxNode.create(device, session, node_info)
+
+    assert peak >= 4
