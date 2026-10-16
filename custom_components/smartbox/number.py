@@ -11,13 +11,13 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
-from homeassistant.helpers import config_validation as cv
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_platform
 import voluptuous as vol
 
 from .const import (
     ATTR_DURATION,
     DEFAULT_BOOST_TIME,
-    DOMAIN,
     MAX_TEMP_LIMIT_DEFAULT,
     SERVICE_SET_BOOST_PARAMS,
 )
@@ -27,11 +27,11 @@ from .models import (
     get_temperature_unit,
     max_temp_limit_available,
     prog_temps_available,
-    resolve_target_entity_ids,
 )
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
@@ -144,41 +144,35 @@ async def async_setup_entry(
         update_before_add=True,
     )
 
-    async def handle_set_boost_params(call: ServiceCall) -> None:
-        """Handle the service call."""
-        target_entity_ids = resolve_target_entity_ids(hass, call.data)
-        boost_temp = call.data.get(ATTR_TEMPERATURE)
-        boost_time = call.data.get(ATTR_DURATION)
-        for boost_entity in boost_entities:
-            if boost_entity.entity_id not in target_entity_ids:
-                continue
-            if (
-                boost_temp is not None
-                and boost_entity.device_class == NumberDeviceClass.TEMPERATURE
-            ):
-                await boost_entity.async_set_native_value(boost_temp)
-            if (
-                boost_time is not None
-                and boost_entity.device_class == NumberDeviceClass.DURATION
-            ):
-                await boost_entity.async_set_native_value(boost_time)
-
-    hass.services.async_register(
-        DOMAIN,
+    # Registered once per domain by the platform; HA dispatches to the
+    # entities of every config entry.
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
         SERVICE_SET_BOOST_PARAMS,
-        handle_set_boost_params,
-        schema=vol.All(
-            vol.Schema(
-                {
-                    vol.Optional(ATTR_TEMPERATURE): vol.Coerce(float),
-                    vol.Optional(ATTR_DURATION): vol.Coerce(int),
-                    **(cv.ENTITY_SERVICE_FIELDS),
-                },
-            ),
-            cv.has_at_least_one_key(ATTR_TEMPERATURE, ATTR_DURATION),
-        ),
+        {
+            vol.Optional(ATTR_TEMPERATURE): vol.Coerce(float),
+            vol.Optional(ATTR_DURATION): vol.Coerce(int),
+        },
+        _async_handle_set_boost_params,
     )
     _LOGGER.debug("Finished setting up Smartbox number platform")
+
+
+async def _async_handle_set_boost_params(entity: Entity, call: ServiceCall) -> None:
+    """Handle the set_boost_params service for one targeted entity."""
+    if ATTR_TEMPERATURE not in call.data and ATTR_DURATION not in call.data:
+        msg = f"Provide at least one of {ATTR_TEMPERATURE} or {ATTR_DURATION}"
+        raise ServiceValidationError(msg)
+    if not isinstance(entity, ConfigBoostTemperature | ConfigBoostDuration):
+        return
+    if (boost_temp := call.data.get(ATTR_TEMPERATURE)) is not None and isinstance(
+        entity, ConfigBoostTemperature
+    ):
+        await entity.async_set_native_value(boost_temp)
+    if (boost_time := call.data.get(ATTR_DURATION)) is not None and isinstance(
+        entity, ConfigBoostDuration
+    ):
+        await entity.async_set_native_value(boost_time)
 
 
 class PowerLimit(SmartboxBoxEntity, NumberEntity):

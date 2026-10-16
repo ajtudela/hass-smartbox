@@ -31,7 +31,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_track_point_in_time,
@@ -62,7 +62,6 @@ from .models import (
     get_current_prog_profile,
     get_next_prog_change,
     get_temperature_unit,
-    resolve_target_entity_ids,
     rtc_time_to_datetime,
 )
 
@@ -70,6 +69,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
@@ -153,54 +153,41 @@ async def async_setup_entry(
         update_before_add=True,
     )
 
-    async def handle_set_schedule(call: ServiceCall) -> None:
-        """Handle the service call."""
-        schedule: ProgDict = call.data[FIELD_SCHEDULE]
-        target_entity_ids = resolve_target_entity_ids(hass, call.data)
-        for schedule_entity in schedule_entities:
-            if schedule_entity.entity_id not in target_entity_ids:
-                continue
-            try:
-                await schedule_entity.async_set_schedule(schedule)
-            except InvalidAuthError as ex:
-                msg = (
-                    "Authentication failed setting the schedule on "
-                    f"{schedule_entity.entity_id}: {ex}"
-                )
-                raise HomeAssistantError(msg) from ex
-            except APIUnavailableError as ex:
-                msg = (
-                    "API unavailable setting the schedule on "
-                    f"{schedule_entity.entity_id}: {ex}"
-                )
-                raise HomeAssistantError(msg) from ex
-            except SmartboxError as ex:
-                msg = (
-                    "API error setting the schedule on "
-                    f"{schedule_entity.entity_id}: {ex}"
-                )
-                raise HomeAssistantError(msg) from ex
-
-    hass.services.async_register(
-        DOMAIN,
+    # Registered once per domain by the platform; HA dispatches to the
+    # entities of every config entry.
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
         SERVICE_SET_SCHEDULE,
-        handle_set_schedule,
-        schema=vol.Schema(
-            {
-                vol.Required(FIELD_SCHEDULE): vol.All(
-                    dict,
-                    vol.Length(min=1),
-                    {
-                        vol.All(vol.Coerce(str), vol.In(DAY_KEYS)): [
-                            vol.Coerce(int)
-                        ],
-                    },
-                ),
-                **(cv.ENTITY_SERVICE_FIELDS),
-            }
-        ),
+        {
+            vol.Required(FIELD_SCHEDULE): vol.All(
+                dict,
+                vol.Length(min=1),
+                {
+                    vol.All(vol.Coerce(str), vol.In(DAY_KEYS)): [vol.Coerce(int)],
+                },
+            ),
+        },
+        _async_handle_set_schedule,
     )
     _LOGGER.debug("Finished setting up Smartbox sensor platform")
+
+
+async def _async_handle_set_schedule(entity: Entity, call: ServiceCall) -> None:
+    """Handle the set_schedule service for one targeted entity."""
+    if not isinstance(entity, ScheduleSensor):
+        return
+    schedule: ProgDict = call.data[FIELD_SCHEDULE]
+    try:
+        await entity.async_set_schedule(schedule)
+    except InvalidAuthError as ex:
+        msg = f"Authentication failed setting the schedule on {entity.entity_id}: {ex}"
+        raise HomeAssistantError(msg) from ex
+    except APIUnavailableError as ex:
+        msg = f"API unavailable setting the schedule on {entity.entity_id}: {ex}"
+        raise HomeAssistantError(msg) from ex
+    except SmartboxError as ex:
+        msg = f"API error setting the schedule on {entity.entity_id}: {ex}"
+        raise HomeAssistantError(msg) from ex
 
 
 class SmartboxSensorBase(SmartBoxNodeEntity, SensorEntity):
@@ -342,9 +329,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
             self._api_available = False
             return
         except SmartboxError:
-            _LOGGER.exception(
-                "Error refreshing the consumption of %s", self._node.name
-            )
+            _LOGGER.exception("Error refreshing the consumption of %s", self._node.name)
             self._api_available = False
             return
         self._api_available = True
@@ -667,7 +652,7 @@ class ClockDriftSensor(SmartboxBoxEntity, SensorEntity):
         """Fetch the box RTC and update the entity."""
         try:
             self._rtc = await self._device.async_refresh_rtc()
-        except (SmartboxError, APIUnavailableError):
+        except SmartboxError, APIUnavailableError:
             # Transient API trouble: surface as unavailable instead of
             # leaving a stale-but-available entity.
             self._attr_available = False

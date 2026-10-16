@@ -709,3 +709,31 @@ async def test_total_consumption_update_marks_api_error_unavailable(
     await sensor.async_update()
 
     assert sensor._api_available is False
+
+
+async def test_set_schedule_service_targets_schedule_entity(
+    hass, mock_smartbox, config_entry, recorder_mock
+):
+    """smartbox.set_schedule writes the programme of the targeted heater only."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = next(
+        node
+        for node in await mock_smartbox.session.get_nodes(mock_device["dev_id"])
+        if is_heater_node(node)
+    )
+    entity_id = get_entity_id_from_unique_id(
+        hass, SENSOR_DOMAIN, get_node_unique_id(mock_device, mock_node, "schedule")
+    )
+    # Non-schedule sensors targeted by the same call are ignored.
+    other_id = get_sensor_entity_id(mock_node, "temperature")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"entity_id": [entity_id, other_id], "schedule": {"1": [2] * 24}},
+        blocking=True,
+    )
+
+    mock_smartbox.session.set_node_prog.assert_awaited_once()

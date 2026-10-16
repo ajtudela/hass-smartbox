@@ -16,13 +16,7 @@ from homeassistant.components.climate import (
     PRESET_NONE,
     HVACMode,
 )
-from homeassistant.const import (
-    ATTR_AREA_ID,
-    ATTR_DEVICE_ID,
-    ATTR_ENTITY_ID,
-    UnitOfTemperature,
-)
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 from smartbox import (
@@ -1516,24 +1510,3 @@ def get_next_prog_change(prog: ProgDict, now: datetime) -> datetime | None:
             if profile != current:
                 return start
     return None
-
-
-def resolve_target_entity_ids(hass: HomeAssistant, data: dict[str, Any]) -> set[str]:
-    """Resolve a service call's targets (entity/device/area) to entity ids."""
-    entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
-    target_entity_ids: set[str] = set(data.get(ATTR_ENTITY_ID, []))
-    for device_id in data.get(ATTR_DEVICE_ID, []):
-        target_entity_ids.update(
-            entity.entity_id
-            for entity in er.async_entries_for_device(entity_registry, device_id)
-        )
-    for area_id in data.get(ATTR_AREA_ID, []):
-        for device in dr.async_entries_for_area(device_registry, area_id):
-            target_entity_ids.update(
-                entity.entity_id
-                for entity in er.async_entries_for_device(
-                    entity_registry, device.id
-                )
-            )
-    return target_entity_ids
