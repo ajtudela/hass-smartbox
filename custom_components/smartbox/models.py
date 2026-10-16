@@ -1300,6 +1300,24 @@ def _round_setpoint(temp: float, units: str) -> str:
     return str(temp)
 
 
+_WARNED_UNKNOWN: set[str] = set()
+
+
+def warn_unknown_once(kind: str, value: object) -> None:
+    """Log a single warning per unknown protocol value.
+
+    These values are evaluated on every state write, so logging each time
+    would flood the log for as long as the firmware reports them.
+    """
+    key = f"{kind}:{value}"
+    if key in _WARNED_UNKNOWN:
+        return
+    _WARNED_UNKNOWN.add(key)
+    _LOGGER.warning(
+        "Unknown smartbox %s %r - please report to %s", kind, value, GITHUB_ISSUES_URL
+    )
+
+
 def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
     """Get the mode of HVAC."""
     if status.get("boost", False):
@@ -1319,9 +1337,8 @@ def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
         return HVACMode.AUTO
     if status["mode"] == "self_learn" or status["mode"] == "presence":
         return HVACMode.AUTO
-    msg = f"Unknown smartbox node mode {status['mode']}"
-    _LOGGER.error(msg)
-    raise ValueError(msg)
+    warn_unknown_once("node mode", status["mode"])
+    return None
 
 
 def set_hvac_mode_args(

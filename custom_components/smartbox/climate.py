@@ -21,7 +21,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
     DOMAIN,
-    GITHUB_ISSUES_URL,
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
@@ -37,6 +36,7 @@ from .models import (
     set_hvac_mode_args,
     set_preset_mode_status_update,
     set_temperature_args,
+    warn_unknown_once,
 )
 
 if TYPE_CHECKING:
@@ -197,7 +197,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             status_args["boost"] = False
         await self._node.set_status(**status_args)
 
-    def _preset_mode_for_manual(self, mode: str) -> str:
+    def _preset_mode_for_manual(self) -> str | None:
         _check_status_key("selected_temp", self._node.node_type, self._status)
         selected_temp = self._status["selected_temp"]
         if selected_temp == "comfort":
@@ -206,14 +206,11 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             return PRESET_ECO
         if selected_temp == "ice":
             return PRESET_FROST
-        msg = (
-            f"Unexpected 'selected_temp' value {selected_temp} found for "
-            f"{self._node.node_type} and {mode} - please report to {GITHUB_ISSUES_URL}."
-        )
-        raise ValueError(msg)
+        warn_unknown_once("selected_temp", selected_temp)
+        return None
 
     @property
-    def preset_mode(self) -> str:  # noqa: PLR0911
+    def preset_mode(self) -> str | None:  # noqa: PLR0911
         """Get preset mode."""
         if self._node.away:
             return PRESET_AWAY
@@ -229,9 +226,9 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             if mode == "self_learn":
                 return PRESET_SELF_LEARN
             if mode == "manual":
-                return self._preset_mode_for_manual(mode)
-            msg = f"Unknown smartbox node mode {mode}"
-            raise ValueError(msg)
+                return self._preset_mode_for_manual()
+            warn_unknown_once("node mode", mode)
+            return None
         return PRESET_HOME
 
     @property

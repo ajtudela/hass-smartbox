@@ -1286,7 +1286,7 @@ def test_preset_mode(node_attributes, expected_preset):
 
 
 def test_preset_mode_invalid_selected_temp():
-    """Test preset_mode raises ValueError for invalid selected_temp."""
+    """Test preset_mode is None for an unknown selected_temp."""
     mock_node = MagicMock()
     mock_node.node_type = SmartboxNodeType.HTR_MOD
     mock_node.status = {"mode": "manual", "selected_temp": "invalid_temp"}
@@ -1295,12 +1295,11 @@ def test_preset_mode_invalid_selected_temp():
 
     heater = SmartboxHeater(mock_node, MagicMock())
     heater._status = mock_node.status
-    with pytest.raises(ValueError, match="Unexpected 'selected_temp' value"):
-        _ = heater.preset_mode
+    assert heater.preset_mode is None
 
 
 def test_preset_mode_invalid_mode():
-    """Test preset_mode raises ValueError for invalid mode."""
+    """Test preset_mode is None for an unknown mode."""
     mock_node = MagicMock()
     mock_node.node_type = SmartboxNodeType.HTR_MOD
     mock_node.status = {"mode": "invalid_mode", "selected_temp": "invalid_temp"}
@@ -1310,8 +1309,7 @@ def test_preset_mode_invalid_mode():
     heater = SmartboxHeater(mock_node, MagicMock())
     heater._status = mock_node.status
 
-    with pytest.raises(ValueError, match="Unknown smartbox node mode"):
-        _ = heater.preset_mode
+    assert heater.preset_mode is None
 
 
 @pytest.mark.parametrize(

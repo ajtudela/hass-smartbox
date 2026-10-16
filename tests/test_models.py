@@ -23,6 +23,7 @@ from custom_components.smartbox.const import (
     SmartboxNodeType,
 )
 from custom_components.smartbox.models import (
+    _WARNED_UNKNOWN,
     SmartboxDevice,
     SmartboxNode,
     away_offset_available,
@@ -585,8 +586,7 @@ def test_get_hvac_mode():
         get_hvac_mode(SmartboxNodeType.HTR, {"mode": "modified_auto"}) == HVACMode.AUTO
     )
     assert get_hvac_mode(SmartboxNodeType.ACM, {"mode": "manual"}) == HVACMode.HEAT
-    with pytest.raises(ValueError):
-        get_hvac_mode(SmartboxNodeType.HTR, {"mode": "blah"})
+    assert get_hvac_mode(SmartboxNodeType.HTR, {"mode": "blah"}) is None
     assert (
         get_hvac_mode(SmartboxNodeType.HTR_MOD, {"on": True, "mode": "auto"})
         == HVACMode.AUTO
@@ -619,8 +619,7 @@ def test_get_hvac_mode():
         get_hvac_mode(SmartboxNodeType.HTR_MOD, {"on": False, "mode": "manual"})
         == HVACMode.OFF
     )
-    with pytest.raises(ValueError):
-        get_hvac_mode(SmartboxNodeType.HTR_MOD, {"on": True, "mode": "blah"})
+    assert get_hvac_mode(SmartboxNodeType.HTR_MOD, {"on": True, "mode": "blah"}) is None
     with pytest.raises(KeyError) as exc_info:
         get_hvac_mode(SmartboxNodeType.HTR_MOD, {"mode": "manual"})
     assert "on" in exc_info.exconly()
@@ -1456,3 +1455,11 @@ async def test_cancel_does_not_restart_watchdog_when_run_returns(hass, caplog):
 
         assert not restarts
         assert "exited unexpectedly" not in caplog.text
+
+
+def test_unknown_mode_warns_only_once(caplog):
+    """An unknown mode degrades to None and is logged a single time."""
+    _WARNED_UNKNOWN.clear()
+    for _ in range(3):
+        assert get_hvac_mode(SmartboxNodeType.HTR, {"mode": "brand_new"}) is None
+    assert caplog.text.count("Unknown smartbox node mode 'brand_new'") == 1
