@@ -3,8 +3,8 @@
 These guard lock-step evolution with the sibling repository (../smartbox):
 if a library change breaks something the integration depends on, they fail
 here before the integration is bumped. They run against whatever `smartbox`
-is installed in the environment — the uv.lock pin (PyPI) or the editable
-sibling checkout (see scripts/dev-lib-link.sh).
+is installed in the environment — the uv.lock pin (the GitHub release
+tarball) or an editable sibling checkout.
 """
 
 import inspect
@@ -16,8 +16,11 @@ from smartbox import (
     AvailableResellers,
     SmartboxNodeType,
     UpdateManager,
+    WsUserSocketSession,
+    check_ws_user_support,
 )
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
+from smartbox.retry import backoff_delay
 
 # Session methods the integration calls (models.py, __init__.py, config_flow.py).
 SESSION_METHODS = (
@@ -29,6 +32,10 @@ SESSION_METHODS = (
     "set_device_away_status",
     "get_device_power_limit",
     "set_device_power_limit",
+    "get_device_rtc_time",
+    "health_check",
+    "check_refresh_auth",
+    "api_version",
     "get_node_samples",
     "get_node_status",
     "set_node_status",
@@ -135,9 +142,8 @@ def test_availability_surface() -> None:
     """Node-availability surface (smartbox >= 2.6.1) stays usable.
 
     Skip-guarded so the suite also stays green against older library
-    installs (e.g. after scripts/dev-lib-link.sh --unlink with a
-    pre-2.6.1 uv.lock pin; see memory-bank/program.md). The release pin
-    itself is smartbox 2.6.1, so this normally runs unskipped.
+    installs. The release pin is newer than 2.6.1, so this normally runs
+    unskipped.
     """
     if not hasattr(UpdateManager, "expect_write_confirmation"):
         pytest.skip("smartbox < 2.6.1: no availability surface")
@@ -156,3 +162,24 @@ def test_availability_surface() -> None:
     ).parameters
     assert {"node", "written", "kind"} <= set(expect_params)
     assert expect_params["kind"].default == "status"
+
+
+def test_ws_user_surface() -> None:
+    """The shared ws_user transport keeps the entry points __init__.py uses."""
+    assert inspect.iscoroutinefunction(check_ws_user_support)
+    ctor_params = list(inspect.signature(WsUserSocketSession.__init__).parameters)
+    assert ctor_params[:2] == ["self", "session"]
+    for name in ("run", "cancel"):
+        assert callable(getattr(WsUserSocketSession, name, None)), (
+            f"WsUserSocketSession.{name} missing"
+        )
+    assert inspect.iscoroutinefunction(WsUserSocketSession.run)
+    # The UpdateManager receives the shared socket by keyword.
+    assert "ws_user_socket" in inspect.signature(UpdateManager.__init__).parameters
+
+
+def test_backoff_delay_surface() -> None:
+    """backoff_delay(restarts, base, cap) grows and saturates at the cap."""
+    assert backoff_delay(0, 5, 300) == 5
+    assert backoff_delay(1, 5, 300) > backoff_delay(0, 5, 300)
+    assert backoff_delay(50, 5, 300) == 300
