@@ -14,11 +14,14 @@ from custom_components.smartbox import (
     APIUnavailableError,
     InvalidAuthError,
     SmartboxError,
+    async_remove_entry,
     async_setup_entry,
+    async_unload_entry,
     create_smartbox_session_from_entry,
     update_listener,
 )
 from custom_components.smartbox.const import DOMAIN
+from custom_components.smartbox.models import SmartboxDevice
 
 # Key -> entity domain of the legacy per-node registry entries to re-home.
 _LEGACY_KEYS = {
@@ -291,3 +294,35 @@ async def test_box_device_created_and_legacy_entities_rehomed(
         )
         is None
     )
+
+
+async def test_unload_keeps_transport_when_platforms_refuse(
+    hass, mock_smartbox, config_entry
+):
+    """A refused platform unload must not tear the transport down."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    devices = list(config_entry.runtime_data.devices)
+
+    with (
+        patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            AsyncMock(return_value=False),
+        ),
+        patch.object(SmartboxDevice, "cancel", AsyncMock()) as mock_cancel,
+    ):
+        assert await async_unload_entry(hass, config_entry) is False
+
+    assert devices
+    mock_cancel.assert_not_awaited()
+
+
+async def test_remove_entry_drops_ws_user_reload_marks(hass, config_entry):
+    """Removing the entry forgets its ws_user reload history."""
+    key = f"{config_entry.entry_id}_ws_user_reload_marks"
+    hass.data.setdefault(DOMAIN, {})[key] = [1.0]
+
+    await async_remove_entry(hass, config_entry)
+
+    assert key not in hass.data[DOMAIN]

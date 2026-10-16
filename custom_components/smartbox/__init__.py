@@ -474,6 +474,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> bool:
     """Unload a config entry."""
+    # Platforms first: when they refuse to unload the entry stays loaded
+    # (FAILED_UNLOAD) with live entities, which must keep their transport.
+    if not (
+        unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    ):
+        return False
     # runtime_data only exists once setup got far enough to build the session;
     # a failed/retrying entry must still unload cleanly (the UI reload path).
     runtime_data: SmartboxData | None = getattr(entry, "runtime_data", None)
@@ -483,7 +489,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
         # Await the bounded shared-socket teardown so the entry never
         # finishes unloading while its transport is still tearing down.
         await _async_cancel_ws_user_socket(entry)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:
+    """Drop the per-entry state kept in ``hass.data`` across reloads."""
+    domain_data = hass.data.get(DOMAIN)
+    if domain_data is not None:
+        domain_data.pop(f"{entry.entry_id}_ws_user_reload_marks", None)
 
 
 async def update_listener(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:
