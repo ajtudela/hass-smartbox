@@ -162,7 +162,6 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                     self._get_reauth_entry(),
                     data_updates=user_input,
                 )
-            return await self.async_step_user(user_input=user_input)
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema(LOGIN_DATA_SCHEMA),

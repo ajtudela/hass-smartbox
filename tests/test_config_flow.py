@@ -180,8 +180,9 @@ async def test_async_step_reauth_confirm_invalid_auth(
             }
         )
     assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
     assert result["errors"] == {"base": "invalid_auth"}
-    assert flow.context["title_placeholders"]["error"] == "Invalid auth"
+    assert result["description_placeholders"]["error"] == "Invalid auth"
 
 
 async def test_async_step_reauth_confirm_unknown_error(
@@ -202,8 +203,9 @@ async def test_async_step_reauth_confirm_unknown_error(
             }
         )
     assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
     assert result["errors"] == {"base": "unknown"}
-    assert flow.context["title_placeholders"]["error"] == "Unknown error"
+    assert result["description_placeholders"]["error"] == "Unknown error"
 
 
 async def test_async_step_reauth_confirm_api_unavailable(
@@ -224,5 +226,6 @@ async def test_async_step_reauth_confirm_api_unavailable(
             }
         )
     assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
     assert result["errors"] == {"base": "cannot_connect"}
-    assert flow.context["title_placeholders"]["error"] == "Cannot connect"
+    assert result["description_placeholders"]["error"] == "Cannot connect"
