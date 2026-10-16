@@ -341,6 +341,12 @@ class TotalConsumptionSensor(SmartboxSensorBase):
             # leaving a stale-but-available entity.
             self._api_available = False
             return
+        except SmartboxError:
+            _LOGGER.exception(
+                "Error refreshing the consumption of %s", self._node.name
+            )
+            self._api_available = False
+            return
         self._api_available = True
         await self._adjust_short_term_statistics()
 
@@ -389,7 +395,24 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                 )
 
     async def update_statistics(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003, ARG002
-        """Update statistics from samples."""
+        """Update statistics from samples, tolerating API failures.
+
+        An uncaught error here would make HA drop the entity while it is
+        being added (no state, no timer) until the next reload. The history
+        option only flips from START after a successful import, so a failed
+        attempt is simply retried on the next 15 minute tick.
+        """
+        try:
+            await self._import_statistics()
+        except SmartboxError as ex:
+            _LOGGER.warning(
+                "Could not update the consumption statistics of %s: %s",
+                self._node.name,
+                ex,
+            )
+
+    async def _import_statistics(self) -> None:
+        """Fetch the samples and import them as recorder statistics."""
         history_status = HistoryConsumptionStatus(
             self.config_entry.options.get(
                 CONF_HISTORY_CONSUMPTION, HistoryConsumptionStatus.START

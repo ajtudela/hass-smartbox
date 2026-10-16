@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_component import async_update_entity
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from smartbox.error import APIUnavailableError, SmartboxError
 
 from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
@@ -671,3 +672,40 @@ async def test_polling_sensors_follow_node_availability(
     await hass.async_block_till_done()
     for entity_id in entity_ids:
         assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
+
+
+@pytest.mark.asyncio
+async def test_update_statistics_survives_api_error(hass, mock_smartbox, config_entry):
+    """A failing import is logged and keeps the history option on START."""
+    mock_node = AsyncMock()
+    mock_node.get_samples.side_effect = APIUnavailableError("down")
+    sensor = TotalConsumptionSensor(mock_node, config_entry)
+    sensor.hass = hass
+    hass.config_entries.async_update_entry(
+        entry=config_entry,
+        options={
+            **config_entry.options,
+            CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.START,
+        },
+    )
+
+    await sensor.update_statistics()
+
+    assert (
+        config_entry.options[CONF_HISTORY_CONSUMPTION] == HistoryConsumptionStatus.START
+    )
+
+
+@pytest.mark.asyncio
+async def test_total_consumption_update_marks_api_error_unavailable(
+    hass, mock_smartbox, config_entry
+):
+    """Any SmartboxError while polling samples makes the sensor unavailable."""
+    mock_node = AsyncMock()
+    mock_node.update_samples.side_effect = SmartboxError("boom")
+    sensor = TotalConsumptionSensor(mock_node, config_entry)
+    sensor.hass = hass
+
+    await sensor.async_update()
+
+    assert sensor._api_available is False
