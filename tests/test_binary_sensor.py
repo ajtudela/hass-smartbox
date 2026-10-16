@@ -23,9 +23,9 @@ async def test_connected_sensor_updates_without_polling(
     await hass.async_block_till_done()
 
     device_dict = (await mock_smartbox.session.get_devices())[0]
-    runtime_device = hass.config_entries.async_entries(DOMAIN)[
+    runtime_device = hass.config_entries.async_entries(DOMAIN)[0].runtime_data.devices[
         0
-    ].runtime_data.devices[0]
+    ]
     assert runtime_device.dev_id == device_dict["dev_id"]
 
     entity_id = get_connected_binary_sensor_entity_id(device_dict)
@@ -52,9 +52,10 @@ async def test_connected_sensor_is_on_box_device(hass, mock_smartbox, config_ent
     for device_dict in await mock_smartbox.session.get_devices():
         entity_id = get_connected_binary_sensor_entity_id(device_dict)
         unique_id = f"{device_dict['dev_id']}_connected"
-        assert get_entity_id_from_unique_id(
-            hass, BINARY_SENSOR_DOMAIN, unique_id
-        ) == entity_id
+        assert (
+            get_entity_id_from_unique_id(hass, BINARY_SENSOR_DOMAIN, unique_id)
+            == entity_id
+        )
         box_device = device_registry.async_get_device(
             identifiers={(DOMAIN, device_dict["dev_id"])}
         )

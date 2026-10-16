@@ -242,9 +242,7 @@ async def test_write_to_unreachable_node_marks_unavailable(
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
 
-    climate_entity = hass.data["entity_components"]["climate"].get_entity(
-        entity_id
-    )
+    climate_entity = hass.data["entity_components"]["climate"].get_entity(entity_id)
     status_ref = climate_entity._status
     # HA's service targeting silently DROPS unavailable entities
     # (helpers/service.py: "if not entity.available: continue"), so a user
@@ -268,9 +266,7 @@ async def test_write_to_unreachable_node_marks_unavailable(
     assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
 
 
-async def test_write_on_live_node_stays_available(
-    hass, mock_smartbox, config_entry
-):
+async def test_write_on_live_node_stays_available(hass, mock_smartbox, config_entry):
     """Writes never false-flip a live node, even with no confirming frame.
 
     MockSmartbox does not push confirming frames after writes, so the
@@ -326,9 +322,7 @@ async def test_hvac_write_confirming_frame_reaches_entity(
     entity_id = get_climate_entity_id(mock_node)
 
     # Known starting point: off
-    mock_smartbox.generate_socket_status_update(
-        mock_device, mock_node, {"mode": "off"}
-    )
+    mock_smartbox.generate_socket_status_update(mock_device, mock_node, {"mode": "off"})
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == HVACMode.OFF
 
@@ -345,9 +339,7 @@ async def test_hvac_write_confirming_frame_reaches_entity(
 
     # The confirming frame for the write equals the optimistically merged
     # node cache; it must still reach the entity
-    confirmed = mock_smartbox.generate_socket_status_update(
-        mock_device, mock_node, {}
-    )
+    confirmed = mock_smartbox.generate_socket_status_update(mock_device, mock_node, {})
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == HVACMode.HEAT
     _check_state(hass, mock_node, confirmed, hass.states.get(entity_id))
@@ -394,9 +386,7 @@ async def test_target_temperature_mirrors_backend_on_mode_change(
     )["stemp"]
 
     # Start off: no set point attribute (display semantics matching the app)
-    mock_smartbox.generate_socket_status_update(
-        mock_device, mock_node, {"mode": "off"}
-    )
+    mock_smartbox.generate_socket_status_update(mock_device, mock_node, {"mode": "off"})
     await hass.async_block_till_done()
     state = hass.states.get(entity_id)
     assert state.state == HVACMode.OFF
@@ -520,7 +510,9 @@ async def test_set_temperature_in_auto_engages_modified_auto(
         hass, convert_temp(hass, units, device_temp)
     )
     # The explicit revert renders AUTO too
-    mock_smartbox.generate_socket_status_update(mock_device, mock_node, {"mode": "auto"})
+    mock_smartbox.generate_socket_status_update(
+        mock_device, mock_node, {"mode": "auto"}
+    )
     await hass.async_block_till_done()
     state = hass.states.get(entity_id)
     assert state.state == HVACMode.AUTO
@@ -916,7 +908,7 @@ async def test_frost_preset(hass, mock_smartbox):
     assert mock_node_status["selected_temp"] == "ice"
 
 
-async def test_set_hvac_mode(hass, mock_smartbox, config_entry):
+async def test_set_hvac_mode(hass, mock_smartbox, config_entry):  # noqa: C901
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert len(hass.states.async_entity_ids(CLIMATE_DOMAIN)) == 7
@@ -1051,9 +1043,7 @@ async def test_set_target_temp(hass, mock_smartbox, config_entry):
                     mock_node["type"] != SmartboxNodeType.HTR_MOD
                     and mock_node_status["units"] == "C"
                 ):
-                    assert new_target_temp == pytest.approx(
-                        round(sent * 2) / 2
-                    )
+                    assert new_target_temp == pytest.approx(round(sent * 2) / 2)
                 else:
                     assert new_target_temp == pytest.approx(sent)
 

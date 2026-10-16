@@ -64,7 +64,7 @@ def fast_availability_windows(monkeypatch):
     the merged mock state and reports the node available — a no-op for
     existing tests, but fast enough to not leak 6 s timers.
     """
-    from custom_components.smartbox import models as smartbox_models
+    from custom_components.smartbox import models as smartbox_models  # noqa: PLC0415
 
     monkeypatch.setattr(smartbox_models, "SMARTBOX_UNAVAILABLE_DELAY", 0.05)
     monkeypatch.setattr(smartbox_models, "SMARTBOX_WRITE_CONFIRM_TIMEOUT", 0.05)

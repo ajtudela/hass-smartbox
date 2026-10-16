@@ -144,7 +144,7 @@ def test_availability_surface() -> None:
     params = inspect.signature(UpdateManager.__init__).parameters
     assert params["write_confirm_timeout"].default > 0
     assert params["unavailable_delay"].default > 0
-    assert callable(getattr(UpdateManager, "get_node_availability"))
+    assert callable(UpdateManager.get_node_availability)
     # subscribe_to_node_availability keeps an explicit callback parameter,
     # like every other subscription wired in models.py.
     sub_params = inspect.signature(

@@ -135,7 +135,8 @@ class SmartboxDevice:
             "enabled": False,
             "forced": False,
             **cast(
-                "dict[str, bool]", await self._session.get_device_away_status(self.dev_id)
+                "dict[str, bool]",
+                await self._session.get_device_away_status(self.dev_id),
             ),
         }
 
@@ -288,18 +289,14 @@ class SmartboxDevice:
             # is cheap.
             self.dispatch_node_status(node, node_status)
 
-    def dispatch_node_status(
-        self, node: SmartboxNode, status: StatusDict
-    ) -> None:
+    def dispatch_node_status(self, node: SmartboxNode, status: StatusDict) -> None:
         """Forward a node status snapshot to the node's listening entities.
 
         Both websocket frames and the optimistic merge in
         SmartboxNode.set_status go through this single dispatcher event, so
         an entity copy cannot miss an update the node cache already has.
         """
-        async_dispatcher_send(
-            self._hass, f"{DOMAIN}_{node.node_id}_status", status
-        )
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_status", status)
 
     def _node_availability_update(
         self, node_type: str, addr: int, available: bool
@@ -336,9 +333,7 @@ class SmartboxDevice:
             return
         node: SmartboxNode = self._nodes[(node_type, addr)]
         node.update_setup(node_setup)
-        async_dispatcher_send(
-            self._hass, f"{DOMAIN}_{node.node_id}_setup", node_setup
-        )
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_setup", node_setup)
 
     def _node_prog_update(self, node_type: str, addr: int, payload: Any) -> None:  # noqa: ANN401
         """Node prog (schedule) update from the websocket.
@@ -365,9 +360,7 @@ class SmartboxDevice:
             return
         node: SmartboxNode = self._nodes[(node_type, addr)]
         node.update_prog(prog)
-        async_dispatcher_send(
-            self._hass, f"{DOMAIN}_{node.node_id}_prog", prog
-        )
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_prog", prog)
 
     def _watchdog_done(self, task: asyncio.Task) -> None:
         """Handle the update-manager task exiting.
@@ -570,6 +563,7 @@ class SmartboxNode:
         node_info: Node,
     ) -> SmartboxNode:
         """Create a smartbox node."""
+
         async def get_status() -> StatusDict:
             if node_info["type"] != SmartboxNodeType.PMO:
                 return cast(
@@ -663,6 +657,7 @@ class SmartboxNode:
     def status(self) -> StatusDict:
         """Return the status of node."""
         return self._status
+
     @property
     def version(self) -> dict[str, str]:
         """Version info of node (includes PID)."""
@@ -753,7 +748,7 @@ class SmartboxNode:
         try:
             if limit is not None and float(limit) > 0:
                 self._last_max_stemp_limit = str(limit)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             # Malformed wire value; skip the memory update (the property
             # reads of max_stemp_limit have the same constraint).
             _LOGGER.warning(
@@ -1114,7 +1109,7 @@ class SmartboxNode:
         return int((boost_end - dt_util.now()).total_seconds())
 
 
-def get_temperature_unit(status: StatusDict) -> None | UnitOfTemperature:
+def get_temperature_unit(status: StatusDict) -> UnitOfTemperature | None:
     """Get the unit of temperature."""
     if "units" not in status:
         return None
@@ -1150,7 +1145,7 @@ def rtc_time_to_datetime(rtc: dict[str, Any] | None) -> datetime | None:
             second=int(rtc["s"]),
             tzinfo=dt_util.DEFAULT_TIME_ZONE,
         )
-    except (KeyError, TypeError, ValueError):
+    except KeyError, TypeError, ValueError:
         return None
 
 
@@ -1332,7 +1327,9 @@ def warn_unknown_once(kind: str, value: object) -> None:
     )
 
 
-def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
+def get_hvac_mode(  # noqa: PLR0911
+    node_type: str, status: dict[str, Any]
+) -> HVACMode | None:
     """Get the mode of HVAC."""
     if status.get("boost", False):
         return HVACMode.HEAT
@@ -1458,9 +1455,7 @@ def prog_temps_available(node: SmartboxNode) -> bool:
     return node.node_type in (
         SmartboxNodeType.HTR,
         SmartboxNodeType.ACM,
-    ) and all(
-        key in node.status for key in ("ice_temp", "eco_temp", "comf_temp")
-    )
+    ) and all(key in node.status for key in ("ice_temp", "eco_temp", "comf_temp"))
 
 
 def _normalize_prog(payload: Any) -> ProgDict | None:  # noqa: ANN401
@@ -1522,9 +1517,7 @@ def get_next_prog_change(prog: ProgDict, now: datetime) -> datetime | None:
             hour=0, minute=0, second=0, microsecond=0
         )
         for slot, profile in enumerate(day):
-            start = dt_util.as_local(
-                day_start + timedelta(minutes=slot * slot_minutes)
-            )
+            start = dt_util.as_local(day_start + timedelta(minutes=slot * slot_minutes))
             if start <= local_now:
                 continue
             if profile != current:

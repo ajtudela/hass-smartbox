@@ -63,7 +63,9 @@ async def async_setup_entry(
             switch_entities.append(ChildLockSwitch(node, entry))
 
         if max_temp_limit_available(node):
-            _LOGGER.debug("Creating max temperature limit switch for node %s", node.name)
+            _LOGGER.debug(
+                "Creating max temperature limit switch for node %s", node.name
+            )
             switch_entities.append(MaxTemperatureLimitSwitch(node, entry))
 
     async_add_entities(switch_entities, update_before_add=True)
@@ -199,9 +201,9 @@ class BoostSwitch(SmartBoxNodeEntity, SwitchEntity):
             "boost_temperature": self._node.boost_temp,
             "boost_duration_minutes": self._node.boost_time,
             "boost_time_remaining": self._node.remaining_boost_time,
-            "boost_end_time": get_boost_end_datetime(
-                self._node.boost_end_min
-            ).strftime("%H:%M")
+            "boost_end_time": get_boost_end_datetime(self._node.boost_end_min).strftime(
+                "%H:%M"
+            )
             if self._node.remaining_boost_time
             else None,
         }
@@ -287,7 +289,7 @@ class MaxTemperatureLimitSwitch(SmartBoxNodeEntity, SwitchEntity, RestoreEntity)
             return
         try:
             self._node.remember_max_stemp_limit(float(limit))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             _LOGGER.warning(
                 "Ignoring restored non-numeric last_limit %r for node %s",
                 limit,

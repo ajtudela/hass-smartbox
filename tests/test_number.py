@@ -48,8 +48,7 @@ async def test_power_limit(hass, mock_smartbox, config_entry):
         )
         assert state.name == f"{mock_device['name']} Power Limit"
         assert (
-            state.attributes[ATTR_FRIENDLY_NAME]
-            == f"{mock_device['name']} Power Limit"
+            state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_device['name']} Power Limit"
         )
         assert entity_id == get_power_limit_number_entity_id(mock_device)
         assert state.attributes["max"] == 60000
@@ -256,10 +255,7 @@ async def test_max_temperature(hass, mock_smartbox, config_entry):
         get_object_id(get_max_temperature_entity_name(mock_node))
     )
     assert state.name == f"{mock_node['name']} Maximum"
-    assert (
-        state.attributes[ATTR_FRIENDLY_NAME]
-        == f"{mock_node['name']} Maximum"
-    )
+    assert state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Maximum"
     unique_id = get_node_unique_id(mock_device, mock_node, "max_temperature")
     assert entity_id == get_entity_id_from_unique_id(hass, NUMBER_DOMAIN, unique_id)
 
@@ -322,8 +318,7 @@ async def test_prog_temps(hass, mock_smartbox, config_entry):
     units = status["units"]
     status_keys = {"frost": "ice_temp", "eco": "eco_temp", "comfort": "comf_temp"}
     entity_ids = {
-        profile: get_prog_temp_entity_id(mock_node, profile)
-        for profile in status_keys
+        profile: get_prog_temp_entity_id(mock_node, profile) for profile in status_keys
     }
     for profile, entity_id in entity_ids.items():
         state = hass.states.get(entity_id)

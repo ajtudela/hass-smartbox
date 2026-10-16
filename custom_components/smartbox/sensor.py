@@ -79,7 +79,7 @@ SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: SmartboxConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -225,7 +225,7 @@ class TemperatureSensor(SmartboxSensorBase):
         return self._status["mtemp"]
 
     @property
-    def native_unit_of_measurement(self) -> None | UnitOfTemperature:
+    def native_unit_of_measurement(self) -> UnitOfTemperature | None:
         """Return the unit of the sensor."""
         return get_temperature_unit(self._status)
 

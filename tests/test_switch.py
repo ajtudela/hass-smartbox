@@ -456,8 +456,8 @@ async def test_lock_switch(hass, mock_smartbox, config_entry):
     # Mock heater node starts unlocked (locked == False).
     assert hass.states.get(entity_id).state == "off"
     # Display name comes from the "Child Lock" translation.
-    assert hass.states.get(entity_id).attributes[ATTR_FRIENDLY_NAME].endswith(
-        "Child Lock"
+    assert (
+        hass.states.get(entity_id).attributes[ATTR_FRIENDLY_NAME].endswith("Child Lock")
     )
 
     # Turn on via HA: single-key status write with an optimistic local merge.
@@ -491,10 +491,7 @@ async def test_max_temperature_limit_switch(hass, mock_smartbox, config_entry):
         get_object_id(get_max_limit_switch_entity_name(mock_node))
     )
     assert state.name == f"{mock_node['name']} Maximum Limit"
-    assert (
-        state.attributes[ATTR_FRIENDLY_NAME]
-        == f"{mock_node['name']} Maximum Limit"
-    )
+    assert state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Maximum Limit"
     unique_id = get_node_unique_id(mock_device, mock_node, "max_temperature_limit")
     assert entity_id == get_entity_id_from_unique_id(hass, SWITCH_DOMAIN, unique_id)
 
@@ -601,9 +598,7 @@ async def test_max_temperature_limit_switch_restores_last_limit(
     assert float(setup["max_stemp_limit"]) == 21.0
 
 
-@pytest.mark.parametrize(
-    "bad_value", ["", "junk", None, []]
-)
+@pytest.mark.parametrize("bad_value", ["", "junk", None, []])
 async def test_max_temperature_limit_restore_bad_value(
     hass, mock_smartbox, config_entry, bad_value
 ):

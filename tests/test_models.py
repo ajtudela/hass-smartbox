@@ -154,7 +154,9 @@ async def test_cancel(hass, caplog):
         finished = asyncio.create_task(asyncio.sleep(0))
         await finished
         device._watchdog_task = finished
-        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+        with caplog.at_level(
+            logging.WARNING, logger="custom_components.smartbox.models"
+        ):
             await device.cancel()
         device.update_manager.cancel.assert_awaited_once()
         assert not caplog.records
@@ -165,7 +167,9 @@ async def test_cancel(hass, caplog):
         device.update_manager = AsyncMock()
         running = asyncio.create_task(asyncio.sleep(3600))
         device._watchdog_task = running
-        with caplog.at_level(logging.WARNING, logger="custom_components.smartbox.models"):
+        with caplog.at_level(
+            logging.WARNING, logger="custom_components.smartbox.models"
+        ):
             await device.cancel()
         device.update_manager.cancel.assert_awaited_once()
         assert running.cancelled()
@@ -409,7 +413,12 @@ def test_get_target_temperature():
     assert (
         get_target_temperature(
             SmartboxNodeType.HTR_MOD,
-            {"on": False, "mode": "manual", "selected_temp": "comfort", "comfort_temp": "22.0"},
+            {
+                "on": False,
+                "mode": "manual",
+                "selected_temp": "comfort",
+                "comfort_temp": "22.0",
+            },
         )
         is None
     )
@@ -1101,7 +1110,10 @@ async def test_smartbox_device_rtc_cache(hass):
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
-        assert await device.async_refresh_rtc() == mock_session.get_device_rtc_time.return_value
+        assert (
+            await device.async_refresh_rtc()
+            == mock_session.get_device_rtc_time.return_value
+        )
 
         # A non-dict payload keeps the cached snapshot.
         mock_session.get_device_rtc_time = AsyncMock(return_value=MagicMock())
@@ -1299,7 +1311,9 @@ async def test_watchdog_restarts_on_unexpected_exit(hass, caplog):
         "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
-        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass)
+        device = SmartboxDevice(
+            MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass
+        )
         device.update_manager.run = AsyncMock()
 
         # Spy on the restart scheduler: record the call, then flip _stopping
@@ -1339,9 +1353,7 @@ async def test_dispatch_node_status(hass):
         )
     mock_node = MagicMock()
     mock_node.node_id = "device_1_0"
-    with patch(
-        "custom_components.smartbox.models.async_dispatcher_send"
-    ) as mock_send:
+    with patch("custom_components.smartbox.models.async_dispatcher_send") as mock_send:
         device.dispatch_node_status(mock_node, {"mtemp": "21.4"})
     mock_send.assert_called_once_with(
         hass, "smartbox_device_1_0_status", {"mtemp": "21.4"}
@@ -1379,9 +1391,7 @@ async def test_node_status_update_forwards_frame_equal_to_cache(hass):
         ) as mock_send:
             device._node_status_update(SmartboxNodeType.HTR, 0, frame)
         mock_node.update_status.assert_called_once_with(frame)
-        mock_send.assert_called_once_with(
-            hass, "smartbox_device_1_0_status", frame
-        )
+        mock_send.assert_called_once_with(hass, "smartbox_device_1_0_status", frame)
 
 
 async def test_node_status_update_skips_non_ok_frames(hass):
@@ -1400,9 +1410,7 @@ async def test_node_status_update_skips_non_ok_frames(hass):
         with patch(
             "custom_components.smartbox.models.async_dispatcher_send"
         ) as mock_send:
-            device._node_status_update(
-                SmartboxNodeType.HTR, 0, {"sync_status": "lost"}
-            )
+            device._node_status_update(SmartboxNodeType.HTR, 0, {"sync_status": "lost"})
         # The sync marker still enters the node cache (the poll path uses it
         # to mark entities unavailable); entities are just not notified
         mock_node.update_status.assert_called_once_with({"sync_status": "lost"})
@@ -1431,7 +1439,9 @@ async def test_cancel_does_not_restart_watchdog_when_run_returns(hass, caplog):
         "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
-        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass)
+        device = SmartboxDevice(
+            MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass
+        )
         exit_requested = asyncio.Event()
 
         async def _run() -> None:

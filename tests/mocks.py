@@ -288,7 +288,7 @@ class MockSmartbox:
     def _get_device(self, dev_id):
         return self._device_info[dev_id]
 
-    def _create_mock_session(self):
+    def _create_mock_session(self):  # noqa: C901
         mock_session = AsyncMock()
         mock_session.get_devices.return_value = self._devices
         mock_session.reseller = SmartboxReseller(
@@ -354,7 +354,10 @@ class MockSmartbox:
 
         async def get_node_version(dev_id, node):
             node_info = self._node_info[dev_id][node["addr"]]
-            return {"hw_version": node_info.get("fw_version"), "pid": node_info.get("product_id")}
+            return {
+                "hw_version": node_info.get("fw_version"),
+                "pid": node_info.get("product_id"),
+            }
 
         mock_session.get_node_version = get_node_version
 

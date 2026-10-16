@@ -44,19 +44,15 @@ async def test_setup_probe_unsupported_falls_back(config_entry):
 @pytest.mark.parametrize(
     ("exc", "match"),
     [
-        # One no-demotion path: the helper never demotes
-        # non-deterministic trouble; async_setup_entry's except tuple
-        # (SmartboxError/APIUnavailableError/OSError/aiohttp.ClientError)
-        # turns it into ConfigEntryNotReady.
+        # The helper never demotes non-deterministic trouble: the except
+        # tuple in async_setup_entry turns these into ConfigEntryNotReady.
         (OSError("network unreachable"), "network unreachable"),
         (SmartboxError("boom"), "boom"),
         (aiohttp.ClientError("proxy 502"), "proxy 502"),
     ],
 )
 @pytest.mark.asyncio
-async def test_setup_probe_transient_propagates_raw(
-    hass, config_entry, exc, match
-):
+async def test_setup_probe_transient_propagates_raw(hass, config_entry, exc, match):
     """Transient probe trouble propagates raw (setup maps it to NotReady)."""
     config_entry.runtime_data = SimpleNamespace(client=MagicMock())
     with (
@@ -96,8 +92,10 @@ async def test_setup_probe_success_builds_shared_socket(hass, config_entry):
 
 @pytest.mark.asyncio
 async def test_setup_probe_backend_socket_io_skips_probe(config_entry):
-    """The legacy backend never probes (the constant is read lazily, so
-    tests can patch const.SMARTBOX_WS_BACKEND)."""
+    """The legacy backend never probes.
+
+    The constant is read lazily, so tests can patch const.SMARTBOX_WS_BACKEND.
+    """
     config_entry.runtime_data = SimpleNamespace(client=MagicMock())
     probe = AsyncMock()
     with (
@@ -123,13 +121,11 @@ async def test_supervisor_reload_on_midrun_unsupported(hass, monkeypatch):
         # Close the scheduled reload coroutine instead of awaiting it:
         # no "coroutine was never awaited" noise in the suite.
         async_create_background_task=MagicMock(
-            side_effect=lambda _hass, coro, name: coro.close()
+            side_effect=lambda _hass, coro, _name: coro.close()
         ),
         runtime_data=SimpleNamespace(ws_user_socket=sock, devices=[]),
     )
-    monkeypatch.setattr(
-        "custom_components.smartbox.async_dispatcher_send", MagicMock()
-    )
+    monkeypatch.setattr("custom_components.smartbox.async_dispatcher_send", MagicMock())
 
     task = asyncio.create_task(_supervise_ws_user_socket(hass, entry))
     await asyncio.wait_for(task, 2)
@@ -169,7 +165,7 @@ async def test_ws_user_unsupported_reload_rate_limited(hass, monkeypatch):
         # Close the scheduled reload coroutine instead of awaiting it:
         # no "coroutine was never awaited" noise in the suite.
         async_create_background_task=MagicMock(
-            side_effect=lambda _hass, coro, name: coro.close()
+            side_effect=lambda _hass, coro, _name: coro.close()
         ),
         runtime_data=SimpleNamespace(ws_user_socket=MagicMock(), devices=[]),
     )
@@ -280,6 +276,7 @@ async def test_supervisor_restarts_real_session_after_unexpected_exit(
     and parks. A one-shot run() would make the restart a no-op and leave
     the transport permanently dead.
     """
+
     class HangingWsCtx:
         async def __aenter__(self):
             await asyncio.sleep(30)
@@ -303,12 +300,8 @@ async def test_supervisor_restarts_real_session_after_unexpected_exit(
     # Real but tiny backoff sleeps (module-level constants, watchdog
     # pattern) — a global asyncio.sleep patch would break the hang
     # simulation itself.
-    monkeypatch.setattr(
-        smartbox_init, "_WS_USER_WATCHDOG_BASE_SECONDS", 0.005
-    )
-    monkeypatch.setattr(
-        smartbox_init, "_WS_USER_WATCHDOG_MAX_SECONDS", 0.01
-    )
+    monkeypatch.setattr(smartbox_init, "_WS_USER_WATCHDOG_BASE_SECONDS", 0.005)
+    monkeypatch.setattr(smartbox_init, "_WS_USER_WATCHDOG_MAX_SECONDS", 0.01)
 
     sock = WsUserSocketSession(session_stub)
     entry = SimpleNamespace(
@@ -341,7 +334,9 @@ async def session_stub(mocker, reseller):
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_ws_user_active_full_wiring(hass, mock_smartbox, config_entry):
+async def test_setup_entry_ws_user_active_full_wiring(
+    hass, mock_smartbox, config_entry
+):
     """Full setup with ws_user active: shared socket + supervision task.
 
     Everything else in the suite exercises the fallback path (the mocked

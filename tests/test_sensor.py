@@ -594,9 +594,7 @@ async def test_transient_sync_lost_frame_keeps_last_status(
     assert entity.native_value is not None
     assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
 
-    mock_node_status = mock_smartbox.generate_new_socket_status(
-        mock_device, mock_node
-    )
+    mock_node_status = mock_smartbox.generate_new_socket_status(mock_device, mock_node)
     await hass.async_block_till_done()
     _check_temp_state(hass, mock_node_status, hass.states.get(entity_id))
 
@@ -635,7 +633,10 @@ def test_rtc_time_to_datetime_0_indexed_month():
 
 def test_rtc_time_to_datetime_rejects_unparseable():
     """Unexpected shapes (e.g. a 1-indexed December n=12) yield None."""
-    assert rtc_time_to_datetime({"d": 1, "h": 0, "m": 0, "n": 12, "s": 0, "y": 2026}) is None
+    assert (
+        rtc_time_to_datetime({"d": 1, "h": 0, "m": 0, "n": 12, "s": 0, "y": 2026})
+        is None
+    )
     assert rtc_time_to_datetime({"y": 2026}) is None
     assert rtc_time_to_datetime(None) is None
 

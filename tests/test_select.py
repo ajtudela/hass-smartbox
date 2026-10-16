@@ -29,8 +29,7 @@ async def test_radiator_priority(hass, mock_smartbox, config_entry):
     )
     assert state.name == f"{mock_node['name']} Radiator Priority"
     assert (
-        state.attributes[ATTR_FRIENDLY_NAME]
-        == f"{mock_node['name']} Radiator Priority"
+        state.attributes[ATTR_FRIENDLY_NAME] == f"{mock_node['name']} Radiator Priority"
     )
     unique_id = get_node_unique_id(mock_device, mock_node, "priority")
     assert entity_id == get_entity_id_from_unique_id(hass, SELECT_DOMAIN, unique_id)

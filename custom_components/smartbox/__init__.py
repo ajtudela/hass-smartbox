@@ -233,14 +233,13 @@ def _handle_ws_user_unsupported(
         f"{entry.entry_id}_ws_user_reload_marks", []
     )
     reload_marks[:] = [
-        mark
-        for mark in reload_marks
-        if now - mark < _WS_USER_RELOAD_WINDOW_SECONDS
+        mark for mark in reload_marks if now - mark < _WS_USER_RELOAD_WINDOW_SECONDS
     ]
     if entry.state is not ConfigEntryState.LOADED:
         _LOGGER.warning(
             "ws_user endpoint stopped being served, but the entry is not "
-            "loaded (state=%s); not reloading", entry.state,
+            "loaded (state=%s); not reloading",
+            entry.state,
         )
         return False
     if len(reload_marks) >= _WS_USER_RELOAD_LIMIT:
@@ -312,9 +311,7 @@ async def _supervise_ws_user_socket(
             "requesting reauthentication"
         )
         for device in entry.runtime_data.devices:
-            async_dispatcher_send(
-                hass, f"{DOMAIN}_{device.dev_id}_reauth_required"
-            )
+            async_dispatcher_send(hass, f"{DOMAIN}_{device.dev_id}_reauth_required")
 
     # Run/exit model: run() returns only when exit was requested
     # (teardown); exceptions propagate out and are handled here. A
@@ -340,9 +337,7 @@ async def _supervise_ws_user_socket(
             _signal_reauth()
             return
         except Exception:
-            _LOGGER.exception(
-                "Shared ws_user socket exited unexpectedly; restarting"
-            )
+            _LOGGER.exception("Shared ws_user socket exited unexpectedly; restarting")
         else:
             # run() returned normally: exit was requested (teardown/cancel).
             return
@@ -410,9 +405,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         raise ConfigEntryNotReady from ex
 
     try:
-        entry.runtime_data.ws_user_socket = (
-            await _async_create_ws_user_socket(entry)
-        )
+        entry.runtime_data.ws_user_socket = await _async_create_ws_user_socket(entry)
         devices = await get_devices(
             session=entry.runtime_data.client,
             hass=hass,

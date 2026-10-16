@@ -285,7 +285,9 @@ async def test_box_device_created_and_legacy_entities_rehomed(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     assert (
-        entity_registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_1_away_status")
+        entity_registry.async_get_entity_id(
+            SWITCH_DOMAIN, DOMAIN, "device_1_away_status"
+        )
         is not None
     )
     assert (
