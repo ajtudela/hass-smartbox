@@ -104,11 +104,6 @@ max-complexity = 10
     "PT011",
 ]
 
-[tool.coverage.report]
-exclude_also = [
-    "def handle_set_boost_params",
-]
-
 [tool.tox]
 env_list = ["3.14"]
 
