@@ -142,13 +142,22 @@ class SmartBoxNodeEntity(DefaultSmartBoxEntity):
         # The box keeps reporting connected while a NODE is unreachable:
         # node availability comes from the library's tracking (bare lost
         # frames / unconfirmed writes), see api-notes.md 2026-09-30.
-        self._attr_available = node.available is not False
+        self._node_available = node.available is not False
+        # Polling entities flip this on REST failures; the cloud answers
+        # even when the node itself is disconnected, so it is only ever an
+        # additional reason to be unavailable.
+        self._api_available = True
         super().__init__(entry=entry)
+
+    @property
+    def available(self) -> bool:
+        """Return True when both the node and the REST API are reachable."""
+        return self._node_available and self._api_available
 
     @callback
     def _async_availability_update(self, available: bool) -> None:
         """Update availability from a node-availability event."""
-        self._attr_available = available
+        self._node_available = available
         self.async_write_ha_state()
 
     async def async_update(self) -> None:
@@ -168,14 +177,16 @@ class SmartBoxNodeEntity(DefaultSmartBoxEntity):
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         await super().async_added_to_hass()
-        if self._attr_should_poll is False:
-            self.async_on_remove(
-                async_dispatcher_connect(
-                    self.hass,
-                    f"{DOMAIN}_{self._node.node_id}_availability",
-                    self._async_availability_update,
-                )
+        # Polling entities need the node signal too: their REST calls
+        # succeed while the node is disconnected.
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{DOMAIN}_{self._node.node_id}_availability",
+                self._async_availability_update,
             )
+        )
+        if self._attr_should_poll is False:
             self.async_on_remove(
                 async_dispatcher_connect(
                     self.hass,

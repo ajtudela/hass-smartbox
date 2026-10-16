@@ -208,7 +208,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 32
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 39
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -637,3 +637,37 @@ def test_rtc_time_to_datetime_rejects_unparseable():
     assert rtc_time_to_datetime({"d": 1, "h": 0, "m": 0, "n": 12, "s": 0, "y": 2026}) is None
     assert rtc_time_to_datetime({"y": 2026}) is None
     assert rtc_time_to_datetime(None) is None
+
+
+async def test_polling_sensors_follow_node_availability(
+    hass, mock_smartbox, config_entry, recorder_mock
+):
+    """Polling node sensors go Unavailable with their node, REST being fine."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = next(
+        node
+        for node in await mock_smartbox.session.get_nodes(mock_device["dev_id"])
+        if is_heater_node(node)
+    )
+    entity_ids = [
+        get_entity_id_from_unique_id(
+            hass, SENSOR_DOMAIN, get_node_unique_id(mock_device, mock_node, key)
+        )
+        for key in ("total_consumption", "schedule")
+    ]
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
+
+    mock_smartbox.generate_socket_node_unavailable(mock_device, mock_node)
+    await asyncio.sleep(0.3)
+    await hass.async_block_till_done()
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
+
+    mock_smartbox.generate_new_socket_status(mock_device, mock_node)
+    await hass.async_block_till_done()
+    for entity_id in entity_ids:
+        assert hass.states.get(entity_id).state != STATE_UNAVAILABLE

@@ -286,9 +286,9 @@ class PowerSensor(SmartboxSensorBase):
             except APIUnavailableError:
                 # Transient API trouble: surface as unavailable instead of
                 # leaving a stale-but-available entity.
-                self._attr_available = False
+                self._api_available = False
             else:
-                self._attr_available = True
+                self._api_available = True
             self.async_write_ha_state()
 
     @property
@@ -339,9 +339,9 @@ class TotalConsumptionSensor(SmartboxSensorBase):
         except APIUnavailableError:
             # Transient API trouble: surface as unavailable instead of
             # leaving a stale-but-available entity.
-            self._attr_available = False
+            self._api_available = False
             return
-        self._attr_available = True
+        self._api_available = True
         await self._adjust_short_term_statistics()
 
     async def async_added_to_hass(self) -> None:
@@ -545,7 +545,7 @@ class ScheduleSensor(SmartboxSensorBase):
         except APIUnavailableError:
             # Transient API trouble: surface as unavailable instead of
             # leaving a stale-but-available entity.
-            self._attr_available = False
+            self._api_available = False
             return
         except SmartboxError:
             _LOGGER.exception(
@@ -553,7 +553,7 @@ class ScheduleSensor(SmartboxSensorBase):
                 self._node.name,
             )
             return
-        self._attr_available = True
+        self._api_available = True
         if prog is not None:
             self._node.update_prog(prog)
         self._track_next_change()
