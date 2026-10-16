@@ -27,7 +27,6 @@ class DefaultSmartBoxEntity(Entity):
         self._device_id = self._node.node_id
         self._status: dict[str, Any] = {}
         self._attr_translation_key = self._attr_key
-        self._attr_unique_id = self._node.node_id
         self._reseller = self._node.session.reseller
         self._configuration_url = f"{self._reseller.web_url}#/{self._node.device.home['id']}/dev/{self._device_id}/{self._node.node_type}/{self._node.addr}/setup"
         if entry.options.get(CONF_DISPLAY_ENTITY_PICTURES, False) is True:

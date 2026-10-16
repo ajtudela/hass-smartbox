@@ -9,6 +9,7 @@ from homeassistant.components.climate import (
     PRESET_COMFORT,
     PRESET_ECO,
     PRESET_HOME,
+    PRESET_NONE,
     HVACMode,
     UnitOfTemperature,
 )
@@ -685,6 +686,13 @@ def test_set_hvac_mode_args():
     assert "selected_temp" in exc_info.exconly()
 
 
+def test_set_preset_mode_status_update_rejects_home_and_away():
+    """Presets handled outside status updates raise instead of asserting."""
+    for preset in (PRESET_HOME, PRESET_AWAY, PRESET_NONE):
+        with pytest.raises(ValueError, match="not applied through a status update"):
+            set_preset_mode_status_update(SmartboxNodeType.HTR_MOD, {}, preset)
+
+
 def test_set_preset_mode_status_update():
     assert set_preset_mode_status_update(
         SmartboxNodeType.HTR_MOD, {}, PRESET_SCHEDULE
@@ -718,10 +726,6 @@ def test_set_preset_mode_status_update():
 
     with pytest.raises(ValueError):
         set_preset_mode_status_update(SmartboxNodeType.HTR_MOD, {}, "fake_preset")
-    with pytest.raises(AssertionError):
-        set_preset_mode_status_update(SmartboxNodeType.HTR_MOD, {}, PRESET_HOME)
-    with pytest.raises(AssertionError):
-        set_preset_mode_status_update(SmartboxNodeType.HTR_MOD, {}, PRESET_AWAY)
 
 
 def test_get_temperature_unit():

@@ -448,8 +448,6 @@ class SmartboxDevice:
 
     def get_nodes(self) -> list[SmartboxNode]:
         """Return all nodes."""
-        for item in self._nodes:
-            _LOGGER.debug("Get_nodes: %s", item)
         return list(self._nodes.values())
 
     @property
@@ -1389,7 +1387,9 @@ def set_preset_mode_status_update(
         msg = f"{node_type} nodes do not support preset {preset_mode}"
         raise ValueError(msg)
     # PRESET_HOME and PRESET_AWAY are not handled via status updates
-    assert preset_mode not in (PRESET_HOME, PRESET_AWAY, PRESET_NONE)  # noqa: S101
+    if preset_mode in (PRESET_HOME, PRESET_AWAY, PRESET_NONE):
+        msg = f"Preset {preset_mode} is not applied through a status update"
+        raise ValueError(msg)
 
     if preset_mode == PRESET_SCHEDULE:
         return set_hvac_mode_args(node_type, status, HVACMode.AUTO)

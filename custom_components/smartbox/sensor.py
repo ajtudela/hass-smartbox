@@ -96,11 +96,7 @@ async def async_setup_entry(
     )
     # Power
     async_add_entities(
-        [
-            PowerSensor(node, entry)
-            for node in entry.runtime_data.nodes
-            # if is_heater_node(node) and node.node_type != SmartboxNodeType.HTR_MOD
-        ],
+        [PowerSensor(node, entry) for node in entry.runtime_data.nodes],
         update_before_add=True,
     )
     # Duty Cycle and Energy
