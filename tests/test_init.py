@@ -199,7 +199,10 @@ async def test_hass_stop_cancels_device_websocket_tasks(
     await hass.async_block_till_done()
 
     for device in devices:
-        assert device._watchdog_task.cancelled()
+        # A faithful socket returns from run() once cancelled (it is not
+        # force-cancelled) and the watchdog must not treat that as a crash.
+        assert device._watchdog_task.done()
+        assert device._watchdog_restarts == 0
 
 
 async def test_box_device_created_and_legacy_entities_rehomed(

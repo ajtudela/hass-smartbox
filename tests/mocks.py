@@ -2,7 +2,7 @@ import asyncio
 from copy import deepcopy
 import logging
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, create_autospec
 
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
@@ -11,6 +11,7 @@ from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.helpers import entity_registry
+from smartbox import AsyncSmartboxSession
 from smartbox.reseller import SmartboxReseller
 
 from custom_components.smartbox.const import DOMAIN, HEATER_NODE_TYPES, SmartboxNodeType
@@ -289,7 +290,9 @@ class MockSmartbox:
         return self._device_info[dev_id]
 
     def _create_mock_session(self):  # noqa: C901
-        mock_session = AsyncMock()
+        # Autospec'd so a call to a method the library does not have fails
+        # here instead of silently "working" on a bare AsyncMock.
+        mock_session = create_autospec(AsyncSmartboxSession, instance=True)
         mock_session.get_devices.return_value = self._devices
         mock_session.reseller = SmartboxReseller(
             name="Test API name",
@@ -312,27 +315,27 @@ class MockSmartbox:
         async def get_node_status(dev_id, node):
             return self._get_session_status(dev_id, node["addr"])
 
-        mock_session.get_status.side_effect = get_node_status
+        mock_session.get_status = get_node_status  # test-only alias
         mock_session.get_node_status.side_effect = get_node_status
 
         async def set_node_status(dev_id, node, status_updates):
             self._socket_node_status[dev_id][node["addr"]].update(status_updates)
             self._session_node_status = self._socket_node_status
 
-        mock_session.set_status = set_node_status
+        mock_session.set_status = set_node_status  # test-only alias
         mock_session.set_node_status = set_node_status
 
         async def get_node_setup(dev_id, node):
             return self._session_node_setup[dev_id][node["addr"]]
 
         mock_session.get_node_setup = get_node_setup
-        mock_session.get_setup = get_node_setup
+        mock_session.get_setup = get_node_setup  # test-only alias
 
         async def set_node_setup(dev_id, node, setup_updates):
             self._socket_node_setup[dev_id][node["addr"]].update(setup_updates)
             self._session_node_setup = self._socket_node_setup
 
-        mock_session.set_setup = set_node_setup
+        mock_session.set_setup = set_node_setup  # test-only alias
         mock_session.set_node_setup = set_node_setup
 
         async def get_device_power_limit(dev_id, node=None):
@@ -406,9 +409,20 @@ class MockSmartbox:
         # Production run() parks in the websocket loop for the task's
         # lifetime. A mock that returns immediately makes the device's
         # watchdog-restart machinery churn on its backoff timers forever,
-        # hanging every async_block_till_done()-based test. Park forever.
-        never = asyncio.Event()
-        mock_socket.run = AsyncMock(side_effect=never.wait)
+        # hanging every async_block_till_done()-based test. Park until
+        # cancel() is requested, then return like the real session does
+        # (after a short delay, as python-socketio's wait() sleeps).
+        exit_requested = asyncio.Event()
+
+        async def run() -> None:
+            await exit_requested.wait()
+
+        async def cancel() -> None:
+            exit_requested.set()
+            await asyncio.sleep(0)
+
+        mock_socket.run = AsyncMock(side_effect=run)
+        mock_socket.cancel = AsyncMock(side_effect=cancel)
         return mock_socket
 
     def get_mock_socket(
