@@ -24,7 +24,6 @@
         "title": "Réauthentification",
         "description": "Vous devez vous réauthentifier.",
         "data": {
-          "username": "Nom d'utilisateur",
           "password": "Mot de passe"
         }
       }

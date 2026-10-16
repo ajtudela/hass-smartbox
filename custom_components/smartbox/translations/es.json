@@ -24,7 +24,6 @@
         "title": "Reautenticación",
         "description": "La integración de Smartbox necesita volver a autenticar tu cuenta",
         "data": {
-          "username": "Nombre de usuario",
           "password": "Contraseña"
         }
       }

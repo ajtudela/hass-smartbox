@@ -24,7 +24,6 @@
         "title": "[%key:common::config_flow::title::reauth%]",
         "description": "[%key:common::config_flow::description::reauth%]",
         "data": {
-          "username": "[%key:common::config_flow::data::username%]",
           "password": "[%key:common::config_flow::data::password%]"
         }
       }

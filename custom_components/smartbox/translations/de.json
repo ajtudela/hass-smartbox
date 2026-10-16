@@ -24,7 +24,6 @@
         "title": "Erneute Authentifizierung",
         "description": "Die Smartbox-Integration muss dein Konto erneut authentifizieren",
         "data": {
-          "username": "Benutzername",
           "password": "Passwort"
         }
       }

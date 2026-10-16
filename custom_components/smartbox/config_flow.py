@@ -54,6 +54,10 @@ LOGIN_DATA_SCHEMA = {
         )
     ),
 }
+# The account is fixed by the entry being reauthenticated: only the password changes.
+REAUTH_DATA_SCHEMA = {
+    key: value for key, value in LOGIN_DATA_SCHEMA.items() if key != CONF_USERNAME
+}
 
 OPTIONS_DATA_SCHEMA = {
     vol.Required(CONF_HISTORY_CONSUMPTION): SelectSelector(
@@ -164,7 +168,7 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema(LOGIN_DATA_SCHEMA),
+            data_schema=vol.Schema(REAUTH_DATA_SCHEMA),
             errors=errors,
             description_placeholders=placeholders,
         )

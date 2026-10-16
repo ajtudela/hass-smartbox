@@ -73,7 +73,7 @@ async def test_step_reauth(hass: HomeAssistant, mock_smartbox, reseller) -> None
     """Test the reauth flow."""
     entry = MockConfigEntry(
         domain=DOMAIN,
-        unique_id="test_api_name_1_user@email.com",
+        unique_id="test_api_name_1_test_username_1",
         data=MOCK_SMARTBOX_CONFIG[DOMAIN],
     )
     entry.add_to_hass(hass)
@@ -85,10 +85,7 @@ async def test_step_reauth(hass: HomeAssistant, mock_smartbox, reseller) -> None
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        user_input={
-            CONF_USERNAME: "user@email.com",
-            CONF_PASSWORD: "new_password",
-        },
+        user_input={CONF_PASSWORD: "new_password"},
     )
 
     assert result["type"] is FlowResultType.ABORT
@@ -160,6 +157,7 @@ async def test_async_step_reauth_confirm_show_form(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reauth_confirm"
     assert result["errors"] == {}
+    assert [str(key) for key in result["data_schema"].schema] == [CONF_PASSWORD]
 
 
 async def test_async_step_reauth_confirm_invalid_auth(

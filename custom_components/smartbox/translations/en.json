@@ -24,7 +24,6 @@
         "title": "Reauthentication",
         "description": "The Smartbox integration needs to re-authenticate your account",
         "data": {
-          "username": "Username",
           "password": "Password"
         }
       }
