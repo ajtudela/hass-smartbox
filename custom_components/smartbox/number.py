@@ -206,7 +206,7 @@ class PowerLimit(SmartboxBoxEntity, NumberEntity):
         self.async_write_ha_state()
 
 
-class ConfigBoostTemperature(SmartBoxNodeEntity, NumberEntity):
+class ConfigBoostTemperature(_DeviceScaleBounds, SmartBoxNodeEntity, NumberEntity):
     """Smartbox boost temperature control."""
 
     _attr_key = "config_boost_temperature"
@@ -215,9 +215,8 @@ class ConfigBoostTemperature(SmartBoxNodeEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_device_class = NumberDeviceClass.TEMPERATURE
 
-    _attr_native_min_value: float = 5.0
-    _attr_native_max_value: float = 30.0
-    _attr_native_step: float = 0.5
+    _C_SCALE_BOUNDS = (5.0, 30.0, 0.5)
+    _F_SCALE_BOUNDS = (41.0, 86.0, 1.0)
 
     @property
     def native_value(self) -> float:

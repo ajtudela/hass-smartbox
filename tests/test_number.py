@@ -104,6 +104,10 @@ async def test_boost_temperature(hass, mock_smartbox, config_entry):
     assert entity_id == get_entity_id_from_unique_id(hass, NUMBER_DOMAIN, unique_id)
     min_val = state.attributes.get("min")
     max_val = state.attributes.get("max")
+    # Bounds follow the device scale (5-30 °C / 41-86 °F), which is the same
+    # span once HA converts to its own unit system.
+    assert min_val == pytest.approx(5.0, abs=0.5)
+    assert max_val == pytest.approx(30.0, abs=0.5)
     test_value = round((min_val + max_val) / 2, 1)
 
     await hass.services.async_call(
