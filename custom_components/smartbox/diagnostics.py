@@ -11,7 +11,27 @@ if TYPE_CHECKING:
 
     from . import SmartboxConfigEntry
 
-TO_REDACT = [CONF_PASSWORD, CONF_USERNAME, "title", "unique_id"]
+TO_REDACT = [CONF_PASSWORD, CONF_USERNAME, "device_ids", "title", "unique_id"]
+# Identifiers users paste into public issues; dev_id also opens the device
+# websocket. A generic "id" key is NOT redacted (it would hide useful ids),
+# so the home's id is handled explicitly in _redact_device.
+TO_REDACT_IDENTIFIERS = [
+    "dev_id",
+    "serial_id",
+    "serial_number",
+    "uid",
+    "identifiers",
+    "configuration_url",
+]
+TO_REDACT_HOME = ["id", "name"]
+
+
+def _redact_device(device: Any) -> Any:  # noqa: ANN401
+    """Redact the identifiers of a device dict, including its home."""
+    redacted = async_redact_data(device, TO_REDACT_IDENTIFIERS)
+    if isinstance(redacted.get("home"), dict):
+        redacted["home"] = async_redact_data(redacted["home"], TO_REDACT_HOME)
+    return redacted
 
 
 async def async_get_config_entry_diagnostics(
@@ -30,24 +50,32 @@ async def async_get_config_entry_diagnostics(
             # supervision loop is dead), NOT per-connection state —
             # named accordingly to keep bug reports readable.
             "ws_user_run_finished": (
-                None if runtime.ws_user_socket is None else runtime.ws_user_socket.closed
+                None
+                if runtime.ws_user_socket is None
+                else runtime.ws_user_socket.closed
             ),
             "client": {"expiry_time": runtime.client.expiry_time},
             "nodes": [
-                {"info": e.node_info, "setup": e.setup, "status": e.status}
+                {
+                    "info": async_redact_data(e.node_info, TO_REDACT_IDENTIFIERS),
+                    "setup": e.setup,
+                    "status": e.status,
+                }
                 for e in config_entry.runtime_data.nodes
             ],
-            "devices": [d.device for d in config_entry.runtime_data.devices],
+            "devices": [
+                _redact_device(d.device) for d in config_entry.runtime_data.devices
+            ],
         },
     }
     diagnostics_data["hass_devices"] = [
-        e.dict_repr
+        async_redact_data(e.dict_repr, TO_REDACT_IDENTIFIERS)
         for e in dr.async_entries_for_config_entry(
             dr.async_get(hass), config_entry.entry_id
         )
     ]
     diagnostics_data["hass_entities"] = [
-        e.as_partial_dict
+        async_redact_data(e.as_partial_dict, TO_REDACT)
         for e in er.async_entries_for_config_entry(
             er.async_get(hass), config_entry.entry_id
         )
