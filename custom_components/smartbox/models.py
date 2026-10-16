@@ -190,7 +190,6 @@ class SmartboxDevice:
     async def cancel(self) -> None:
         """Cancel the watchdog task and disconnect.
 
-        self._stopping = True
         Deliberately bounded and exception-proof: unload (UI reload) and the
         HA-stop hook must always complete promptly even when the websocket
         session is wedged. On live hardware run() parks in the websocket
@@ -198,6 +197,7 @@ class SmartboxDevice:
         and then awaiting it bare used to raise CancelledError out of
         async_unload_entry, which silently killed UI reloads.
         """
+        self._stopping = True
         try:
             await asyncio.wait_for(
                 self.update_manager.cancel(), _TEARDOWN_TIMEOUT_SECONDS

@@ -1423,3 +1423,36 @@ async def test_update_status_lost_frame_keeps_snapshot():
     )
     node.update_status({"sync_status": "lost"})
     assert node.status == {"mtemp": "21.4", "sync_status": "lost"}
+
+
+async def test_cancel_does_not_restart_watchdog_when_run_returns(hass, caplog):
+    """run() returning after cancel() (reconnect backoff) must not restart it."""
+    mock_session = MagicMock()
+    with patch(
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        new_callable=NonCallableMock,
+    ):
+        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass)
+        exit_requested = asyncio.Event()
+
+        async def _run() -> None:
+            await exit_requested.wait()
+
+        async def _cancel() -> None:
+            exit_requested.set()
+            await asyncio.sleep(0)
+
+        device.update_manager.run = _run
+        device.update_manager.cancel = _cancel
+        restarts: list[None] = []
+        device._schedule_watchdog_restart = lambda: restarts.append(None)
+
+        task = asyncio.create_task(device.update_manager.run())
+        device._watchdog_task = task
+        task.add_done_callback(device._watchdog_done)
+
+        await device.cancel()
+        await asyncio.sleep(0)
+
+        assert not restarts
+        assert "exited unexpectedly" not in caplog.text
