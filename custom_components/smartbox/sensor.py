@@ -72,6 +72,9 @@ if TYPE_CHECKING:
     from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
+
+# Read-only entities fed by pushed state or coordinators; no limit on parallel updates.
+PARALLEL_UPDATES = 0
 SCAN_INTERVAL = timedelta(minutes=15)
 
 
@@ -327,6 +330,7 @@ class DutyCycleSensor(SmartboxSensorBase):
     """Smartbox heater duty cycle sensor: Represents the duty cycle for the heater."""
 
     _attr_key = "duty_cycle"
+    _attr_entity_registry_enabled_default = False
     _attr_device_class = SensorDeviceClass.POWER_FACTOR
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -616,6 +620,7 @@ class ClockDriftSensor(SmartboxBoxEntity, SensorEntity):
     """
 
     _attr_key = "rtc_drift"
+    _attr_entity_registry_enabled_default = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_state_class = SensorStateClass.MEASUREMENT

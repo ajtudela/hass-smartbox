@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from dateutil import tz
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_LOCKED, STATE_UNAVAILABLE
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_component import async_update_entity
 from homeassistant.util import dt as dt_util
 import pytest
@@ -30,6 +31,7 @@ from .mocks import (
     MOCK_DEVICE_RTC,
     active_or_charging_update,
     get_clock_drift_sensor_entity_id,
+    get_clock_drift_sensor_entity_name,
     get_device_unique_id,
     get_entity_id_from_unique_id,
     get_node_unique_id,
@@ -54,7 +56,7 @@ def _check_temp_state(hass, mock_node_status, state):
 async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 39
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -124,7 +126,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, recorder_mock):
 async def test_basic_power(hass, mock_smartbox, config_entry, recorder_mock):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 39
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -208,7 +210,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 39
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -236,7 +238,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable, recorder_mock):
 async def test_basic_charge_level(hass, mock_smartbox, recorder_mock, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 39
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -581,6 +583,20 @@ async def test_transient_sync_lost_frame_keeps_last_status(
 @pytest.mark.asyncio
 async def test_clock_drift_sensor(hass, mock_smartbox, config_entry, recorder_mock):
     """One clock drift sensor per box device, with the raw RTC as attributes."""
+    # Diagnostic sensors are disabled by default: enable them through the
+    # registry before the platform is set up, as a user would.
+    registry = er.async_get(hass)
+    for mock_device in await mock_smartbox.session.get_devices():
+        registry.async_get_or_create(
+            SENSOR_DOMAIN,
+            DOMAIN,
+            get_device_unique_id(mock_device, "rtc_drift"),
+            config_entry=config_entry,
+            suggested_object_id=get_object_id(
+                get_clock_drift_sensor_entity_name(mock_device)
+            ),
+            disabled_by=None,
+        )
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -716,3 +732,33 @@ async def test_set_schedule_service_targets_schedule_entity(
     )
 
     mock_smartbox.session.set_node_prog.assert_awaited_once()
+
+
+async def test_diagnostic_sensors_disabled_by_default(
+    hass, mock_smartbox, config_entry, recorder_mock
+):
+    """The duty cycle and clock drift sensors are opt-in."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    for mock_device in await mock_smartbox.session.get_devices():
+        entity_id = registry.async_get_entity_id(
+            SENSOR_DOMAIN, DOMAIN, get_device_unique_id(mock_device, "rtc_drift")
+        )
+        assert entity_id is not None
+        assert (
+            registry.async_get(entity_id).disabled_by
+            is er.RegistryEntryDisabler.INTEGRATION
+        )
+        assert hass.states.get(entity_id) is None
+        for mock_node in await mock_smartbox.session.get_nodes(mock_device["dev_id"]):
+            if mock_node["type"] != SmartboxNodeType.HTR:
+                continue
+            entity_id = registry.async_get_entity_id(
+                SENSOR_DOMAIN,
+                DOMAIN,
+                get_node_unique_id(mock_device, mock_node, "duty_cycle"),
+            )
+            assert entity_id is not None
+            assert hass.states.get(entity_id) is None
