@@ -17,6 +17,8 @@ from custom_components.smartbox.const import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from homeassistant.core import HomeAssistant
 
     from custom_components.smartbox import SmartboxConfigEntry
@@ -30,6 +32,37 @@ CONSUMPTION_UPDATE_INTERVAL: Final = timedelta(minutes=15)
 _DAY_SECONDS: Final = 24 * 60 * 60
 _YEAR_SECONDS: Final = 365 * _DAY_SECONDS
 _HOUR_SECONDS: Final = 60 * 60
+
+
+def polling_coordinator[T](
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    *,
+    name: str,
+    interval: timedelta,
+    method: Callable[[], Awaitable[T]],
+) -> DataUpdateCoordinator[T]:
+    """Build a coordinator that polls one REST resource.
+
+    Library errors become ``UpdateFailed`` so the entities reading the
+    coordinator go unavailable instead of keeping a stale value.
+    """
+
+    async def _update() -> T:
+        try:
+            return await method()
+        except SmartboxError as ex:
+            msg = f"Error refreshing {name}: {ex}"
+            raise UpdateFailed(msg) from ex
+
+    return DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        config_entry=entry,
+        name=name,
+        update_method=_update,
+        update_interval=interval,
+    )
 
 
 @dataclass(frozen=True)

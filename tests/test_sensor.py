@@ -405,33 +405,20 @@ def test_import_statistics_off(hass, config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_update_pmo(hass, mock_smartbox, config_entry):
+@pytest.mark.parametrize("success", [True, False])
+async def test_pmo_power_follows_the_coordinator(hass, config_entry, success):
+    """A PMO power cycle publishes the state and tracks its success."""
     mock_node = AsyncMock()
     mock_node.node_type = SmartboxNodeType.PMO
-    mock_node.update_power = AsyncMock()
-    sensor = PowerSensor(mock_node, config_entry)
+    coordinator = MagicMock(last_update_success=success)
+    sensor = PowerSensor(mock_node, config_entry, coordinator)
     sensor.hass = hass
 
     with patch.object(sensor, "async_write_ha_state") as mock_write_ha_state:
-        await sensor._async_update_pmo(None)
+        sensor._handle_coordinator_update()
 
-        mock_node.update_power.assert_called_once()
-        mock_write_ha_state.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_async_update_pmo_non_pmo_node(hass, mock_smartbox, config_entry):
-    mock_node = AsyncMock()
-    mock_node.node_type = SmartboxNodeType.HTR
-    mock_node.update_power = AsyncMock()
-    sensor = PowerSensor(mock_node, config_entry)
-    sensor.hass = hass
-
-    with patch.object(sensor, "async_write_ha_state") as mock_write_ha_state:
-        await sensor._async_update_pmo(None)
-
-        mock_node.update_power.assert_not_called()
-        mock_write_ha_state.assert_not_called()
+    assert sensor._api_available is success
+    mock_write_ha_state.assert_called_once()
 
 
 @pytest.mark.asyncio

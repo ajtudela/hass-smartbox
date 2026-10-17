@@ -1437,3 +1437,29 @@ async def test_get_devices_initialises_boxes_concurrently(hass):
 
     assert len(devices) == 2
     assert peak == 2
+
+
+async def test_async_sync_prog_stores_the_schedule(hass):
+    """The coordinator method refreshes and caches the schedule."""
+    mock_session = AsyncMock()
+    mock_device = MagicMock(dev_id="device_1")
+    node = SmartboxNode(
+        mock_device,
+        {"addr": 1, "name": "node_1", "type": "htr"},
+        mock_session,
+        {"locked": False},
+        {"factory_options": {}},
+        [],
+        {"hw_version": "1.0", "fw_version": "1.0"},
+    )
+    mock_session.get_node_prog.return_value = {
+        "prog": {"0": [1, 2]},
+        "sync_status": "ok",
+    }
+
+    assert await node.async_sync_prog() == {"0": [1, 2]}
+    assert node.prog == {"0": [1, 2]}
+
+    # An unusable response keeps the cached schedule.
+    mock_session.get_node_prog.return_value = {"sync_status": "lost"}
+    assert await node.async_sync_prog() == {"0": [1, 2]}

@@ -1,5 +1,6 @@
 """Tests for the consumption coordinator."""
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -13,6 +14,7 @@ from custom_components.smartbox.const import (
 from custom_components.smartbox.core.coordinator import (
     CONSUMPTION_UPDATE_INTERVAL,
     ConsumptionCoordinator,
+    polling_coordinator,
 )
 
 
@@ -71,3 +73,34 @@ def test_update_interval(hass, config_entry):
     """The cycle keeps the 15 minute cadence."""
     coordinator, _node = _coordinator(hass, config_entry, HistoryConsumptionStatus.AUTO)
     assert coordinator.update_interval == CONSUMPTION_UPDATE_INTERVAL
+
+
+async def test_polling_coordinator_returns_the_method_result(hass, config_entry):
+    """The polled resource becomes the coordinator data."""
+    coordinator = polling_coordinator(
+        hass,
+        config_entry,
+        name="test",
+        interval=timedelta(minutes=1),
+        method=AsyncMock(return_value={"ok": True}),
+    )
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success
+    assert coordinator.data == {"ok": True}
+
+
+async def test_polling_coordinator_maps_library_errors(hass, config_entry):
+    """A library error fails the cycle so entities go unavailable."""
+    coordinator = polling_coordinator(
+        hass,
+        config_entry,
+        name="test",
+        interval=timedelta(minutes=1),
+        method=AsyncMock(side_effect=APIUnavailableError("down")),
+    )
+
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success

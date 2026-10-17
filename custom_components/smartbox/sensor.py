@@ -31,11 +31,7 @@ from homeassistant.const import (
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.event import (
-    async_track_point_in_time,
-    async_track_time_interval,
-)
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.util import dt as dt_util
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
 import voluptuous as vol
@@ -45,14 +41,13 @@ from .const import (
     CONF_TIMEDELTA_POWER,
     DAY_KEYS,
     DEFAULT_TIMEDELTA_POWER,
-    DOMAIN,
     FIELD_SCHEDULE,
     PROG_PROFILE_NAMES,
     SERVICE_SET_SCHEDULE,
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from .core.coordinator import ConsumptionCoordinator
+from .core.coordinator import ConsumptionCoordinator, polling_coordinator
 from .core.protocol import (
     ProgDict,
     get_boost_end_datetime,
@@ -69,6 +64,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
     from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
     from . import SmartboxConfigEntry
     from .core.coordinator import ConsumptionData
@@ -97,7 +93,26 @@ async def async_setup_entry(
     )
     # Power
     async_add_entities(
-        [PowerSensor(node, entry) for node in entry.runtime_data.nodes],
+        [
+            PowerSensor(
+                node,
+                entry,
+                polling_coordinator(
+                    hass,
+                    entry,
+                    name=f"smartbox_power_{node.node_id}",
+                    interval=timedelta(
+                        seconds=entry.options.get(
+                            CONF_TIMEDELTA_POWER, DEFAULT_TIMEDELTA_POWER
+                        )
+                    ),
+                    method=node.update_power,
+                )
+                if node.node_type == SmartboxNodeType.PMO
+                else None,
+            )
+            for node in entry.runtime_data.nodes
+        ],
         update_before_add=True,
     )
     # Duty Cycle and Energy
@@ -143,16 +158,38 @@ async def async_setup_entry(
     # /prog frame shape is not yet live-confirmed, see ../smartbox
     # api-notes.md).
     schedule_entities: list[ScheduleSensor] = [
-        ScheduleSensor(node, entry)
+        ScheduleSensor(
+            node,
+            entry,
+            polling_coordinator(
+                hass,
+                entry,
+                name=f"smartbox_schedule_{node.node_id}",
+                interval=SCAN_INTERVAL,
+                method=node.async_sync_prog,
+            ),
+        )
         for node in entry.runtime_data.nodes
         if node.heater_node
     ]
-    async_add_entities(schedule_entities, update_before_add=True)
+    async_add_entities(schedule_entities)
 
     # Box device clock drift (diagnostic): polls the box's own RTC.
     async_add_entities(
-        [ClockDriftSensor(device, entry) for device in entry.runtime_data.devices],
-        update_before_add=True,
+        [
+            ClockDriftSensor(
+                device,
+                entry,
+                polling_coordinator(
+                    hass,
+                    entry,
+                    name=f"smartbox_rtc_{device.dev_id}",
+                    interval=ClockDriftSensor.RTC_REFRESH_INTERVAL,
+                    method=device.async_refresh_rtc,
+                ),
+            )
+            for device in entry.runtime_data.devices
+        ],
     )
 
     # Registered once per domain by the platform; HA dispatches to the
@@ -248,37 +285,30 @@ class PowerSensor(SmartboxSensorBase):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
+    def __init__(
+        self,
+        node: SmartboxNode,
+        entry: SmartboxConfigEntry,
+        coordinator: DataUpdateCoordinator[None] | None = None,
+    ) -> None:
+        """Initialize the power sensor; PMO nodes poll through a coordinator."""
+        super().__init__(node=node, entry=entry)
+        self._coordinator = coordinator
+
     async def async_added_to_hass(self) -> None:
         """When added to hass."""
         await super().async_added_to_hass()
-        if self._node.node_type == SmartboxNodeType.PMO:
-            self._attr_should_poll = True
+        if self._coordinator is not None:
             self.async_on_remove(
-                async_track_time_interval(
-                    self.hass,
-                    self._async_update_pmo,
-                    timedelta(
-                        seconds=self.config_entry.options.get(
-                            CONF_TIMEDELTA_POWER, DEFAULT_TIMEDELTA_POWER
-                        )
-                    ),
-                    name=f"Update PMO Power - {self.name}",
-                    cancel_on_shutdown=True,
-                )
+                self._coordinator.async_add_listener(self._handle_coordinator_update)
             )
 
-    async def _async_update_pmo(self, _) -> None:  # noqa: ANN001
-        """Get the latest data."""
-        if self._node.node_type == SmartboxNodeType.PMO:
-            try:
-                await self._node.update_power()
-            except APIUnavailableError:
-                # Transient API trouble: surface as unavailable instead of
-                # leaving a stale-but-available entity.
-                self._api_available = False
-            else:
-                self._api_available = True
-            self.async_write_ha_state()
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Publish the power fetched by the coordinator."""
+        if self._coordinator is not None:
+            self._api_available = self._coordinator.last_update_success
+        self.async_write_ha_state()
 
     @property
     def native_value(self) -> float:
@@ -478,12 +508,17 @@ class ScheduleSensor(SmartboxSensorBase):
     """
 
     _attr_key = "schedule"
-    _attr_should_poll = True
     _attr_device_class = SensorDeviceClass.ENUM
 
-    def __init__(self, node: SmartboxNode, entry: SmartboxConfigEntry) -> None:
+    def __init__(
+        self,
+        node: SmartboxNode,
+        entry: SmartboxConfigEntry,
+        coordinator: DataUpdateCoordinator[ProgDict | None],
+    ) -> None:
         """Initialize the schedule sensor."""
         super().__init__(node=node, entry=entry)
+        self._coordinator = coordinator
         self._attr_websocket_event = "prog"
         self._unsub_boundary: Callable[[], None] | None = None
         self._attr_options = list(PROG_PROFILE_NAMES)
@@ -511,37 +546,23 @@ class ScheduleSensor(SmartboxSensorBase):
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         await super().async_added_to_hass()
-        # The base registers websocket dispatchers only for non-polling
-        # entities; this one polls REST and additionally refreshes
-        # immediately when a websocket prog frame arrives.
+        # The base wires the websocket prog frames to _async_update (an
+        # immediate refresh of the state); REST stays the authoritative
+        # source through the coordinator, refreshed once now and then
+        # every cycle.
+        await self._coordinator.async_refresh()
+        self._api_available = self._coordinator.last_update_success
+        self._track_next_change()
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                f"{DOMAIN}_{self._node.node_id}_prog",
-                self._async_update,
-            )
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
         )
-        self._track_next_change()
 
-    async def async_update(self) -> None:
-        """Refresh the schedule from the API."""
-        try:
-            prog = await self._node.async_refresh_prog()
-        except APIUnavailableError:
-            # Transient API trouble: surface as unavailable instead of
-            # leaving a stale-but-available entity.
-            self._api_available = False
-            return
-        except SmartboxError:
-            _LOGGER.exception(
-                "Error refreshing the schedule for %s; keeping last known",
-                self._node.name,
-            )
-            return
-        self._api_available = True
-        if prog is not None:
-            self._node.update_prog(prog)
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Publish the schedule fetched by the coordinator."""
+        self._api_available = self._coordinator.last_update_success
         self._track_next_change()
+        self.async_write_ha_state()
 
     @callback
     def _async_update(self) -> None:
@@ -598,47 +619,39 @@ class ClockDriftSensor(SmartboxBoxEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _RTC_REFRESH_INTERVAL = timedelta(minutes=5)
+    RTC_REFRESH_INTERVAL = timedelta(minutes=5)
 
-    def __init__(self, device: SmartboxDevice, entry: SmartboxConfigEntry) -> None:
+    def __init__(
+        self,
+        device: SmartboxDevice,
+        entry: SmartboxConfigEntry,
+        coordinator: DataUpdateCoordinator[dict[str, int] | None],
+    ) -> None:
         """Initialize the clock drift sensor."""
         super().__init__(device=device, entry=entry)
+        self._coordinator = coordinator
         self._rtc: dict[str, int] | None = None
 
     async def async_added_to_hass(self) -> None:
         """When added to hass."""
         await super().async_added_to_hass()
-        # This entity polls REST on a slow interval instead of relying on
-        # websocket events (RTC has no websocket feed); the base skips
-        # dispatcher wiring for entities without a websocket event.
+        # The RTC has no websocket feed: it is polled on a slow interval.
+        await self._coordinator.async_refresh()
+        self._apply_coordinator_data()
         self.async_on_remove(
-            async_track_time_interval(
-                self.hass,
-                self._async_refresh,
-                self._RTC_REFRESH_INTERVAL,
-                name=f"Update RTC drift - {self.name}",
-                cancel_on_shutdown=True,
-            )
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
         )
 
-    async def async_update(self) -> None:
-        """Get the latest RTC data."""
-        await self._async_refresh(None)
+    def _apply_coordinator_data(self) -> None:
+        self._attr_available = self._coordinator.last_update_success
+        if self._attr_available:
+            self._rtc = self._coordinator.data
 
-    async def _async_refresh(self, _) -> None:  # noqa: ANN001
-        """Fetch the box RTC and update the entity."""
-        try:
-            self._rtc = await self._device.async_refresh_rtc()
-        except SmartboxError, APIUnavailableError:
-            # Transient API trouble: surface as unavailable instead of
-            # leaving a stale-but-available entity.
-            self._attr_available = False
-        else:
-            self._attr_available = True
-        # update_before_add runs async_update before the entity id exists;
-        # writing the state is only valid once added.
-        if self.entity_id is not None:
-            self.async_write_ha_state()
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Publish the RTC fetched by the coordinator."""
+        self._apply_coordinator_data()
+        self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

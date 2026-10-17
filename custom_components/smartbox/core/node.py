@@ -208,6 +208,13 @@ class SmartboxNode:
         _LOGGER.debug("Updating node %s prog: %s", self.name, prog)
         self._prog = prog
 
+    async def async_sync_prog(self) -> ProgDict | None:
+        """Fetch the schedule and store it in the node cache."""
+        prog = await self.async_refresh_prog()
+        if prog is not None:
+            self.update_prog(prog)
+        return self.prog
+
     async def async_refresh_prog(self) -> ProgDict | None:
         """Fetch the schedule from the API.
 
