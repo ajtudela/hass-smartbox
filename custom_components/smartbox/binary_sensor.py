@@ -42,8 +42,8 @@ class Connected(SmartboxBoxEntity, BinarySensorEntity):
 
     _attr_key = "connected"
     _attr_websocket_event = "connected"
-    device_class = BinarySensorDeviceClass.CONNECTIVITY
-    entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool | None:

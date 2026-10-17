@@ -440,7 +440,7 @@ async def test_adjust_short_term_statistics(hass, mock_smartbox, config_entry):
     sensor = TotalConsumptionSensor(mock_node, config_entry, MagicMock())
     sensor.hass = hass
     sensor.entity_id = "sensor.test_total_consumption"
-    sensor.native_unit_of_measurement = "kWh"
+    sensor._attr_native_unit_of_measurement = "kWh"
 
     last_stat = {
         sensor.entity_id: [
@@ -479,7 +479,7 @@ async def test_adjust_short_term_statistics_no_adjustment(
     sensor = TotalConsumptionSensor(mock_node, config_entry, MagicMock())
     sensor.hass = hass
     sensor.entity_id = "sensor.test_total_consumption"
-    sensor.native_unit_of_measurement = "kWh"
+    sensor._attr_native_unit_of_measurement = "kWh"
 
     last_stat = {
         sensor.entity_id: [

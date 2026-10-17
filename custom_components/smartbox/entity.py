@@ -14,6 +14,27 @@ if TYPE_CHECKING:
     from .core.node import SmartboxNode
 
 
+def box_device_info(device: SmartboxDevice) -> DeviceInfo:
+    """Return the registry info of a box (shared by setup and box entities)."""
+    reseller = device.session.reseller
+    return DeviceInfo(
+        identifiers={(DOMAIN, device.dev_id)},
+        name=device.name,
+        manufacturer=reseller.name,
+        model_id=str(device.model_id),
+        sw_version=str(device.sw_version),
+        serial_number=str(device.serial_number),
+        configuration_url=f"{reseller.web_url}#{device.home['id']}",
+    )
+
+
+def _entity_picture(entry: SmartboxConfigEntry, web_url: str) -> str | None:
+    """Return the reseller logo when the entry asks for entity pictures."""
+    if entry.options.get(CONF_DISPLAY_ENTITY_PICTURES, False) is True:
+        return f"{web_url}img/favicon.ico"
+    return None
+
+
 class DefaultSmartBoxEntity(Entity):
     """Default Smartbox Entity (node device)."""
 
@@ -25,23 +46,22 @@ class DefaultSmartBoxEntity(Entity):
 
     def __init__(self, entry: SmartboxConfigEntry) -> None:
         """Initialize the default Device Entity."""
-        self._device_id = self._node.node_id
+        self._node_id = self._node.node_id
         self._attr_translation_key = self._attr_key
         self._reseller = self._node.session.reseller
-        self._configuration_url = f"{self._reseller.web_url}#/{self._node.device.home['id']}/dev/{self._device_id}/{self._node.node_type}/{self._node.addr}/setup"
-        if entry.options.get(CONF_DISPLAY_ENTITY_PICTURES, False) is True:
-            self._attr_entity_picture = f"{self._reseller.web_url}img/favicon.ico"
+        self._configuration_url = f"{self._reseller.web_url}#/{self._node.device.home['id']}/dev/{self._node_id}/{self._node.node_type}/{self._node.addr}/setup"
+        self._attr_entity_picture = _entity_picture(entry, self._reseller.web_url)
 
     @property
     def unique_id(self) -> str:
         """Return Unique ID string."""
-        return f"{self._device_id}_{self._attr_key}"
+        return f"{self._node_id}_{self._attr_key}"
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info of the node."""
         return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
+            identifiers={(DOMAIN, self._node_id)},
             name=self._node.name,
             manufacturer=self._reseller.name,
             model_id=str(self._node.pid),
@@ -86,9 +106,7 @@ class SmartboxBoxEntity(Entity):
         self._device_id = device.dev_id
         self._attr_translation_key = self._attr_key
         self._reseller = device.session.reseller
-        self._configuration_url = f"{self._reseller.web_url}#{device.home['id']}"
-        if entry.options.get(CONF_DISPLAY_ENTITY_PICTURES, False) is True:
-            self._attr_entity_picture = f"{self._reseller.web_url}img/favicon.ico"
+        self._attr_entity_picture = _entity_picture(entry, self._reseller.web_url)
 
     @property
     def unique_id(self) -> str:
@@ -98,15 +116,7 @@ class SmartboxBoxEntity(Entity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the box device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
-            name=self._device.name,
-            manufacturer=self._reseller.name,
-            model_id=str(self._device.model_id),
-            sw_version=str(self._device.sw_version),
-            serial_number=str(self._device.serial_number),
-            configuration_url=self._configuration_url,
-        )
+        return box_device_info(self._device)
 
     @callback
     def _async_update(self, _data: Any) -> None:  # noqa: ANN401

@@ -39,6 +39,7 @@ from .const import (
 )
 from .core.device import SmartboxDevice, get_devices
 from .core.supervisor import TransportSupervisor
+from .entity import box_device_info
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
@@ -139,16 +140,7 @@ def _async_home_box_devices(
     registry = dr.async_get(hass)
     return {
         device.dev_id: registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, device.dev_id)},
-            manufacturer=device.session.reseller.name,
-            name=device.name,
-            model_id=str(device.model_id),
-            sw_version=str(device.sw_version),
-            serial_number=str(device.serial_number),
-            configuration_url=(
-                f"{device.session.reseller.web_url}#{device.home['id']}"
-            ),
+            config_entry_id=entry.entry_id, **box_device_info(device)
         ).id
         for device in entry.runtime_data.devices
     }

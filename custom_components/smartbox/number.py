@@ -185,9 +185,9 @@ class PowerLimit(SmartboxBoxEntity, NumberEntity):
     _attr_key = "power_limit"
     _attr_websocket_event = "power_limit"
     _attr_native_min_value = 0.0
-    native_max_value: float = _MAX_POWER_LIMIT
+    _attr_native_max_value: float = _MAX_POWER_LIMIT
     _attr_entity_category = EntityCategory.CONFIG
-    native_unit_of_measurement = UnitOfPower.WATT
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
 
     @property
     def native_value(self) -> float:

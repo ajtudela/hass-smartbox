@@ -218,8 +218,8 @@ class TemperatureSensor(SmartboxSensorBase):
     """Smartbox heater temperature sensor."""
 
     _attr_key = "temperature"
-    device_class = SensorDeviceClass.TEMPERATURE
-    state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> float:
@@ -243,10 +243,10 @@ class PowerSensor(SmartboxSensorBase):
     """
 
     _attr_key = "power"
-    device_class = SensorDeviceClass.POWER
-    native_unit_of_measurement = UnitOfPower.WATT
-    state_class = SensorStateClass.MEASUREMENT
-    entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     async def async_added_to_hass(self) -> None:
         """When added to hass."""
@@ -297,9 +297,9 @@ class DutyCycleSensor(SmartboxSensorBase):
     """Smartbox heater duty cycle sensor: Represents the duty cycle for the heater."""
 
     _attr_key = "duty_cycle"
-    device_class = SensorDeviceClass.POWER_FACTOR
-    native_unit_of_measurement = PERCENTAGE
-    state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.POWER_FACTOR
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> float:
@@ -315,9 +315,9 @@ class TotalConsumptionSensor(SmartboxSensorBase):
     """
 
     _attr_key = "total_consumption"
-    device_class = SensorDeviceClass.ENERGY
-    native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
-    state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     def __init__(
         self,
@@ -386,7 +386,9 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                         dt_util.DEFAULT_TIME_ZONE,
                     ),
                     sum_adjustment=state_value - sum_value,
-                    adjustment_unit=self.native_unit_of_measurement,
+                    adjustment_unit=(
+                        self.native_unit_of_measurement or UnitOfEnergy.WATT_HOUR
+                    ),
                 )
 
     def import_statistics(self, data: ConsumptionData) -> None:
@@ -431,9 +433,9 @@ class ChargeLevelSensor(SmartboxSensorBase):
     """Smartbox storage heater charge level sensor."""
 
     _attr_key = "charge_level"
-    device_class = SensorDeviceClass.BATTERY
-    native_unit_of_measurement = PERCENTAGE
-    state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> int:
@@ -451,7 +453,7 @@ class BoostEndTimeSensor(SmartboxSensorBase):
     """Smartbox end boost time sensor."""
 
     _attr_key = "boost_end_time"
-    device_class = SensorDeviceClass.TIMESTAMP
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
     def native_value(self) -> datetime | None:
@@ -477,7 +479,7 @@ class ScheduleSensor(SmartboxSensorBase):
 
     _attr_key = "schedule"
     _attr_should_poll = True
-    device_class = SensorDeviceClass.ENUM
+    _attr_device_class = SensorDeviceClass.ENUM
 
     def __init__(self, node: SmartboxNode, entry: SmartboxConfigEntry) -> None:
         """Initialize the schedule sensor."""
