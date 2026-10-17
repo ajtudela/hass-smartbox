@@ -305,9 +305,8 @@ async def test_smartbox_node(hass):
     # poll, so this is what keeps them in sync with the node cache until the
     # websocket confirms (which may be equal to the cache and dedup-immune
     # now that every ok frame is forwarded).
-    mock_device.dispatch_node_status.assert_called_once_with(
-        node, {"mtemp": "21.6", "stemp": 23.5}
-    )
+    mock_device.dispatch_node_status.assert_called_once_with(node)
+    assert node.status == {"mtemp": "21.6", "stemp": 23.5}
 
     assert not node.away
     mock_device.away = True
@@ -1196,9 +1195,7 @@ async def test_smartbox_device_node_prog_update(hass, caplog):
             device._node_prog_update(SmartboxNodeType.HTR, 1, {"prog": {"0": [1, 2]}})
             mock_node_1.update_prog.assert_called_with({"0": [1, 2]})
             mock_node_2.update_prog.assert_not_called()
-            mock_send.assert_called_with(
-                hass, "smartbox_device_1_1_prog", {"0": [1, 2]}
-            )
+            mock_send.assert_called_with(hass, "smartbox_device_1_1_prog")
 
             # An unchanged schedule is still applied and dispatched: after a
             # set_prog optimistic merge the *entity* copy can be the stale
@@ -1211,9 +1208,7 @@ async def test_smartbox_device_node_prog_update(hass, caplog):
             mock_send.reset_mock()
             device._node_prog_update(SmartboxNodeType.HTR, 1, {"prog": {"0": [1, 2]}})
             mock_node_1.update_prog.assert_called_with({"0": [1, 2]})
-            mock_send.assert_called_with(
-                hass, "smartbox_device_1_1_prog", {"0": [1, 2]}
-            )
+            mock_send.assert_called_with(hass, "smartbox_device_1_1_prog")
 
             # malformed payload: ignored, no error
             mock_node_1.update_prog.reset_mock()
@@ -1290,7 +1285,7 @@ async def test_smartbox_node_prog(hass):
 
 
 async def test_dispatch_node_status(hass):
-    """Status snapshots go out on the node's status dispatcher event."""
+    """Status changes go out on the node's status dispatcher event."""
     with patch(
         "custom_components.smartbox.core.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
@@ -1303,10 +1298,8 @@ async def test_dispatch_node_status(hass):
     with patch(
         "custom_components.smartbox.core.device.async_dispatcher_send"
     ) as mock_send:
-        device.dispatch_node_status(mock_node, {"mtemp": "21.4"})
-    mock_send.assert_called_once_with(
-        hass, "smartbox_device_1_0_status", {"mtemp": "21.4"}
-    )
+        device.dispatch_node_status(mock_node)
+    mock_send.assert_called_once_with(hass, "smartbox_device_1_0_status")
 
 
 async def test_node_status_update_forwards_frame_equal_to_cache(hass):
@@ -1340,7 +1333,7 @@ async def test_node_status_update_forwards_frame_equal_to_cache(hass):
         ) as mock_send:
             device._node_status_update(SmartboxNodeType.HTR, 0, frame)
         mock_node.update_status.assert_called_once_with(frame)
-        mock_send.assert_called_once_with(hass, "smartbox_device_1_0_status", frame)
+        mock_send.assert_called_once_with(hass, "smartbox_device_1_0_status")
 
 
 async def test_node_status_update_skips_non_ok_frames(hass):

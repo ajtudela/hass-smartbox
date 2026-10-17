@@ -544,7 +544,7 @@ class ScheduleSensor(SmartboxSensorBase):
         self._track_next_change()
 
     @callback
-    def _async_update(self, _: Any) -> None:  # noqa: ANN401
+    def _async_update(self) -> None:
         """React to a websocket prog frame; the device updated the cache."""
         self._track_next_change()
         self.async_write_ha_state()

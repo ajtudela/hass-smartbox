@@ -218,17 +218,16 @@ class SmartboxDevice:
             # gets (off->heat->off desync, live finding 2026-09-28). HA's
             # state machine dedups identical state writes, so forwarding
             # is cheap.
-            self.dispatch_node_status(node, node_status)
+            self.dispatch_node_status(node)
 
-    def dispatch_node_status(self, node: SmartboxNode, status: StatusDict) -> None:
-        """Forward a node status snapshot to the node's listening entities.
+    def dispatch_node_status(self, node: SmartboxNode) -> None:
+        """Tell the node's entities that its status changed.
 
         Both websocket frames and the optimistic merge in
         SmartboxNode.set_status go through this single dispatcher event.
-        Entities read the node's own status, so the payload only signals
-        that something changed.
+        Entities read the node's own status, so there is no payload.
         """
-        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_status", status)
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_status")
 
     def _node_availability_update(
         self, node_type: str, addr: int, available: bool
@@ -265,7 +264,7 @@ class SmartboxDevice:
             return
         node: SmartboxNode = self._nodes[(node_type, addr)]
         node.update_setup(node_setup)
-        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_setup", node_setup)
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_setup")
 
     def _node_prog_update(self, node_type: str, addr: int, payload: Any) -> None:  # noqa: ANN401
         """Node prog (schedule) update from the websocket.
@@ -292,7 +291,7 @@ class SmartboxDevice:
             return
         node: SmartboxNode = self._nodes[(node_type, addr)]
         node.update_prog(prog)
-        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_prog", prog)
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_prog")
 
     def _on_update_error(self, exc: Exception) -> bool:
         """Handle the update task dying; return True to stop supervising.

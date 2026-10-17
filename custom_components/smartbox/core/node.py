@@ -280,7 +280,7 @@ class SmartboxNode:
         # no-op write the server may not push any change frame at all --
         # which is what locked entities out of sync (live finding,
         # 2026-09-28). Snapshot the cache: later merges mutate it in place.
-        self._device.dispatch_node_status(self, {**self._status})
+        self._device.dispatch_node_status(self)
         return self._status
 
     def _expect_setup_confirmation(self, body: dict[str, Any]) -> None:

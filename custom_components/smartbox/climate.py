@@ -151,7 +151,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         )
 
     @callback
-    def _async_setup_update(self, _data: Any) -> None:  # noqa: ANN401
+    def _async_setup_update(self) -> None:
         """Refresh setup-derived attributes."""
         self.async_write_ha_state()
 

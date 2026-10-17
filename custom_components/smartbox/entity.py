@@ -81,8 +81,8 @@ class DefaultSmartBoxEntity(Entity):
         return self._node.status
 
     @callback
-    def _async_update(self, _data: Any) -> None:  # noqa: ANN401
-        """Write the state after a node event (the payload is not used)."""
+    def _async_update(self) -> None:
+        """Write the state after a node event."""
         self.async_write_ha_state()
 
 
