@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.recorder import DOMAIN as RECORDER_DOMAIN, get_instance
@@ -53,6 +52,7 @@ from .const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
+from .coordinator import ConsumptionCoordinator
 from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
 from .protocol import (
     ProgDict,
@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
+    from .coordinator import ConsumptionData
     from .device import SmartboxDevice
     from .node import SmartboxNode
 
@@ -79,7 +80,7 @@ SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: SmartboxConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
@@ -111,7 +112,12 @@ async def async_setup_entry(
         update_before_add=True,
     )
     async_add_entities(
-        [TotalConsumptionSensor(node, entry) for node in entry.runtime_data.nodes],
+        [
+            TotalConsumptionSensor(
+                node, entry, ConsumptionCoordinator(hass, entry, node)
+            )
+            for node in entry.runtime_data.nodes
+        ],
         update_before_add=True,
     )
 
@@ -302,51 +308,59 @@ class DutyCycleSensor(SmartboxSensorBase):
 
 
 class TotalConsumptionSensor(SmartboxSensorBase):
-    """Smartbox heater energy sensor: Represents the energy consumed by the heater in total."""
+    """Smartbox heater energy sensor: Represents the energy consumed by the heater in total.
+
+    Driven by a :class:`ConsumptionCoordinator` (one query per cycle shared by
+    the counter and the recorder statistics import).
+    """
 
     _attr_key = "total_consumption"
     device_class = SensorDeviceClass.ENERGY
     native_unit_of_measurement = UnitOfEnergy.WATT_HOUR
     state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_should_poll = True
+
+    def __init__(
+        self,
+        node: SmartboxNode,
+        entry: SmartboxConfigEntry,
+        coordinator: ConsumptionCoordinator,
+    ) -> None:
+        """Initialize the consumption sensor."""
+        super().__init__(node=node, entry=entry)
+        self._coordinator = coordinator
 
     @property
     def native_value(self) -> float | None:
         """Return the native value of the sensor."""
         return self._node.total_energy
 
-    async def async_update(self) -> None:
-        """Get the latest data."""
-        try:
-            await self._node.update_samples()
-        except APIUnavailableError:
-            # Transient API trouble: surface as unavailable instead of
-            # leaving a stale-but-available entity.
-            self._api_available = False
-            return
-        except SmartboxError:
-            _LOGGER.exception("Error refreshing the consumption of %s", self._node.name)
-            self._api_available = False
-            return
-        self._api_available = True
-        await self._adjust_short_term_statistics()
-
     async def async_added_to_hass(self) -> None:
         """When added to hass."""
-        # perform initial statistics import when sensor is added, otherwise it would take
-        # 1 day when _handle_coordinator_update is triggered for the first time.
-        await self.update_statistics()
-        await self._adjust_short_term_statistics()
         await super().async_added_to_hass()
+        # The first fetch also performs the initial statistics import,
+        # otherwise it would take a day for the first cycle to do it. A
+        # failed refresh is not fatal: the coordinator retries every cycle.
+        await self._coordinator.async_refresh()
+        await self._async_process(self._coordinator.data)
         self.async_on_remove(
-            async_track_time_interval(
-                self.hass,
-                self.update_statistics,
-                timedelta(minutes=15),
-                name=f"Update statistics - {self.name}",
-                cancel_on_shutdown=True,
-            )
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
         )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Process the samples of a finished refresh cycle."""
+        self.hass.async_create_background_task(
+            self._async_process(self._coordinator.data),
+            name=f"smartbox_consumption_{self._node.node_id}",
+        )
+
+    async def _async_process(self, data: ConsumptionData | None) -> None:
+        """Import the statistics of a refresh and publish the new state."""
+        self._api_available = self._coordinator.last_update_success
+        if data is not None and self._api_available:
+            self.import_statistics(data)
+            await self._adjust_short_term_statistics()
+        self.async_write_ha_state()
 
     async def _adjust_short_term_statistics(self) -> None:
         """Adjust the short term statistics for the sensor."""
@@ -375,40 +389,12 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                     adjustment_unit=self.native_unit_of_measurement,
                 )
 
-    async def update_statistics(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003, ARG002
-        """Update statistics from samples, tolerating API failures.
-
-        An uncaught error here would make HA drop the entity while it is
-        being added (no state, no timer) until the next reload. The history
-        option only flips from START after a successful import, so a failed
-        attempt is simply retried on the next 15 minute tick.
-        """
-        try:
-            await self._import_statistics()
-        except SmartboxError as ex:
-            _LOGGER.warning(
-                "Could not update the consumption statistics of %s: %s",
-                self._node.name,
-                ex,
-            )
-
-    async def _import_statistics(self) -> None:
-        """Fetch the samples and import them as recorder statistics."""
-        history_status = HistoryConsumptionStatus(
-            self.config_entry.options.get(
-                CONF_HISTORY_CONSUMPTION, HistoryConsumptionStatus.START
-            )
-        )
-        statistic_id = f"{self.entity_id}"
-        samples_data = []
+    def import_statistics(self, data: ConsumptionData) -> None:
+        """Import the fetched samples as recorder statistics."""
+        history_status = data.history
         if history_status == HistoryConsumptionStatus.START:
-            # last 3 years
-            for year in (3, 2, 1):
-                year_sample = await self._node.get_samples(
-                    int(time.time() - (year * 365 * 24 * 60 * 60)),
-                    int(time.time() - ((year - 1) * 365 * 24 * 60 * 60 - 3600)),
-                )
-                samples_data.extend(year_sample)
+            # The full history is imported once; later cycles only add the
+            # last day. Flipping the option reloads the entry.
             self.hass.config_entries.async_update_entry(
                 entry=self.config_entry,
                 options={
@@ -416,16 +402,8 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                     CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.AUTO,
                 },
             )
-        elif history_status == HistoryConsumptionStatus.AUTO:
-            # last day
-            samples_data = await self._node.get_samples(
-                int(time.time() - (24 * 60 * 60)),
-                int(time.time() + 3600),
-            )
-
-        samples_data = sorted(samples_data, key=lambda x: x["t"])
         statistics: list[StatisticData] = []
-        for entry in samples_data:
+        for entry in data.samples:
             counter = float(entry["counter"])
             start = datetime.fromtimestamp(
                 entry["t"], dt_util.DEFAULT_TIME_ZONE
@@ -435,6 +413,7 @@ class TotalConsumptionSensor(SmartboxSensorBase):
                     StatisticData(start=start, sum=counter, state=counter)
                 )
         if statistics and history_status != HistoryConsumptionStatus.OFF:
+            statistic_id = f"{self.entity_id}"
             metadata: StatisticMetaData = StatisticMetaData(
                 mean_type=StatisticMeanType.NONE,
                 unit_class=None,

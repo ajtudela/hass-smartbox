@@ -531,13 +531,17 @@ class SmartboxNode:
 
     async def update_samples(self) -> None:
         """Update the samples."""
-        max_sample = 2
         sample = await self.get_samples(
             int(time.time() - (3600 * 3)),
             int(time.time()),
         )
-        if len(sample) >= max_sample:
-            self._samples = sample[-2:]
+        self.apply_samples(sample)
+
+    def apply_samples(self, samples: SamplesDict) -> None:
+        """Keep the two newest samples (oldest first) as the node's counter."""
+        max_sample = 2
+        if len(samples) >= max_sample:
+            self._samples = samples[-2:]
             _LOGGER.debug("Updating node %s samples: %s", self.name, self._samples)
 
     async def get_samples(self, start_time: int, end_time: int) -> SamplesDict:

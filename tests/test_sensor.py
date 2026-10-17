@@ -1,7 +1,6 @@
 import asyncio
 from datetime import datetime
 import logging
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from dateutil import tz
@@ -11,7 +10,6 @@ from homeassistant.helpers.entity_component import async_update_entity
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from smartbox.error import APIUnavailableError, SmartboxError
 
 from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
@@ -19,6 +17,7 @@ from custom_components.smartbox.const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
+from custom_components.smartbox.coordinator import ConsumptionData
 from custom_components.smartbox.protocol import rtc_time_to_datetime
 from custom_components.smartbox.sensor import (
     BoostEndTimeSensor,
@@ -332,18 +331,23 @@ def test_charge_level_sensor_model_1c():
     assert sensor.native_value == 3
 
 
-@pytest.mark.asyncio
-async def test_update_statistics_start(hass, mock_smartbox, config_entry):
-    mock_node = AsyncMock()
-    mock_node.get_samples.return_value = [{"t": 1739966400, "counter": 100}]
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
+def _statistics_sensor(hass, config_entry, history):
+    sensor = TotalConsumptionSensor(AsyncMock(), config_entry, MagicMock())
     sensor.hass = hass
+    sensor.entity_id = "sensor.test_total_consumption"
     hass.config_entries.async_update_entry(
         entry=config_entry,
-        options={
-            **config_entry.options,
-            CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.START,
-        },
+        options={**config_entry.options, CONF_HISTORY_CONSUMPTION: history},
+    )
+    return sensor
+
+
+def test_import_statistics_start_flips_option_to_auto(hass, config_entry):
+    """The first (3 years) import is followed by the AUTO mode."""
+    sensor = _statistics_sensor(hass, config_entry, HistoryConsumptionStatus.START)
+    data = ConsumptionData(
+        samples=[{"t": 1739966400, "counter": 100}],
+        history=HistoryConsumptionStatus.START,
     )
 
     with (
@@ -352,9 +356,8 @@ async def test_update_statistics_start(hass, mock_smartbox, config_entry):
             "custom_components.smartbox.sensor.async_import_statistics"
         ) as mock_import_statistics,
     ):
-        await sensor.update_statistics()
+        sensor.import_statistics(data)
 
-        assert mock_node.get_samples.call_count == 3
         mock_update_entry.assert_called_once_with(
             entry=config_entry,
             options={
@@ -365,49 +368,38 @@ async def test_update_statistics_start(hass, mock_smartbox, config_entry):
         assert mock_import_statistics.called
 
 
-async def test_update_statistics_auto(hass, mock_smartbox, config_entry):
-    assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
-
-    mock_node = AsyncMock()
-    mock_node.get_samples.return_value = [{"t": 1739966400, "counter": 100}]
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
-    sensor.hass = hass
-    hass.config_entries.async_update_entry(
-        entry=config_entry,
-        options={
-            **config_entry.options,
-            CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.AUTO,
-        },
+def test_import_statistics_auto(hass, config_entry):
+    """AUTO imports the samples without touching the option."""
+    sensor = _statistics_sensor(hass, config_entry, HistoryConsumptionStatus.AUTO)
+    data = ConsumptionData(
+        samples=[{"t": 1739966400, "counter": 100}],
+        history=HistoryConsumptionStatus.AUTO,
     )
 
-    with patch(
-        "custom_components.smartbox.sensor.async_import_statistics"
-    ) as mock_import_statistics:
-        await sensor.update_statistics()
+    with (
+        patch.object(hass.config_entries, "async_update_entry") as mock_update_entry,
+        patch(
+            "custom_components.smartbox.sensor.async_import_statistics"
+        ) as mock_import_statistics,
+    ):
+        sensor.import_statistics(data)
 
-        mock_node.get_samples.assert_called_once()
+        mock_update_entry.assert_not_called()
         assert mock_import_statistics.called
 
 
-@pytest.mark.asyncio
-async def test_update_statistics_off(hass, mock_smartbox, config_entry):
-    mock_node = AsyncMock()
-    mock_node.get_samples = AsyncMock(return_value=[{"t": time.time(), "counter": 100}])
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
-    sensor.hass = hass
-    hass.config_entries.async_update_entry(
-        entry=config_entry,
-        options={
-            **config_entry.options,
-            CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.OFF,
-        },
+def test_import_statistics_off(hass, config_entry):
+    """OFF never imports statistics."""
+    sensor = _statistics_sensor(hass, config_entry, HistoryConsumptionStatus.OFF)
+    data = ConsumptionData(
+        samples=[{"t": 1739966400, "counter": 100}],
+        history=HistoryConsumptionStatus.OFF,
     )
 
     with patch(
         "custom_components.smartbox.sensor.async_import_statistics"
     ) as mock_import_statistics:
-        await sensor.update_statistics()
+        sensor.import_statistics(data)
 
         mock_import_statistics.assert_not_called()
 
@@ -445,7 +437,7 @@ async def test_async_update_pmo_non_pmo_node(hass, mock_smartbox, config_entry):
 @pytest.mark.asyncio
 async def test_adjust_short_term_statistics(hass, mock_smartbox, config_entry):
     mock_node = AsyncMock()
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
+    sensor = TotalConsumptionSensor(mock_node, config_entry, MagicMock())
     sensor.hass = hass
     sensor.entity_id = "sensor.test_total_consumption"
     sensor.native_unit_of_measurement = "kWh"
@@ -484,7 +476,7 @@ async def test_adjust_short_term_statistics_no_adjustment(
     hass, mock_smartbox, config_entry
 ):
     mock_node = AsyncMock()
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
+    sensor = TotalConsumptionSensor(mock_node, config_entry, MagicMock())
     sensor.hass = hass
     sensor.entity_id = "sensor.test_total_consumption"
     sensor.native_unit_of_measurement = "kWh"
@@ -676,40 +668,39 @@ async def test_polling_sensors_follow_node_availability(
 
 
 @pytest.mark.asyncio
-async def test_update_statistics_survives_api_error(hass, mock_smartbox, config_entry):
-    """A failing import is logged and keeps the history option on START."""
-    mock_node = AsyncMock()
-    mock_node.get_samples.side_effect = APIUnavailableError("down")
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
+async def test_failed_refresh_marks_consumption_unavailable(hass, config_entry):
+    """A failed coordinator cycle makes the sensor unavailable and imports nothing."""
+    coordinator = MagicMock(last_update_success=False, data=None)
+    sensor = TotalConsumptionSensor(AsyncMock(), config_entry, coordinator)
     sensor.hass = hass
-    hass.config_entries.async_update_entry(
-        entry=config_entry,
-        options={
-            **config_entry.options,
-            CONF_HISTORY_CONSUMPTION: HistoryConsumptionStatus.START,
-        },
-    )
+    sensor.async_write_ha_state = MagicMock()
 
-    await sensor.update_statistics()
+    with patch.object(sensor, "import_statistics") as mock_import:
+        await sensor._async_process(None)
 
-    assert (
-        config_entry.options[CONF_HISTORY_CONSUMPTION] == HistoryConsumptionStatus.START
-    )
+    assert sensor._api_available is False
+    mock_import.assert_not_called()
+    sensor.async_write_ha_state.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_total_consumption_update_marks_api_error_unavailable(
-    hass, mock_smartbox, config_entry
-):
-    """Any SmartboxError while polling samples makes the sensor unavailable."""
-    mock_node = AsyncMock()
-    mock_node.update_samples.side_effect = SmartboxError("boom")
-    sensor = TotalConsumptionSensor(mock_node, config_entry)
+async def test_successful_refresh_imports_statistics(hass, config_entry):
+    """A successful cycle imports the statistics and publishes the state."""
+    data = ConsumptionData(samples=[], history=HistoryConsumptionStatus.AUTO)
+    coordinator = MagicMock(last_update_success=True, data=data)
+    sensor = TotalConsumptionSensor(AsyncMock(), config_entry, coordinator)
     sensor.hass = hass
+    sensor.async_write_ha_state = MagicMock()
 
-    await sensor.async_update()
+    with (
+        patch.object(sensor, "import_statistics") as mock_import,
+        patch.object(sensor, "_adjust_short_term_statistics", AsyncMock()) as adjust,
+    ):
+        await sensor._async_process(data)
 
-    assert sensor._api_available is False
+    assert sensor._api_available is True
+    mock_import.assert_called_once_with(data)
+    adjust.assert_awaited_once()
 
 
 async def test_set_schedule_service_targets_schedule_entity(
