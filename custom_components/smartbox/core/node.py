@@ -89,17 +89,6 @@ class SmartboxNode:
                 "power": await session.get_device_power_limit(device.dev_id, node_info),
             }
 
-        async def get_samples() -> SamplesDict:
-            return cast(
-                "dict[str, Any]",
-                await session.get_node_samples(
-                    device.dev_id,
-                    node_info,
-                    int(time.time() - (3600 * 3)),
-                    int(time.time()),
-                ),
-            )["samples"]
-
         async def get_prog() -> ProgDict | None:
             if node_info["type"] not in HEATER_NODE_TYPES:
                 return None
@@ -119,16 +108,17 @@ class SmartboxNode:
 
         # The five reads are independent: issue them together instead of
         # paying five sequential round trips per node.
-        status, setup, samples, version, prog = await asyncio.gather(
+        status, setup, version, prog = await asyncio.gather(
             get_status(),
             session.get_node_setup(device.dev_id, node_info),
-            get_samples(),
             session.get_node_version(device.dev_id, node_info),
             get_prog(),
         )
         setup = cast("SetupDict", setup)
         version = cast("dict[str, str]", version)
-        node = cls(device, node_info, session, status, setup, samples, version, prog)
+        # The consumption samples are not fetched here: the sensor's
+        # ConsumptionCoordinator loads them on its first refresh.
+        node = cls(device, node_info, session, status, setup, [], version, prog)
         node.update_availability(status.get("sync_status", "ok") == "ok")
         return node
 

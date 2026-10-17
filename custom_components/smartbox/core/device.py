@@ -419,23 +419,31 @@ async def get_devices(
     homes: list[dict[str, Any]] = cast(
         "list[dict[str, Any]]", await session.get_homes()
     )
-    devices: list[SmartboxDevice] = []
-    try:
-        for home in homes:
-            _home = home.copy()
-            del _home["devs"]
-            for session_device in home["devs"]:
-                session_device["home"] = _home
-                devices.append(
-                    await SmartboxDevice.initialise_nodes(
-                        session_device, session, hass, ws_user_socket=ws_user_socket
-                    )
-                )
-    except Exception:
-        # Every device created so far already runs websocket/update tasks;
-        # cancel them so a failed or retried setup does not leak sessions.
+    session_devices: list[Device] = []
+    for home in homes:
+        _home = home.copy()
+        del _home["devs"]
+        for session_device in home["devs"]:
+            session_device["home"] = _home
+            session_devices.append(session_device)
+
+    # Boxes are independent: initialise them together. Every one that
+    # succeeds already runs websocket/update tasks, so when any fails the
+    # rest must be cancelled or a failed/retried setup would leak sessions.
+    results = await asyncio.gather(
+        *(
+            SmartboxDevice.initialise_nodes(
+                session_device, session, hass, ws_user_socket=ws_user_socket
+            )
+            for session_device in session_devices
+        ),
+        return_exceptions=True,
+    )
+    devices = [r for r in results if not isinstance(r, BaseException)]
+    errors = [r for r in results if isinstance(r, BaseException)]
+    if errors:
         for device in devices:
             with suppress(Exception):
                 await device.cancel()
-        raise
+        raise errors[0]
     return devices

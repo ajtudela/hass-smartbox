@@ -1417,3 +1417,30 @@ async def test_node_create_issues_reads_concurrently(hass):
     await SmartboxNode.create(device, session, node_info)
 
     assert peak >= 4
+
+
+async def test_get_devices_initialises_boxes_concurrently(hass):
+    """Boxes are set up together, not one after another."""
+    in_flight = 0
+    peak = 0
+
+    async def slow_initialise(*_args, **_kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return MagicMock()
+
+    session = MagicMock()
+    session.get_homes = AsyncMock(
+        return_value=[{"id": "home", "devs": [{"dev_id": "a"}, {"dev_id": "b"}]}]
+    )
+    with patch(
+        "custom_components.smartbox.core.device.SmartboxDevice.initialise_nodes",
+        slow_initialise,
+    ):
+        devices = await get_devices(session=session, hass=hass)
+
+    assert len(devices) == 2
+    assert peak == 2
