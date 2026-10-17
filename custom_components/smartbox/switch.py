@@ -13,7 +13,7 @@ from .core.node import (
     window_mode_available,
 )
 from .core.protocol import get_boost_end_datetime
-from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
+from .entity import SmartboxBoxEntity, SmartBoxNodeEntity, wrap_action_errors
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from . import SmartboxConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+# Serialise the commands sent to the cloud API; state is pushed, never polled.
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -79,10 +82,12 @@ class AwaySwitch(SmartboxBoxEntity, SwitchEntity):
     _attr_key = "away_status"
     _attr_websocket_event = "away_status"
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on the switch."""
         await self._device.set_away_status(away=True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off the switch."""
         await self._device.set_away_status(away=False)
@@ -113,10 +118,12 @@ class NoPowerLimitSwitch(SmartboxBoxEntity, SwitchEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_websocket_event = "power_limit"
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on the switch (remove the limit)."""
         await self._device.set_power_limit(0)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off the switch (restore the last known limit)."""
         limit = self._device.last_nonzero_power_limit
@@ -143,10 +150,12 @@ class WindowModeSwitch(SmartBoxNodeEntity, SwitchEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_websocket_event = "setup"
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on the switch."""
         await self._node.set_window_mode(True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off the switch."""
         await self._node.set_window_mode(False)
@@ -164,10 +173,12 @@ class TrueRadiantSwitch(SmartBoxNodeEntity, SwitchEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_websocket_event = "setup"
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on the switch."""
         await self._node.set_true_radiant(True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off the switch."""
         await self._node.set_true_radiant(False)
@@ -208,11 +219,13 @@ class BoostSwitch(SmartBoxNodeEntity, SwitchEntity):
             else None,
         }
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on boost mode."""
         _LOGGER.debug("Activating boost mode for %s", self._node.name)
         await self._node.set_status(boost=True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off boost mode."""
         _LOGGER.debug("Deactivating boost mode for %s", self._node.name)
@@ -242,10 +255,12 @@ class ChildLockSwitch(SmartBoxNodeEntity, SwitchEntity):
     _attr_icon = "mdi:lock"
     _attr_websocket_event = "status"
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn on the child lock."""
         await self._node.set_status(locked=True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Turn off the child lock."""
         await self._node.set_status(locked=False)
@@ -301,10 +316,12 @@ class MaxTemperatureLimitSwitch(SmartBoxNodeEntity, SwitchEntity, RestoreEntity)
         """Return state attributes."""
         return {"last_limit": self._node.last_max_stemp_limit}
 
+    @wrap_action_errors
     async def async_turn_on(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Enable the maximum temperature limit."""
         await self._node.set_max_temp_limit_enabled(True)
 
+    @wrap_action_errors
     async def async_turn_off(self, **kwargs) -> None:  # noqa: ANN003, ARG002
         """Disable the maximum temperature limit."""
         await self._node.set_max_temp_limit_enabled(False)

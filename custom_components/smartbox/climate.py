@@ -36,7 +36,7 @@ from .core.protocol import (
     set_temperature_args,
     warn_unknown_once,
 )
-from .entity import SmartBoxNodeEntity
+from .entity import SmartBoxNodeEntity, wrap_action_errors
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -46,6 +46,9 @@ if TYPE_CHECKING:
     from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
+
+# Serialise the commands sent to the cloud API; state is pushed, never polled.
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -155,6 +158,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         """Refresh setup-derived attributes."""
         self.async_write_ha_state()
 
+    @wrap_action_errors
     async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
         """Set new target temperature."""
         temp = kwargs.get(ATTR_TEMPERATURE)
@@ -189,6 +193,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         """Return the list of available operation modes."""
         return [HVACMode.HEAT, HVACMode.AUTO, HVACMode.OFF]
 
+    @wrap_action_errors
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set operation mode."""
         _LOGGER.debug("Setting HVAC mode to %s", hvac_mode)
@@ -252,6 +257,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
             default_preset_modes.append(PRESET_HOME)
         return default_preset_modes
 
+    @wrap_action_errors
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the mode."""
         if preset_mode == PRESET_AWAY:

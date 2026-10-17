@@ -7,7 +7,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 
 from .core.node import priority_available
-from .entity import SmartBoxNodeEntity
+from .entity import SmartBoxNodeEntity, wrap_action_errors
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -17,6 +17,9 @@ if TYPE_CHECKING:
     from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
+
+# Serialise the commands sent to the cloud API; state is pushed, never polled.
+PARALLEL_UPDATES = 1
 
 # Radiator priority values observed on the wire ("low") and offered by the
 # web app. Enforcement under the box power limit is device-side; this is
@@ -66,6 +69,7 @@ class RadiatorPriority(SmartBoxNodeEntity, SelectEntity):
         """Return the current radiator priority."""
         return self._node.priority
 
+    @wrap_action_errors
     async def async_select_option(self, option: str) -> None:
         """Set the radiator priority."""
         await self._node.set_priority(option)

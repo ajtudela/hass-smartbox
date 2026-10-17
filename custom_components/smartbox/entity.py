@@ -1,17 +1,44 @@
 """Generic entity."""
 
-from typing import TYPE_CHECKING, Any
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Concatenate
 
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, Entity
+from smartbox.error import SmartboxError
 
 from .const import CONF_DISPLAY_ENTITY_PICTURES, DOMAIN
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+
     from . import SmartboxConfigEntry
     from .core.device import SmartboxDevice
     from .core.node import SmartboxNode
+
+
+def wrap_action_errors[EntityT: Entity, **P, R](
+    func: Callable[Concatenate[EntityT, P], Coroutine[Any, Any, R]],
+) -> Callable[Concatenate[EntityT, P], Coroutine[Any, Any, R]]:
+    """Turn library errors raised by an entity action into `HomeAssistantError`.
+
+    Home Assistant shows the message of a `HomeAssistantError` to the user;
+    any other exception surfaces as an "unexpected error" with a traceback.
+    """
+
+    @wraps(func)
+    async def wrapper(self: EntityT, *args: P.args, **kwargs: P.kwargs) -> R:
+        try:
+            return await func(self, *args, **kwargs)
+        except SmartboxError as ex:
+            msg = (
+                f"Error communicating with the Smartbox API for {self.entity_id}: {ex}"
+            )
+            raise HomeAssistantError(msg) from ex
+
+    return wrapper
 
 
 def box_device_info(device: SmartboxDevice) -> DeviceInfo:

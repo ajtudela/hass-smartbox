@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Read-only entities fed by pushed state or coordinators; no limit on parallel updates.
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     _: HomeAssistant,

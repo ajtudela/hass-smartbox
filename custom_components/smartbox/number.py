@@ -27,7 +27,7 @@ from .core.node import (
     prog_temps_available,
 )
 from .core.protocol import get_temperature_unit
-from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
+from .entity import SmartboxBoxEntity, SmartBoxNodeEntity, wrap_action_errors
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from . import SmartboxConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
+
+# Serialise the commands sent to the cloud API; state is pushed, never polled.
+PARALLEL_UPDATES = 1
 # Upper bound enforced by the web app UI (cannot save a larger number).
 _MAX_POWER_LIMIT = 60000
 
@@ -194,6 +197,7 @@ class PowerLimit(SmartboxBoxEntity, NumberEntity):
         """Return the native value of the number."""
         return self._device.power_limit
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         await self._device.set_power_limit(int(value))
@@ -224,6 +228,7 @@ class ConfigBoostTemperature(_DeviceScaleBounds, SmartBoxNodeEntity, NumberEntit
             return unit
         return UnitOfTemperature.CELSIUS
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Set the boost temperature."""
         await self._node.set_extra_options({"boost_temp": str(value)})
@@ -248,6 +253,7 @@ class ConfigBoostDuration(SmartBoxNodeEntity, NumberEntity):
         """Return the current boost duration."""
         return self._node.boost_time
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Set the boost duration."""
         await self._node.set_extra_options({"boost_time": int(value)})
@@ -287,6 +293,7 @@ class AwayOffset(_DeviceScaleBounds, SmartBoxNodeEntity, NumberEntity):
             return unit
         return UnitOfTemperature.CELSIUS
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Set the away offset."""
         await self._node.set_away_offset(value)
@@ -325,6 +332,7 @@ class MaxTemperature(_DeviceScaleBounds, SmartBoxNodeEntity, NumberEntity):
             return unit
         return UnitOfTemperature.CELSIUS
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Set the maximum target temperature."""
         await self._node.set_max_stemp_limit(value)
@@ -366,6 +374,7 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartBoxNodeEntity, NumberEntity):
             return unit
         return UnitOfTemperature.CELSIUS
 
+    @wrap_action_errors
     async def async_set_native_value(self, value: float) -> None:
         """Set the profile temperature."""
         await self._node.set_prog_temps(**{self.status_key: value})
