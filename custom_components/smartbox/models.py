@@ -254,8 +254,9 @@ class SmartboxDevice:
         """Forward a node status snapshot to the node's listening entities.
 
         Both websocket frames and the optimistic merge in
-        SmartboxNode.set_status go through this single dispatcher event, so
-        an entity copy cannot miss an update the node cache already has.
+        SmartboxNode.set_status go through this single dispatcher event.
+        Entities read the node's own status, so the payload only signals
+        that something changed.
         """
         async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_status", status)
 
@@ -609,9 +610,7 @@ class SmartboxNode:
         _LOGGER.debug("Updating node %s status: %s", self.name, status)
         # The transient post-write frames carry just {"sync_status": "lost"}
         # (../smartbox api-notes.md): merging keeps the last full snapshot
-        # and only flips the sync marker, which the poll path uses to mark
-        # entities unavailable (entity copies skip non-ok frames, so the
-        # 1-key frame never replaces a snapshot there).
+        # and only flips the sync marker.
         self._status |= {**status}
 
     @property
@@ -723,10 +722,6 @@ class SmartboxNode:
     async def update_device_away_status(self, away: bool) -> None:
         """Update device away status."""
         await self._device.set_away_status(away)
-
-    async def async_update(self, _: Any) -> StatusDict:  # noqa: ANN401
-        """Update status."""
-        return self.status
 
     @property
     def window_mode(self) -> bool:

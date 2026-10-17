@@ -310,9 +310,6 @@ async def test_smartbox_node(hass):
     mock_device.away = True
     assert node.away
 
-    status_update = await node.async_update(hass)
-    assert status_update == node.status
-
     # setup fields
     assert not node.window_mode
     node.update_setup({"window_mode_enabled": True})

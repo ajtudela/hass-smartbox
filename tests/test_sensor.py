@@ -321,14 +321,14 @@ def test_charge_level_sensor_model_1c():
     sensor._node = MagicMock()
     sensor._node.get_model_code.return_value = "1C"
 
-    sensor._status = {"current_charge_per": 75, "charge_level": 3}
+    sensor._node.status = {"current_charge_per": 75, "charge_level": 3}
     assert sensor.native_value == 75
 
-    sensor._status = {"charge_level": 3}
+    sensor._node.status = {"charge_level": 3}
     assert sensor.native_value == 0
 
     sensor._node.get_model_code.return_value = None
-    sensor._status = {"current_charge_per": 75, "charge_level": 3}
+    sensor._node.status = {"current_charge_per": 75, "charge_level": 3}
     assert sensor.native_value == 3
 
 

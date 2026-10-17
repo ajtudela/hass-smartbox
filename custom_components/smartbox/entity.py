@@ -25,7 +25,6 @@ class DefaultSmartBoxEntity(Entity):
     def __init__(self, entry: SmartboxConfigEntry) -> None:
         """Initialize the default Device Entity."""
         self._device_id = self._node.node_id
-        self._status: dict[str, Any] = {}
         self._attr_translation_key = self._attr_key
         self._reseller = self._node.session.reseller
         self._configuration_url = f"{self._reseller.web_url}#/{self._node.device.home['id']}/dev/{self._device_id}/{self._node.node_type}/{self._node.addr}/setup"
@@ -49,23 +48,20 @@ class DefaultSmartBoxEntity(Entity):
             configuration_url=self._configuration_url,
         )
 
+    @property
+    def _status(self) -> dict[str, Any]:
+        """Return the node's status: the single source of truth for state.
+
+        Entities never keep their own copy. The node merges every websocket
+        frame and optimistic write into this dict (keeping the last full
+        snapshot when a transient ``lost`` frame arrives) and the dispatcher
+        only tells entities that something changed.
+        """
+        return self._node.status
+
     @callback
-    def _async_update(self, data: Any) -> None:  # noqa: ANN401
-        """Update the state from a websocket event."""
-        # Status payloads are dicts snapshotting the node status; keep the
-        # entity-local copy in sync for entities reading self._status.
-        # Live hardware (../smartbox api-notes.md, 2026-09-26) pushes a
-        # transient {"sync_status": "lost"} frame right after every accepted
-        # write; skip non-ok frames so the last full snapshot survives until
-        # the websocket confirms (load-bearing for set_status's optimistic
-        # merge on an unreachable node: the dispatched body carries the
-        # cache's lost marker; websocket updates only ever dispatch ok
-        # frames, so availability's graced dispatcher path is unaffected).
-        if (
-            self._attr_websocket_event == "status"
-            and data.get("sync_status", "ok") == "ok"
-        ):
-            self._status = data
+    def _async_update(self, _data: Any) -> None:  # noqa: ANN401
+        """Write the state after a node event (the payload is not used)."""
         self.async_write_ha_state()
 
 
@@ -158,20 +154,6 @@ class SmartBoxNodeEntity(DefaultSmartBoxEntity):
         """Update availability from a node-availability event."""
         self._node_available = available
         self.async_write_ha_state()
-
-    async def async_update(self) -> None:
-        """Get the latest data."""
-        new_status = await self._node.async_update(self.hass)
-        if new_status["sync_status"] == "ok":
-            # update our status
-            self._status = new_status
-        # Availability is owned by the library's node-availability tracking
-        # (smartbox_<node_id>_availability dispatcher, with its grace
-        # window). The cached sync_status marker read here is the SAME
-        # evidence that path already processes, with no grace: mapping it
-        # directly would emit a momentary false Unavailable on transient
-        # lost frames. async_update does not fetch from the API, so this
-        # branch adds no detection the dispatcher lacks.
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""

@@ -1270,7 +1270,6 @@ def test_preset_mode(node_attributes, expected_preset):
     mock_node.status = node_attributes.get("status", {})
 
     heater = SmartboxHeater(mock_node, MagicMock())
-    heater._status = mock_node.status
 
     assert heater.preset_mode == expected_preset
 
@@ -1284,7 +1283,6 @@ def test_preset_mode_invalid_selected_temp():
     mock_node.boost = False
 
     heater = SmartboxHeater(mock_node, MagicMock())
-    heater._status = mock_node.status
     assert heater.preset_mode is None
 
 
@@ -1297,7 +1295,6 @@ def test_preset_mode_invalid_mode():
     mock_node.boost = False
 
     heater = SmartboxHeater(mock_node, MagicMock())
-    heater._status = mock_node.status
 
     assert heater.preset_mode is None
 
@@ -1351,7 +1348,6 @@ def test_hvac_action(node_attributes, expected_action):
     mock_node.boost = node_attributes.get("boost", False)
 
     heater = SmartboxHeater(mock_node, MagicMock())
-    heater._status = mock_node.status
 
     assert heater.hvac_action == expected_action
 

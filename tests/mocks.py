@@ -63,7 +63,6 @@ def mock_node(dev_id: str, addr: int, node_type: str, mode="auto") -> AsyncMock:
     else:
         node.status["stemp"] = "20"
 
-    node.async_update = AsyncMock(return_value=node.status)
     return node
 
 
