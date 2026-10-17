@@ -52,9 +52,8 @@ from .const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from .coordinator import ConsumptionCoordinator
-from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
-from .protocol import (
+from .core.coordinator import ConsumptionCoordinator
+from .core.protocol import (
     ProgDict,
     get_boost_end_datetime,
     get_current_prog_profile,
@@ -62,6 +61,7 @@ from .protocol import (
     get_temperature_unit,
     rtc_time_to_datetime,
 )
+from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -71,9 +71,9 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
-    from .coordinator import ConsumptionData
-    from .device import SmartboxDevice
-    from .node import SmartboxNode
+    from .core.coordinator import ConsumptionData
+    from .core.device import SmartboxDevice
+    from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)

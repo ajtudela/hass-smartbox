@@ -18,7 +18,7 @@ from custom_components.smartbox.const import DOMAIN, HEATER_NODE_TYPES, Smartbox
 from tests.const import CONF_DEVICE_IDS
 
 if TYPE_CHECKING:
-    from custom_components.smartbox.protocol import SetupDict, StatusDict
+    from custom_components.smartbox.core.protocol import SetupDict, StatusDict
 
 _LOGGER = logging.getLogger(__name__)
 

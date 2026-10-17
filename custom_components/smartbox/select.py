@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 
+from .core.node import priority_available
 from .entity import SmartBoxNodeEntity
-from .node import priority_available
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
-    from .node import SmartboxNode
+    from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 

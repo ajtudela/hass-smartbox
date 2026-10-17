@@ -11,12 +11,16 @@ from typing import TYPE_CHECKING, Final
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from smartbox.error import SmartboxError
 
-from .const import CONF_HISTORY_CONSUMPTION, HistoryConsumptionStatus
+from custom_components.smartbox.const import (
+    CONF_HISTORY_CONSUMPTION,
+    HistoryConsumptionStatus,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from . import SmartboxConfigEntry
+    from custom_components.smartbox import SmartboxConfigEntry
+
     from .node import SmartboxNode
     from .protocol import SamplesDict
 

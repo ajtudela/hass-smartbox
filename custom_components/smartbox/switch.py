@@ -7,13 +7,13 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
-from .node import (
+from .core.node import (
     max_temp_limit_available,
     true_radiant_available,
     window_mode_available,
 )
-from .protocol import get_boost_end_datetime
+from .core.protocol import get_boost_end_datetime
+from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant

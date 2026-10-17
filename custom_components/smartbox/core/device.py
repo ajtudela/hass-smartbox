@@ -14,7 +14,12 @@ from smartbox import (
 )
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
 
-from .const import DOMAIN, SMARTBOX_UNAVAILABLE_DELAY, SMARTBOX_WRITE_CONFIRM_TIMEOUT
+from custom_components.smartbox.const import (
+    DOMAIN,
+    SMARTBOX_UNAVAILABLE_DELAY,
+    SMARTBOX_WRITE_CONFIRM_TIMEOUT,
+)
+
 from .node import SmartboxNode
 from .protocol import Device, Node, SetupDict, StatusDict, normalize_prog
 from .supervisor import TransportSupervisor

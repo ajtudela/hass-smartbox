@@ -17,8 +17,8 @@ from custom_components.smartbox.const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from custom_components.smartbox.coordinator import ConsumptionData
-from custom_components.smartbox.protocol import rtc_time_to_datetime
+from custom_components.smartbox.core.coordinator import ConsumptionData
+from custom_components.smartbox.core.protocol import rtc_time_to_datetime
 from custom_components.smartbox.sensor import (
     BoostEndTimeSensor,
     ChargeLevelSensor,
@@ -516,7 +516,7 @@ async def test_native_value_boost_end_time_sensor(hass, mock_smartbox, config_en
 
     # boost_end_min is the minute of the day (UTC) at which boost ends
     with patch(
-        "custom_components.smartbox.node.dt_util.utcnow",
+        "custom_components.smartbox.core.node.dt_util.utcnow",
         return_value=datetime(2023, 10, 10, 1, 0, tzinfo=dt_util.UTC),
     ):
         expected_time = datetime(2023, 10, 10, 1, 30, tzinfo=dt_util.UTC)

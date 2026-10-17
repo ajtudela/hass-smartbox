@@ -5,8 +5,8 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from custom_components.smartbox import supervisor as supervisor_module
-from custom_components.smartbox.supervisor import TransportSupervisor
+from custom_components.smartbox.core import supervisor as supervisor_module
+from custom_components.smartbox.core.supervisor import TransportSupervisor
 
 
 def _make(run, **kwargs) -> TransportSupervisor:

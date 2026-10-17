@@ -37,13 +37,13 @@ from .const import (
     TRANSPORT_AUTO,
     TRANSPORT_SOCKET_IO,
 )
-from .device import SmartboxDevice, get_devices
-from .supervisor import TransportSupervisor
+from .core.device import SmartboxDevice, get_devices
+from .core.supervisor import TransportSupervisor
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
-    from .node import SmartboxNode
+    from .core.node import SmartboxNode
 
 __version__ = "2.6.0"
 

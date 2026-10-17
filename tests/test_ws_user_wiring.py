@@ -212,7 +212,7 @@ async def test_supervisor_pauses_once_after_refused_reload(monkeypatch):
         await real_sleep(0)
 
     monkeypatch.setattr(
-        "custom_components.smartbox.supervisor.asyncio.sleep", fake_sleep
+        "custom_components.smartbox.core.supervisor.asyncio.sleep", fake_sleep
     )
     await asyncio.wait_for(_supervise_ws_user_socket(SimpleNamespace(), entry), 2)
     assert delays == [smartbox_init._WS_USER_WATCHDOG_BASE_SECONDS]

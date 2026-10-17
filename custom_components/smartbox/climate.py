@@ -26,8 +26,7 @@ from .const import (
     PRESET_SELF_LEARN,
     SmartboxNodeType,
 )
-from .entity import SmartBoxNodeEntity
-from .protocol import (
+from .core.protocol import (
     check_status_key,
     get_hvac_mode,
     get_target_temperature,
@@ -37,13 +36,14 @@ from .protocol import (
     set_temperature_args,
     warn_unknown_once,
 )
+from .entity import SmartBoxNodeEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
-    from .node import SmartboxNode
+    from .core.node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 

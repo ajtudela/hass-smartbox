@@ -9,13 +9,14 @@ from homeassistant.util import dt as dt_util
 from smartbox import AsyncSmartboxSession, SmartboxNodeType
 from smartbox.error import APIUnavailableError, SmartboxError
 
-from .const import (
+from custom_components.smartbox.const import (
     DEFAULT_BOOST_TEMP,
     DEFAULT_BOOST_TIME,
     HEATER_NODE_TYPES,
     MAX_TEMP_LIMIT_DEFAULT,
     BoostConfig,
 )
+
 from .protocol import (
     FactoryOptionsDict,
     Node,

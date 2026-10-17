@@ -10,7 +10,7 @@ from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
     HistoryConsumptionStatus,
 )
-from custom_components.smartbox.coordinator import (
+from custom_components.smartbox.core.coordinator import (
     CONSUMPTION_UPDATE_INTERVAL,
     ConsumptionCoordinator,
 )

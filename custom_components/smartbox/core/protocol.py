@@ -17,7 +17,12 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from smartbox import SmartboxNodeType
 
-from .const import GITHUB_ISSUES_URL, PRESET_FROST, PRESET_SCHEDULE, PRESET_SELF_LEARN
+from custom_components.smartbox.const import (
+    GITHUB_ISSUES_URL,
+    PRESET_FROST,
+    PRESET_SCHEDULE,
+    PRESET_SELF_LEARN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

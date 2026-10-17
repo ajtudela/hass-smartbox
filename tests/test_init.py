@@ -21,7 +21,7 @@ from custom_components.smartbox import (
     update_listener,
 )
 from custom_components.smartbox.const import DOMAIN
-from custom_components.smartbox.device import SmartboxDevice
+from custom_components.smartbox.core.device import SmartboxDevice
 
 # Key -> entity domain of the legacy per-node registry entries to re-home.
 _LEGACY_KEYS = {
@@ -148,7 +148,7 @@ async def test_device_cancel_bounded_when_socket_teardown_hangs(
     with (
         patch.object(device.update_manager, "cancel", hang_cancel),
         patch.object(device._supervisor, "_teardown_timeout", 0.05),
-        patch("custom_components.smartbox.supervisor._EXIT_GRACE_SECONDS", 0.01),
+        patch("custom_components.smartbox.core.supervisor._EXIT_GRACE_SECONDS", 0.01),
     ):
         cancel_task = asyncio.create_task(device.cancel())
         done, _pending = await asyncio.wait({cancel_task}, timeout=5)
@@ -176,7 +176,7 @@ async def test_unload_entry_completes_with_parked_watchdog(
 
     for device in devices:
         device._supervisor._teardown_timeout = 0.05
-    with patch("custom_components.smartbox.supervisor._EXIT_GRACE_SECONDS", 0.01):
+    with patch("custom_components.smartbox.core.supervisor._EXIT_GRACE_SECONDS", 0.01):
         unload_task = asyncio.create_task(
             hass.config_entries.async_unload(config_entry.entry_id)
         )
