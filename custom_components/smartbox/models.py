@@ -26,7 +26,6 @@ from smartbox import (
     WsUserSocketSession,
 )
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
-from smartbox.retry import backoff_delay
 
 from .const import (
     DEFAULT_BOOST_TEMP,
@@ -42,17 +41,13 @@ from .const import (
     SMARTBOX_WRITE_CONFIRM_TIMEOUT,
     BoostConfig,
 )
+from .supervisor import TransportSupervisor
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 _NODE_CREATE_CONCURRENCY = 3
-
-# Upper bound for websocket teardown (cancel + watchdog exit). Unload/reload
-# and the HA-stop hook must always complete promptly even if the websocket
-# session is wedged.
-_TEARDOWN_TIMEOUT_SECONDS: Final = 10.0
 
 # Backoff for restarting the update-manager task after an unexpected exit
 # (run() itself waits out transient trouble; this only bounds how fast we
@@ -101,17 +96,23 @@ class SmartboxDevice:
         self._last_nonzero_power_limit: int | None = None
         self._rtc_time: dict[str, int] | None = None
         self._nodes: dict[tuple[str, int | str], SmartboxNode] = {}
-        self._watchdog_task: asyncio.Task | None = None
         self._hass = hass
         self._connected_status: bool | None = None
-        self._watchdog_restarts: int = 0
-        self._stopping: bool = False
         self.update_manager: UpdateManager = UpdateManager(
             self._session,
             self.dev_id,
             unavailable_delay=SMARTBOX_UNAVAILABLE_DELAY,
             write_confirm_timeout=SMARTBOX_WRITE_CONFIRM_TIMEOUT,
             ws_user_socket=self._ws_user_socket,
+        )
+        self._supervisor = TransportSupervisor(
+            lambda coro, name: self._hass.async_create_background_task(coro, name),  # noqa: PLW0108
+            lambda: self.update_manager.run(),  # noqa: PLW0108
+            name=f"smartbox_update_{self.dev_id}",
+            base_delay=_WATCHDOG_RESTART_BASE_SECONDS,
+            max_delay=_WATCHDOG_RESTART_MAX_SECONDS,
+            cancel=lambda: self.update_manager.cancel(),  # noqa: PLW0108
+            on_error=self._on_update_error,
         )
 
     @classmethod
@@ -181,64 +182,24 @@ class SmartboxDevice:
         )
 
         _LOGGER.debug("Starting UpdateManager task for device %s", self.dev_id)
-        self._watchdog_task = asyncio.create_task(
-            self.update_manager.run(), name=f"smartbox_update_{self.dev_id}"
-        )
-        # run() exiting unexpectedly (e.g. credentials rejected) must never
-        # leave a silently dead socket: log it, then restart or trigger reauth.
-        self._watchdog_task.add_done_callback(self._watchdog_done)
+        self._supervisor.start()
         return self
 
     async def cancel(self) -> None:
-        """Cancel the watchdog task and disconnect.
+        """Stop the update task and disconnect, bounded.
 
-        Deliberately bounded and exception-proof: unload (UI reload) and the
-        HA-stop hook must always complete promptly even when the websocket
-        session is wedged. On live hardware run() parks in the websocket
-        loop, so the watchdog task is still alive here; hard-cancelling it
-        and then awaiting it bare used to raise CancelledError out of
-        async_unload_entry, which silently killed UI reloads.
+        Deliberately exception-proof: unload (UI reload) and the HA-stop hook
+        must always complete promptly even when the websocket session is
+        wedged (see :class:`TransportSupervisor`).
         """
-        self._stopping = True
-        try:
-            await asyncio.wait_for(
-                self.update_manager.cancel(), _TEARDOWN_TIMEOUT_SECONDS
-            )
-        except TimeoutError:
-            _LOGGER.warning(
-                "Socket teardown for device %s did not finish in %ss",
-                self.dev_id,
-                _TEARDOWN_TIMEOUT_SECONDS,
-            )
-        except Exception:
-            _LOGGER.exception(
-                "Error tearing down socket session for device %s", self.dev_id
-            )
-        finally:
-            task = self._watchdog_task
-            if task is not None:
-                if not task.done():
-                    _LOGGER.warning(
-                        "Force-cancelling watchdog task for device %s", self.dev_id
-                    )
-                    task.cancel()
-                # asyncio.wait returns on timeout instead of raising, and it
-                # swallows the cancelled task's CancelledError for us; the
-                # suppress only guards our own cancellation mid-wait.
-                with suppress(asyncio.CancelledError):
-                    await asyncio.wait({task}, timeout=_TEARDOWN_TIMEOUT_SECONDS)
-                if not task.done():
-                    _LOGGER.warning(
-                        "Watchdog task for device %s still running after cancel",
-                        self.dev_id,
-                    )
+        await self._supervisor.stop()
 
     def _connected(self, connected: bool) -> None:
         _LOGGER.debug("Connected connected update: %s", connected)
         self._connected_status = connected
         if connected:
             # A (re)connection succeeded: any restart backoff can reset.
-            self._watchdog_restarts = 0
+            self._supervisor.reset_backoff()
         # The box connectivity entity listens on f"{DOMAIN}_{dev_id}_connected".
         async_dispatcher_send(
             self._hass, f"{DOMAIN}_{self.dev_id}_connected", self._connected_status
@@ -362,64 +323,22 @@ class SmartboxDevice:
         node.update_prog(prog)
         async_dispatcher_send(self._hass, f"{DOMAIN}_{node.node_id}_prog", prog)
 
-    def _watchdog_done(self, task: asyncio.Task) -> None:
-        """Handle the update-manager task exiting.
+    def _on_update_error(self, exc: Exception) -> bool:
+        """Handle the update task dying; return True to stop supervising.
 
-        Cancellation (unload, HA stop) is the normal exit. InvalidAuthError
-        means the credentials were rejected after the library's automatic
-        re-auth-and-resend also failed: request a reauthentication flow.
-        Anything else is unexpected -- log it and restart the task with capped
-        backoff instead of leaving a dead socket and stale entities behind.
+        InvalidAuthError means the credentials were rejected after the
+        library's automatic re-auth-and-resend also failed: request a
+        reauthentication flow. Anything else is unexpected and gets restarted
+        by the supervisor with capped backoff.
         """
-        if self._stopping or task.cancelled():
-            return
-        exc = task.exception()
-        if isinstance(exc, InvalidAuthError):
-            _LOGGER.error(
-                "Credentials rejected for device %s; requesting reauthentication",
-                self.dev_id,
-            )
-            async_dispatcher_send(self._hass, f"{DOMAIN}_{self.dev_id}_reauth_required")
-            return
-        if exc is None:
-            _LOGGER.error(
-                "Update task for device %s exited unexpectedly; restarting",
-                self.dev_id,
-            )
-        else:
-            _LOGGER.error(
-                "Update task for device %s exited unexpectedly: %s; restarting",
-                self.dev_id,
-                exc,
-                exc_info=exc,
-            )
-        self._schedule_watchdog_restart()
-
-    def _schedule_watchdog_restart(self) -> None:
-        """Restart the update-manager task after a capped, doubling backoff."""
-        delay = backoff_delay(
-            self._watchdog_restarts,
-            _WATCHDOG_RESTART_BASE_SECONDS,
-            _WATCHDOG_RESTART_MAX_SECONDS,
+        if not isinstance(exc, InvalidAuthError):
+            return False
+        _LOGGER.error(
+            "Credentials rejected for device %s; requesting reauthentication",
+            self.dev_id,
         )
-        self._watchdog_restarts += 1
-
-        async def _restart() -> None:
-            try:
-                await asyncio.sleep(delay)
-            except asyncio.CancelledError:
-                return
-            if self._stopping:
-                return
-            _LOGGER.debug("Restarting update task for device %s", self.dev_id)
-            self._watchdog_task = asyncio.create_task(
-                self.update_manager.run(), name=f"smartbox_update_{self.dev_id}"
-            )
-            self._watchdog_task.add_done_callback(self._watchdog_done)
-
-        self._hass.async_create_task(
-            _restart(), name=f"smartbox_update_restart_{self.dev_id}"
-        )
+        async_dispatcher_send(self._hass, f"{DOMAIN}_{self.dev_id}_reauth_required")
+        return True
 
     @property
     def device(self) -> Device:

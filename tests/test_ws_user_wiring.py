@@ -26,8 +26,13 @@ from custom_components.smartbox import (
     SmartboxError,
     WsUserUnsupportedError,
     _async_create_ws_user_socket,
-    _supervise_ws_user_socket,
+    _create_ws_user_supervisor,
 )
+
+
+async def _supervise_ws_user_socket(hass, entry) -> None:
+    """Run the ws_user supervision loop inline (no task wrapper)."""
+    await _create_ws_user_supervisor(hass, entry)._loop()
 
 
 @pytest.mark.asyncio
@@ -191,36 +196,6 @@ async def test_ws_user_unsupported_reload_rate_limited(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ws_user_restart_pause_resets_after_long_run(hass, monkeypatch):
-    """The restart ratchet resets after a long-lived run.
-
-    A run that lasted more than _WS_USER_RUN_RESET_SECONDS resets the
-    counter, so the next unexpected exit sleeps the BASE backoff; a
-    sub-threshold run escalates. (A regression here pins every future
-    crash at the 300 s cap for the entry's lifetime.)
-    """
-    fake_now = {"t": 1000.0}
-    monkeypatch.setattr(smartbox_init.time, "monotonic", lambda: fake_now["t"])
-    exponents = []
-
-    def fake_backoff(restarts, _base, _cap):
-        exponents.append(restarts)
-        return 0.0  # sleep(0.0) yields once, no real waiting
-
-    monkeypatch.setattr(smartbox_init, "backoff_delay", fake_backoff)
-
-    # Long-lived run (> reset threshold): ratchet resets to 0.
-    restarts = await smartbox_init._ws_user_restart_pause(939.0, 5)
-    assert restarts == 1
-    assert exponents[-1] == 0
-
-    # Short-lived run: ratchet escalates (5 -> 6).
-    restarts = await smartbox_init._ws_user_restart_pause(990.0, 5)
-    assert restarts == 6
-    assert exponents[-1] == 5
-
-
-@pytest.mark.asyncio
 async def test_supervisor_pauses_once_after_refused_reload(monkeypatch):
     """A refused reload backs off once per failed run, not twice."""
     sock = MagicMock()
@@ -231,15 +206,18 @@ async def test_supervisor_pauses_once_after_refused_reload(monkeypatch):
     monkeypatch.setattr(
         smartbox_init, "_handle_ws_user_unsupported", lambda _hass, _entry: False
     )
-    pauses = []
+    delays = []
+    real_sleep = asyncio.sleep
 
-    async def fake_pause(_run_started, restarts):
-        pauses.append(restarts)
-        return restarts + 1
+    async def fake_sleep(delay):
+        delays.append(delay)
+        await real_sleep(0)
 
-    monkeypatch.setattr(smartbox_init, "_ws_user_restart_pause", fake_pause)
+    monkeypatch.setattr(
+        "custom_components.smartbox.supervisor.asyncio.sleep", fake_sleep
+    )
     await asyncio.wait_for(_supervise_ws_user_socket(SimpleNamespace(), entry), 2)
-    assert pauses == [0]
+    assert delays == [smartbox_init._WS_USER_WATCHDOG_BASE_SECONDS]
 
 
 @pytest.mark.asyncio
@@ -379,7 +357,7 @@ async def test_setup_entry_ws_user_active_full_wiring(
     # Supervision task created and the shared socket stored, and the
     # parked run proves the supervision task is alive.
     assert entry.runtime_data.ws_user_socket is created
-    supervision_task = entry.runtime_data.ws_user_task
+    supervision_task = entry.runtime_data.ws_user_supervisor.task
     assert supervision_task is not None
     assert not supervision_task.done()
 

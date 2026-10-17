@@ -1,7 +1,5 @@
 """The Smartbox integration."""
 
-import asyncio
-import contextlib
 from dataclasses import dataclass
 import logging
 import re
@@ -31,11 +29,11 @@ from smartbox.error import (
     SmartboxError,
     WsUserUnsupportedError,
 )
-from smartbox.retry import backoff_delay
 
 from . import const
 from .const import CONF_API_NAME, DOMAIN
 from .models import SmartboxDevice, SmartboxNode, get_devices
+from .supervisor import TransportSupervisor
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
@@ -67,10 +65,10 @@ class SmartboxData:
     client: AsyncSmartboxSession
     devices: list[SmartboxDevice]
     nodes: list[SmartboxNode]
-    # Shared per-user ws_user socket and its supervision task (None in
-    # socket_io mode or when the endpoint was detected unsupported).
+    # Shared per-user ws_user socket and its supervisor (None in socket_io
+    # mode or when the endpoint was detected unsupported).
     ws_user_socket: WsUserSocketSession | None = None
-    ws_user_task: asyncio.Task | None = None
+    ws_user_supervisor: TransportSupervisor | None = None
 
 
 async def create_smartbox_session_from_entry(
@@ -263,109 +261,71 @@ def _handle_ws_user_unsupported(
     return True
 
 
-async def _ws_user_restart_pause(run_started: float, restarts: int) -> int:
-    """Sleep the next restart backoff; return the incremented counter.
-
-    A long-lived run resets the ratchet (see
-    ``_WS_USER_RUN_RESET_SECONDS``); the exponent is saturated by the
-    shared backoff helper.
-    """
-    if time.monotonic() - run_started > _WS_USER_RUN_RESET_SECONDS:
-        restarts = 0
-    await asyncio.sleep(
-        backoff_delay(
-            restarts,
-            _WS_USER_WATCHDOG_BASE_SECONDS,
-            _WS_USER_WATCHDOG_MAX_SECONDS,
-        )
-    )
-    return restarts + 1
-
-
-async def _supervise_ws_user_socket(
+def _create_ws_user_supervisor(
     hass: HomeAssistant, entry: SmartboxConfigEntry
-) -> None:
-    """Run and supervise the shared per-user ws_user socket.
+) -> TransportSupervisor:
+    """Build the supervisor of the shared per-user ws_user socket.
 
-    Mirrors the per-device watchdog pattern: unexpected exits restart the
-    socket loop with capped backoff; rejected credentials surface the
-    per-device reauth signals (the entry's reauth wiring picks them up).
+    Unexpected exits restart the socket loop with capped backoff; rejected
+    credentials surface the per-device reauth signals (the entry's reauth
+    wiring picks them up).
 
     A mid-run :class:`WsUserUnsupportedError` (ws_user disappeared after
     the setup probe passed, e.g. a backend rollback) reloads the config
     entry: setup then re-probes the endpoint and lands every device on
-    the socket_io transport with fresh managers — the same path as the
-    initial fallback, without rebuilding managers here.
+    the socket_io transport with fresh managers. A refused reload (limit
+    tripped / entry not loaded) keeps THIS supervisor alive: parking on a
+    dead transport with every device manager parked would freeze the
+    entities as silently-stale forever; the reload window prunes after
+    ``_WS_USER_RELOAD_WINDOW_SECONDS``, at which point the retry gets a
+    fresh reload.
     """
     socket_ = entry.runtime_data.ws_user_socket
     if socket_ is None:
-        return
-    restarts = 0
+        msg = "ws_user supervisor requested without a ws_user socket"
+        raise ValueError(msg)
 
-    def _signal_reauth() -> None:
-        """Rejected credentials: surface the per-device reauth signals."""
-        # An expected condition (the entry's reauth wiring handles it),
-        # logged as a warning — a traceback here would be noise.
-        _LOGGER.warning(
-            "Credentials rejected on the shared ws_user socket; "
-            "requesting reauthentication"
-        )
-        for device in entry.runtime_data.devices:
-            async_dispatcher_send(hass, f"{DOMAIN}_{device.dev_id}_reauth_required")
+    def _on_error(exc: Exception) -> bool:
+        if isinstance(exc, WsUserUnsupportedError):
+            return _handle_ws_user_unsupported(hass, entry)
+        if isinstance(exc, InvalidAuthError):
+            # An expected condition (the entry's reauth wiring handles it),
+            # logged as a warning: a traceback here would be noise.
+            _LOGGER.warning(
+                "Credentials rejected on the shared ws_user socket; "
+                "requesting reauthentication"
+            )
+            for device in entry.runtime_data.devices:
+                async_dispatcher_send(hass, f"{DOMAIN}_{device.dev_id}_reauth_required")
+            return True
+        return False
 
-    # Run/exit model: run() returns only when exit was requested
-    # (teardown); exceptions propagate out and are handled here. A
-    # WsUserSocketSession is re-runnable — the except Exception path
-    # below restarts it in place. CancelledError (BaseException) is not
-    # caught and propagates.
-    while True:
-        run_started = time.monotonic()
-        try:
-            await socket_.run()
-        except WsUserUnsupportedError:
-            # ws_user disappeared mid-flight (backend rollback): reload
-            # the entry — setup re-probes and falls back to socket_io.
-            # A refused reload (limit tripped / entry not loaded) keeps
-            # THIS supervisor alive: parking on a dead transport with
-            # every device manager parked would freeze the entities as
-            # silently-stale forever; the reload window prunes after
-            # _WS_USER_RELOAD_WINDOW_SECONDS, at which point the retry
-            # below gets a fresh reload.
-            if _handle_ws_user_unsupported(hass, entry):
-                return
-        except InvalidAuthError:
-            _signal_reauth()
-            return
-        except Exception:
-            _LOGGER.exception("Shared ws_user socket exited unexpectedly; restarting")
-        else:
-            # run() returned normally: exit was requested (teardown/cancel).
-            return
-        restarts = await _ws_user_restart_pause(run_started, restarts)
+    return TransportSupervisor(
+        lambda coro, name: entry.async_create_background_task(hass, coro, name),
+        socket_.run,
+        name="smartbox_ws_user",
+        base_delay=_WS_USER_WATCHDOG_BASE_SECONDS,
+        max_delay=_WS_USER_WATCHDOG_MAX_SECONDS,
+        cancel=socket_.cancel,
+        on_error=_on_error,
+        reset_after=_WS_USER_RUN_RESET_SECONDS,
+        teardown_timeout=_WS_USER_TEARDOWN_TIMEOUT_SECONDS,
+    )
 
 
 async def _async_cancel_ws_user_socket(entry: SmartboxConfigEntry) -> None:
-    """Cancel the shared ws_user socket and its supervision task, bounded.
+    """Stop the shared ws_user socket and its supervision, bounded.
 
-    The supervision task is cancelled FIRST so it cannot restart the
-    socket behind this teardown; the socket's ``cancel()`` is a
-    coroutine bounded by the library's own teardown timeouts. Unload
-    awaits this; the HA-stop listener wraps it in a task (teardown then
-    races shutdown, which is fine — cancel is idempotent and bounded).
+    The supervisor flags the stop first so it cannot restart the socket
+    behind this teardown, then cancels the socket (bounded by the library's
+    own teardown timeouts). Unload awaits this; the HA-stop listener wraps it
+    in a task (teardown then races shutdown, which is fine: stop is
+    idempotent and bounded).
     """
     runtime_data: SmartboxData | None = getattr(entry, "runtime_data", None)
-    if runtime_data is None:
+    if runtime_data is None or runtime_data.ws_user_supervisor is None:
         return
-    if runtime_data.ws_user_task is not None and not runtime_data.ws_user_task.done():
-        runtime_data.ws_user_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await runtime_data.ws_user_task
-    if runtime_data.ws_user_socket is not None:
-        with contextlib.suppress(Exception):
-            await asyncio.wait_for(
-                runtime_data.ws_user_socket.cancel(),
-                _WS_USER_TEARDOWN_TIMEOUT_SECONDS,
-            )
+    await runtime_data.ws_user_supervisor.stop()
 
 
 async def _async_create_ws_user_socket(
@@ -436,10 +396,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
     _async_wire_reauth(hass, entry)
 
     if entry.runtime_data.ws_user_socket is not None:
-        entry.runtime_data.ws_user_task = asyncio.create_task(
-            _supervise_ws_user_socket(hass, entry),
-            name="smartbox_ws_user",
-        )
+        supervisor = _create_ws_user_supervisor(hass, entry)
+        entry.runtime_data.ws_user_supervisor = supervisor
+        supervisor.start()
 
     # The box itself is a Home Assistant device; create it (and re-home the
     # device-level registry entries from the per-node devices) before the

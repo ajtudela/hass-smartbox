@@ -147,7 +147,8 @@ async def test_device_cancel_bounded_when_socket_teardown_hangs(
 
     with (
         patch.object(device.update_manager, "cancel", hang_cancel),
-        patch("custom_components.smartbox.models._TEARDOWN_TIMEOUT_SECONDS", 0.05),
+        patch.object(device._supervisor, "_teardown_timeout", 0.05),
+        patch("custom_components.smartbox.supervisor._EXIT_GRACE_SECONDS", 0.01),
     ):
         cancel_task = asyncio.create_task(device.cancel())
         done, _pending = await asyncio.wait({cancel_task}, timeout=5)
@@ -155,7 +156,7 @@ async def test_device_cancel_bounded_when_socket_teardown_hangs(
         # Must complete without raising (CancelledError used to escape).
         await cancel_task
 
-    assert device._watchdog_task.cancelled()
+    assert device._supervisor.task.cancelled()
     assert hang_cancel.await_count == 1
 
 
@@ -173,7 +174,9 @@ async def test_unload_entry_completes_with_parked_watchdog(
     for device in devices:
         device.update_manager.cancel = AsyncMock(side_effect=never.wait)
 
-    with patch("custom_components.smartbox.models._TEARDOWN_TIMEOUT_SECONDS", 0.05):
+    for device in devices:
+        device._supervisor._teardown_timeout = 0.05
+    with patch("custom_components.smartbox.supervisor._EXIT_GRACE_SECONDS", 0.01):
         unload_task = asyncio.create_task(
             hass.config_entries.async_unload(config_entry.entry_id)
         )
@@ -182,7 +185,7 @@ async def test_unload_entry_completes_with_parked_watchdog(
         assert unload_task.result() is True
 
     for device in devices:
-        assert device._watchdog_task.cancelled()
+        assert device._supervisor.task.cancelled()
     assert config_entry.state is ConfigEntryState.NOT_LOADED
 
 
@@ -201,8 +204,8 @@ async def test_hass_stop_cancels_device_websocket_tasks(
     for device in devices:
         # A faithful socket returns from run() once cancelled (it is not
         # force-cancelled) and the watchdog must not treat that as a crash.
-        assert device._watchdog_task.done()
-        assert device._watchdog_restarts == 0
+        assert device._supervisor.task.done()
+        assert device._supervisor.restarts == 0
 
 
 async def test_box_device_created_and_legacy_entities_rehomed(

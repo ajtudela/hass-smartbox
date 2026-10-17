@@ -15,7 +15,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.util import dt as dt_util
 import pytest
-from smartbox.error import APIUnavailableError
+from smartbox.error import APIUnavailableError, InvalidAuthError
 
 from custom_components.smartbox.const import (
     PRESET_FROST,
@@ -134,52 +134,33 @@ async def test_get_devices_cancels_devices_on_failure(hass, mock_smartbox):
     assert initialised_device.cancel.await_count == 1
 
 
-async def test_cancel(hass, caplog):
-    dev_id = "device_1"
-    mock_session = MagicMock()
-
+async def test_cancel_stops_the_supervisor(hass):
+    """Device cancel delegates to the transport supervisor."""
     with patch(
         "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
-        # No watchdog task: only update_manager.cancel() is called
-        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
-        device.update_manager = AsyncMock()
-        device._watchdog_task = None
-        await device.cancel()
-        device.update_manager.cancel.assert_awaited_once()
-
-        # Watchdog task already done: no forced cancellation, no warning
-        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
-        device.update_manager = AsyncMock()
-        finished = asyncio.create_task(asyncio.sleep(0))
-        await finished
-        device._watchdog_task = finished
-        with caplog.at_level(
-            logging.WARNING, logger="custom_components.smartbox.models"
-        ):
-            await device.cancel()
-        device.update_manager.cancel.assert_awaited_once()
-        assert not caplog.records
-
-        # Watchdog task still running: forced cancellation, warning logged,
-        # and cancel() returns promptly with the watchdog task cancelled
-        device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
-        device.update_manager = AsyncMock()
-        running = asyncio.create_task(asyncio.sleep(3600))
-        device._watchdog_task = running
-        with caplog.at_level(
-            logging.WARNING, logger="custom_components.smartbox.models"
-        ):
-            await device.cancel()
-        device.update_manager.cancel.assert_awaited_once()
-        assert running.cancelled()
-        assert_log_message(
-            caplog,
-            "custom_components.smartbox.models",
-            logging.WARNING,
-            f"Force-cancelling watchdog task for device {dev_id}",
+        device = SmartboxDevice(
+            MOCK_SMARTBOX_DEVICE_INFO["device_1"], MagicMock(), hass
         )
+        device._supervisor.stop = AsyncMock()
+        await device.cancel()
+        device._supervisor.stop.assert_awaited_once()
+
+
+async def test_update_error_requests_reauth_on_invalid_auth(hass):
+    """Rejected credentials stop the supervision and signal reauth."""
+    with patch(
+        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        new_callable=NonCallableMock,
+    ):
+        device = SmartboxDevice(
+            MOCK_SMARTBOX_DEVICE_INFO["device_1"], MagicMock(), hass
+        )
+        with patch("custom_components.smartbox.models.async_dispatcher_send") as send:
+            assert device._on_update_error(InvalidAuthError("no")) is True
+            send.assert_called_once_with(hass, "smartbox_device_1_reauth_required")
+        assert device._on_update_error(RuntimeError("boom")) is False
 
 
 async def test_smartbox_device_node_status_update(hass, caplog):
@@ -1308,44 +1289,6 @@ async def test_smartbox_node_prog(hass):
     assert node.prog == {"0": [0] * 24, "1": [1] * 24} | {"1": [2] * 24}
 
 
-async def test_watchdog_restarts_on_unexpected_exit(hass, caplog):
-    """run() dying unexpectedly is logged and the task is restarted."""
-    mock_session = MagicMock()
-    with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
-        new_callable=NonCallableMock,
-    ):
-        device = SmartboxDevice(
-            MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass
-        )
-        device.update_manager.run = AsyncMock()
-
-        # Spy on the restart scheduler: record the call, then flip _stopping
-        # so the churn loop cannot keep scheduling restart tasks forever.
-        restarts: list[None] = []
-
-        def _record_restart() -> None:
-            restarts.append(None)
-            device._stopping = True
-
-        device._schedule_watchdog_restart = _record_restart
-
-        task = asyncio.create_task(device.update_manager.run())
-        device._watchdog_task = task
-        task.add_done_callback(device._watchdog_done)
-        await task
-        # Flush the done callback (it runs via loop.call_soon).
-        await asyncio.sleep(0)
-
-        assert restarts, "unexpected run() exit must schedule a restart"
-        assert_log_message(
-            caplog,
-            "custom_components.smartbox.models",
-            logging.ERROR,
-            "Update task for device device_1 exited unexpectedly; restarting",
-        )
-
-
 async def test_dispatch_node_status(hass):
     """Status snapshots go out on the node's status dispatcher event."""
     with patch(
@@ -1434,41 +1377,6 @@ async def test_update_status_lost_frame_keeps_snapshot():
     )
     node.update_status({"sync_status": "lost"})
     assert node.status == {"mtemp": "21.4", "sync_status": "lost"}
-
-
-async def test_cancel_does_not_restart_watchdog_when_run_returns(hass, caplog):
-    """run() returning after cancel() (reconnect backoff) must not restart it."""
-    mock_session = MagicMock()
-    with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
-        new_callable=NonCallableMock,
-    ):
-        device = SmartboxDevice(
-            MOCK_SMARTBOX_DEVICE_INFO["device_1"], mock_session, hass
-        )
-        exit_requested = asyncio.Event()
-
-        async def _run() -> None:
-            await exit_requested.wait()
-
-        async def _cancel() -> None:
-            exit_requested.set()
-            await asyncio.sleep(0)
-
-        device.update_manager.run = _run
-        device.update_manager.cancel = _cancel
-        restarts: list[None] = []
-        device._schedule_watchdog_restart = lambda: restarts.append(None)
-
-        task = asyncio.create_task(device.update_manager.run())
-        device._watchdog_task = task
-        task.add_done_callback(device._watchdog_done)
-
-        await device.cancel()
-        await asyncio.sleep(0)
-
-        assert not restarts
-        assert "exited unexpectedly" not in caplog.text
 
 
 def test_unknown_mode_warns_only_once(caplog):
