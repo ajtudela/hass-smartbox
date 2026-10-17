@@ -45,8 +45,10 @@ SMARTBOX_WRITE_CONFIRM_TIMEOUT = 6.0
 # tokens are not JWTs; NON-deterministic probe trouble (timeouts, 5xx)
 # is transient and retries via ConfigEntryNotReady like every other
 # setup step — the fallback doctrine never demotes transient trouble.
-# Change this constant to force the legacy per-device transport.
-SMARTBOX_WS_BACKEND = "ws_user"
+# The "transport" option forces the legacy per-device transport.
+CONF_TRANSPORT = "transport"
+TRANSPORT_AUTO = "auto"
+TRANSPORT_SOCKET_IO = "socket_io"
 GITHUB_ISSUES_URL = "https://github.com/ajtudela/hass-smartbox/issues"
 
 HEATER_NODE_TYPES = [

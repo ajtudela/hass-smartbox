@@ -46,11 +46,13 @@
         "data": {
           "history_consumption": "Consumption history",
           "timedelta_update_power": "Delta for update power entity (in sec)",
-          "reseller_entity": "Reseller logo for entities"
+          "reseller_entity": "Reseller logo for entities",
+          "transport": "Transport"
         },
         "data_description": {
           "history_consumption": "Consumption history recovery mode. Auto: forces the data. Start: initialization. Off: no data recovery (be careful, some values ​​may be aberrant).",
-          "timedelta_update_power": "Delta between to attempts to update the power entity for pmo"
+          "timedelta_update_power": "Delta between to attempts to update the power entity for pmo",
+          "transport": "Websocket transport. Automatic uses one shared connection per account when the server supports it; Per-device forces the legacy connection per box."
         }
       }
     }
@@ -186,6 +188,14 @@
           "name": "Schedule",
           "description": "Day-keyed profile slots, e.g. {\"0\": [0, 0, 1, 1, ...]} with 24 entries per day (48 where the heater supports half-hourly slots)."
         }
+      }
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "auto": "Automatic",
+        "socket_io": "Per-device (socket.io)"
       }
     }
   }

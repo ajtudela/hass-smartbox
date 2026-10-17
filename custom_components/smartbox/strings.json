@@ -46,11 +46,13 @@
         "data": {
           "history_consumption": "[%key:common::options::data::history_consumption%]",
           "reseller_entity": "[%key:common::options::data::reseller_entity%]",
-          "timedelta_update_power": "[%key:common::options::data::timedelta_update_power%]"
+          "timedelta_update_power": "[%key:common::options::data::timedelta_update_power%]",
+          "transport": "Transport"
         },
         "data_description": {
           "history_consumption": "[%key:common::options::data_description::history_consumption%]",
-          "timedelta_update_power": "[%key:common::options::data_description::timedelta_update_power%]"
+          "timedelta_update_power": "[%key:common::options::data_description::timedelta_update_power%]",
+          "transport": "Websocket transport. Automatic uses one shared connection per account when the server supports it; Per-device forces the legacy connection per box."
         }
       }
     }
@@ -186,6 +188,14 @@
           "name": "Schedule",
           "description": "Day-keyed profile slots, e.g. {\"0\": [0, 0, 1, 1, ...]} with 24 entries per day (48 where the heater supports half-hourly slots)."
         }
+      }
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "auto": "Automatic",
+        "socket_io": "Per-device (socket.io)"
       }
     }
   }

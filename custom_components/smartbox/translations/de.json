@@ -46,11 +46,13 @@
         "data": {
           "history_consumption": "Verbrauchsverlauf",
           "reseller_entity": "Händlerlogo für Entitäten",
-          "timedelta_update_power": "Delta für Aktualisierung der Leistungs-Entität (in Sek.)"
+          "timedelta_update_power": "Delta für Aktualisierung der Leistungs-Entität (in Sek.)",
+          "transport": "Transport"
         },
         "data_description": {
           "history_consumption": "Modus der Wiederherstellung des Verbrauchsverlaufs. Auto: erzwingt die Daten. Start: Initialisierung. Aus: keine Datenwiederherstellung (Achtung, einige Werte können abweichend sein).",
-          "timedelta_update_power": "Zeitabstand zwischen den Versuchen, die Leistungs-Entität für pmo zu aktualisieren"
+          "timedelta_update_power": "Zeitabstand zwischen den Versuchen, die Leistungs-Entität für pmo zu aktualisieren",
+          "transport": "Websocket-Transport. Automatisch nutzt eine gemeinsame Verbindung pro Konto, wenn der Server dies unterstützt; Pro Gerät erzwingt die alte Verbindung pro Box."
         }
       }
     }
@@ -186,6 +188,14 @@
           "name": "Zeitplan",
           "description": "Programmfenster pro Tag, z. B. {\"0\": [0, 0, 1, 1, ...]} mit 24 Einträgen pro Tag (48, wo der Heizkörper halbstündige Fenster unterstützt)."
         }
+      }
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "auto": "Automatisch",
+        "socket_io": "Pro Gerät (socket.io)"
       }
     }
   }

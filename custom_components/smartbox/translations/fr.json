@@ -46,11 +46,13 @@
         "data": {
           "history_consumption": "Historique de consommation",
           "reseller_entity": "Logo du revendeur pour les entités",
-          "timedelta_update_power": "Délai de récupération des données de puissance (in sec)"
+          "timedelta_update_power": "Délai de récupération des données de puissance (in sec)",
+          "transport": "Transport"
         },
         "data_description": {
           "history_consumption": "Mode de récupération de l'historique de consommation. Auto: force les données. Start: initialisation. Off: aucune récupération des données (attention, certaines valeurs peuvent être abérantes).",
-          "timedelta_update_power": "Temps entre deux récupération de la puissance de l'entité"
+          "timedelta_update_power": "Temps entre deux récupération de la puissance de l'entité",
+          "transport": "Transport websocket. Automatique utilise une connexion partagée par compte quand le serveur le permet ; Par appareil force l'ancienne connexion par boîtier."
         }
       }
     }
@@ -189,6 +191,14 @@
           "name": "Programme",
           "description": "Créneaux par jour, p. ex. {\"0\": [0, 0, 1, 1, ...]} avec 24 entrées par jour (48 là où le radiateur gère des créneaux de 30 minutes)."
         }
+      }
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "auto": "Automatique",
+        "socket_io": "Par appareil (socket.io)"
       }
     }
   }

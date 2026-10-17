@@ -37,8 +37,11 @@ from .const import (
     CONF_DISPLAY_ENTITY_PICTURES,
     CONF_HISTORY_CONSUMPTION,
     CONF_TIMEDELTA_POWER,
+    CONF_TRANSPORT,
     DEFAULT_TIMEDELTA_POWER,
     DOMAIN,
+    TRANSPORT_AUTO,
+    TRANSPORT_SOCKET_IO,
     HistoryConsumptionStatus,
 )
 
@@ -70,6 +73,13 @@ OPTIONS_DATA_SCHEMA = {
     vol.Required(
         CONF_TIMEDELTA_POWER, default=DEFAULT_TIMEDELTA_POWER
     ): cv.positive_int,
+    vol.Required(CONF_TRANSPORT, default=TRANSPORT_AUTO): SelectSelector(
+        SelectSelectorConfig(
+            options=[TRANSPORT_AUTO, TRANSPORT_SOCKET_IO],
+            mode=SelectSelectorMode.DROPDOWN,
+            translation_key=CONF_TRANSPORT,
+        )
+    ),
 }
 
 

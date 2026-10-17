@@ -30,8 +30,13 @@ from smartbox.error import (
     WsUserUnsupportedError,
 )
 
-from . import const
-from .const import CONF_API_NAME, DOMAIN
+from .const import (
+    CONF_API_NAME,
+    CONF_TRANSPORT,
+    DOMAIN,
+    TRANSPORT_AUTO,
+    TRANSPORT_SOCKET_IO,
+)
 from .device import SmartboxDevice, get_devices
 from .supervisor import TransportSupervisor
 
@@ -343,7 +348,7 @@ async def _async_create_ws_user_socket(
     per-device transports' failure modes with ConfigEntryAuthFailed /
     ConfigEntryNotReady as appropriate.
     """
-    if const.SMARTBOX_WS_BACKEND != "ws_user":
+    if entry.options.get(CONF_TRANSPORT, TRANSPORT_AUTO) == TRANSPORT_SOCKET_IO:
         return None
     try:
         await check_ws_user_support(entry.runtime_data.client)

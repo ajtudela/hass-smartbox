@@ -46,11 +46,13 @@
         "data": {
           "history_consumption": "Historial de consumo",
           "reseller_entity": "Entidad del revendedor",
-          "timedelta_update_power": "Delta para actualizar entidad de potencia (en seg)"
+          "timedelta_update_power": "Delta para actualizar entidad de potencia (en seg)",
+          "transport": "Transporte"
         },
         "data_description": {
           "history_consumption": "Modo de recuperación del historial de consumo. Auto: fuerza los datos. Inicio: inicialización. Apagado: no hay recuperación de datos (cuidado, algunos valores pueden ser aberrantes).",
-          "timedelta_update_power": "Delta entre intentos de actualizar la entidad de energía para pmo"
+          "timedelta_update_power": "Delta entre intentos de actualizar la entidad de energía para pmo",
+          "transport": "Transporte websocket. Automático usa una conexión compartida por cuenta cuando el servidor lo admite; Por dispositivo fuerza la conexión antigua por caja."
         }
       }
     }
@@ -186,6 +188,14 @@
           "name": "Horario",
           "description": "Franjas por día, p. ej. {\"0\": [0, 0, 1, 1, ...]} con 24 entradas por día (48 donde el radiador admita franjas de media hora)."
         }
+      }
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "auto": "Automático",
+        "socket_io": "Por dispositivo (socket.io)"
       }
     }
   }

@@ -28,6 +28,7 @@ from custom_components.smartbox import (
     _async_create_ws_user_socket,
     _create_ws_user_supervisor,
 )
+from custom_components.smartbox.const import CONF_TRANSPORT, TRANSPORT_SOCKET_IO
 
 
 async def _supervise_ws_user_socket(hass, entry) -> None:
@@ -96,17 +97,14 @@ async def test_setup_probe_success_builds_shared_socket(hass, config_entry):
 
 
 @pytest.mark.asyncio
-async def test_setup_probe_backend_socket_io_skips_probe(config_entry):
-    """The legacy backend never probes.
-
-    The constant is read lazily, so tests can patch const.SMARTBOX_WS_BACKEND.
-    """
+async def test_setup_probe_backend_socket_io_skips_probe(hass, config_entry):
+    """The "socket_io" transport option never probes."""
+    hass.config_entries.async_update_entry(
+        config_entry, options={CONF_TRANSPORT: TRANSPORT_SOCKET_IO}
+    )
     config_entry.runtime_data = SimpleNamespace(client=MagicMock())
     probe = AsyncMock()
-    with (
-        patch.object(smartbox_init.const, "SMARTBOX_WS_BACKEND", "socket_io"),
-        patch("custom_components.smartbox.check_ws_user_support", probe),
-    ):
+    with patch("custom_components.smartbox.check_ws_user_support", probe):
         assert await _async_create_ws_user_socket(config_entry) is None
     probe.assert_not_awaited()
 
