@@ -10,7 +10,8 @@ from .const import CONF_DISPLAY_ENTITY_PICTURES, DOMAIN
 
 if TYPE_CHECKING:
     from . import SmartboxConfigEntry
-    from .models import SmartboxDevice, SmartboxNode
+    from .device import SmartboxDevice
+    from .node import SmartboxNode
 
 
 class DefaultSmartBoxEntity(Entity):

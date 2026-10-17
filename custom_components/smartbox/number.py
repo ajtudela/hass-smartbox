@@ -22,12 +22,8 @@ from .const import (
     SERVICE_SET_BOOST_PARAMS,
 )
 from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
-from .models import (
-    away_offset_available,
-    get_temperature_unit,
-    max_temp_limit_available,
-    prog_temps_available,
-)
+from .node import away_offset_available, max_temp_limit_available, prog_temps_available
+from .protocol import get_temperature_unit
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall

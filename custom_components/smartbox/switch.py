@@ -8,12 +8,12 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
-from .models import (
-    get_boost_end_datetime,
+from .node import (
     max_temp_limit_available,
     true_radiant_available,
     window_mode_available,
 )
+from .protocol import get_boost_end_datetime
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant

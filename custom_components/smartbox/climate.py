@@ -27,9 +27,8 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity import SmartBoxNodeEntity
-from .models import (
-    SmartboxNode,
-    _check_status_key,
+from .protocol import (
+    check_status_key,
     get_hvac_mode,
     get_target_temperature,
     get_temperature_unit,
@@ -44,6 +43,7 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
+    from .node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         await self._node.set_status(**status_args)
 
     def _preset_mode_for_manual(self) -> str | None:
-        _check_status_key("selected_temp", self._node.node_type, self._status)
+        check_status_key("selected_temp", self._node.node_type, self._status)
         selected_temp = self._status["selected_temp"]
         if selected_temp == "comfort":
             return PRESET_COMFORT
@@ -217,7 +217,7 @@ class SmartboxHeater(SmartBoxNodeEntity, ClimateEntity):
         if self._node.boost:
             return PRESET_BOOST
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
-            _check_status_key("mode", self._node.node_type, self._status)
+            check_status_key("mode", self._node.node_type, self._status)
             mode = self._status["mode"]
             if mode == "auto":
                 return PRESET_SCHEDULE

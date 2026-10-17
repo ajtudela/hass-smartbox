@@ -32,11 +32,13 @@ from smartbox.error import (
 
 from . import const
 from .const import CONF_API_NAME, DOMAIN
-from .models import SmartboxDevice, SmartboxNode, get_devices
+from .device import SmartboxDevice, get_devices
 from .supervisor import TransportSupervisor
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
+
+    from .node import SmartboxNode
 
 __version__ = "2.6.0"
 
@@ -99,7 +101,7 @@ def _async_wire_reauth(
     """Wire per-device rejected-credentials signals to the reauth flow.
 
     A websocket loop dying with rejected credentials surfaces here so the
-    entry can start its reauthentication flow (models.py stays entry-free).
+    entry can start its reauthentication flow (device.py stays entry-free).
     """
     for device in entry.runtime_data.devices:
 
@@ -193,7 +195,7 @@ def _async_rehome_device_entities(
 
 
 # Backoff for restarting the shared ws_user socket after an unexpected
-# exit (mirrors the per-device watchdog pattern in models.py).
+# exit (mirrors the per-device supervisor in device.py).
 _WS_USER_WATCHDOG_BASE_SECONDS: Final = 5.0
 _WS_USER_WATCHDOG_MAX_SECONDS: Final = 300.0
 # A run that lasted this long resets the restart ratchet: seven
@@ -205,7 +207,7 @@ _WS_USER_RUN_RESET_SECONDS: Final = 60.0
 # auto-reloading (manual reload required).
 _WS_USER_RELOAD_WINDOW_SECONDS: Final = 600.0
 _WS_USER_RELOAD_LIMIT: Final = 3
-# Bounded shared-socket teardown, mirroring models.py's _TEARDOWN_TIMEOUT_SECONDS.
+# Bounded shared-socket teardown, mirroring the supervisor teardown timeout.
 _WS_USER_TEARDOWN_TIMEOUT_SECONDS: Final = 10.0
 
 
@@ -392,7 +394,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         entry.runtime_data.nodes.extend(nodes)
 
     # A websocket loop dying with rejected credentials surfaces here so the
-    # entry can start its reauthentication flow (models.py stays entry-free).
+    # entry can start its reauthentication flow (device.py stays entry-free).
     _async_wire_reauth(hass, entry)
 
     if entry.runtime_data.ws_user_socket is not None:

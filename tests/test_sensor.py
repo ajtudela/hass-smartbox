@@ -19,7 +19,7 @@ from custom_components.smartbox.const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from custom_components.smartbox.models import rtc_time_to_datetime
+from custom_components.smartbox.protocol import rtc_time_to_datetime
 from custom_components.smartbox.sensor import (
     BoostEndTimeSensor,
     ChargeLevelSensor,
@@ -524,7 +524,7 @@ async def test_native_value_boost_end_time_sensor(hass, mock_smartbox, config_en
 
     # boost_end_min is the minute of the day (UTC) at which boost ends
     with patch(
-        "custom_components.smartbox.models.dt_util.utcnow",
+        "custom_components.smartbox.node.dt_util.utcnow",
         return_value=datetime(2023, 10, 10, 1, 0, tzinfo=dt_util.UTC),
     ):
         expected_time = datetime(2023, 10, 10, 1, 30, tzinfo=dt_util.UTC)
@@ -575,7 +575,7 @@ async def test_transient_sync_lost_frame_keeps_last_status(
     # the pair back-to-back so the test exercises exactly the transient
     # pattern; the entity must keep its last full snapshot (no KeyError,
     # no state churn).
-    # A bare lost frame is never DISPATCHED to entities (models.py only
+    # A bare lost frame is never DISPATCHED to entities (device.py only
     # forwards ok frames), so the snapshot must survive it untouched:
     # pinned by object identity. Contents must NOT be asserted here -
     # the mock's frame bodies alias its persistent socket dict and the

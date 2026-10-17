@@ -23,18 +23,19 @@ from custom_components.smartbox.const import (
     PRESET_SELF_LEARN,
     SmartboxNodeType,
 )
-from custom_components.smartbox.models import (
-    _WARNED_UNKNOWN,
-    SmartboxDevice,
+from custom_components.smartbox.device import SmartboxDevice, get_devices
+from custom_components.smartbox.node import (
     SmartboxNode,
     away_offset_available,
-    get_devices,
-    get_hvac_mode,
-    get_target_temperature,
-    get_temperature_unit,
     max_temp_limit_available,
     priority_available,
     prog_temps_available,
+)
+from custom_components.smartbox.protocol import (
+    _WARNED_UNKNOWN,
+    get_hvac_mode,
+    get_target_temperature,
+    get_temperature_unit,
     set_hvac_mode_args,
     set_preset_mode_status_update,
     set_temperature_args,
@@ -54,7 +55,7 @@ async def test_smartbox_device_dev_data_updates(hass):
     mock_node_2 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -85,7 +86,7 @@ async def test_smartbox_device_connected_updates(hass):
     mock_node_2.node_id = "device_1_2"
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -95,7 +96,7 @@ async def test_smartbox_device_connected_updates(hass):
         }
 
         with patch(
-            "custom_components.smartbox.models.async_dispatcher_send"
+            "custom_components.smartbox.device.async_dispatcher_send"
         ) as mock_send:
             device._connected(connected=True)
             assert device.connected
@@ -124,7 +125,7 @@ async def test_get_devices_cancels_devices_on_failure(hass, mock_smartbox):
     initialised_device = AsyncMock()
     with (
         patch(
-            "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+            "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
             AsyncMock(side_effect=[initialised_device, APIUnavailableError("fail")]),
         ),
         pytest.raises(APIUnavailableError),
@@ -137,7 +138,7 @@ async def test_get_devices_cancels_devices_on_failure(hass, mock_smartbox):
 async def test_cancel_stops_the_supervisor(hass):
     """Device cancel delegates to the transport supervisor."""
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(
@@ -151,13 +152,13 @@ async def test_cancel_stops_the_supervisor(hass):
 async def test_update_error_requests_reauth_on_invalid_auth(hass):
     """Rejected credentials stop the supervision and signal reauth."""
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(
             MOCK_SMARTBOX_DEVICE_INFO["device_1"], MagicMock(), hass
         )
-        with patch("custom_components.smartbox.models.async_dispatcher_send") as send:
+        with patch("custom_components.smartbox.device.async_dispatcher_send") as send:
             assert device._on_update_error(InvalidAuthError("no")) is True
             send.assert_called_once_with(hass, "smartbox_device_1_reauth_required")
         assert device._on_update_error(RuntimeError("boom")) is False
@@ -172,7 +173,7 @@ async def test_smartbox_device_node_status_update(hass, caplog):
     mock_node_3 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -208,7 +209,7 @@ async def test_smartbox_device_node_status_update(hass, caplog):
         mock_node_2.update_status.assert_not_called()
         assert_log_message(
             caplog,
-            "custom_components.smartbox.models",
+            "custom_components.smartbox.device",
             logging.ERROR,
             "Received status update for unknown node htr 3",
         )
@@ -222,7 +223,7 @@ async def test_smartbox_device_node_setup_update(hass, caplog):
     mock_node_2 = MagicMock()
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -250,7 +251,7 @@ async def test_smartbox_device_node_setup_update(hass, caplog):
         mock_node_2.update_setup.assert_not_called()
         assert_log_message(
             caplog,
-            "custom_components.smartbox.models",
+            "custom_components.smartbox.device",
             logging.ERROR,
             "Received setup update for unknown node htr 3",
         )
@@ -1026,7 +1027,7 @@ def test_smartbox_device_property():
     mock_device_info = MOCK_SMARTBOX_DEVICE_INFO[dev_id]
     # Simulate initialise_nodes with mock data, make sure nobody calls the real one
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(mock_device_info, mock_session, hass=None)
@@ -1039,7 +1040,7 @@ async def test_smartbox_device_away_status_extras(hass):
     dev_id = "device_1"
     mock_session = MagicMock()
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -1057,7 +1058,7 @@ async def test_smartbox_device_power_limit_no_limit(hass):
     dev_id = "device_1"
     mock_session = MagicMock()
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -1088,7 +1089,7 @@ async def test_smartbox_device_rtc_cache(hass):
         return_value={"d": 27, "h": 9, "m": 55, "n": 8, "s": 24, "w": 0, "y": 2026}
     )
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -1151,11 +1152,11 @@ async def test_remaining_boost_time(hass):
     fixed_now = datetime(2023, 10, 10, 1, 0, tzinfo=dt_util.UTC)
     with (
         patch(
-            "custom_components.smartbox.models.dt_util.utcnow",
+            "custom_components.smartbox.node.dt_util.utcnow",
             return_value=fixed_now,
         ),
         patch(
-            "custom_components.smartbox.models.dt_util.now",
+            "custom_components.smartbox.node.dt_util.now",
             return_value=fixed_now,
         ),
     ):
@@ -1177,7 +1178,7 @@ async def test_smartbox_device_node_prog_update(hass, caplog):
     mock_node_2 = MagicMock()
     mock_node_2.node_id = "device_1_2"
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(MOCK_SMARTBOX_DEVICE_INFO[dev_id], mock_session, hass)
@@ -1187,7 +1188,7 @@ async def test_smartbox_device_node_prog_update(hass, caplog):
         }
 
         with patch(
-            "custom_components.smartbox.models.async_dispatcher_send"
+            "custom_components.smartbox.device.async_dispatcher_send"
         ) as mock_send:
             # REST-shape payload (subscribe_to_node_prog update flow)
             device._node_prog_update(SmartboxNodeType.HTR, 1, {"prog": {"0": [1, 2]}})
@@ -1228,7 +1229,7 @@ async def test_smartbox_device_node_prog_update(hass, caplog):
         device._node_prog_update(SmartboxNodeType.HTR, 3, {"prog": {"0": [0]}})
         assert_log_message(
             caplog,
-            "custom_components.smartbox.models",
+            "custom_components.smartbox.device",
             logging.ERROR,
             "Received prog update for unknown node htr 3",
         )
@@ -1289,7 +1290,7 @@ async def test_smartbox_node_prog(hass):
 async def test_dispatch_node_status(hass):
     """Status snapshots go out on the node's status dispatcher event."""
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(
@@ -1297,7 +1298,7 @@ async def test_dispatch_node_status(hass):
         )
     mock_node = MagicMock()
     mock_node.node_id = "device_1_0"
-    with patch("custom_components.smartbox.models.async_dispatcher_send") as mock_send:
+    with patch("custom_components.smartbox.device.async_dispatcher_send") as mock_send:
         device.dispatch_node_status(mock_node, {"mtemp": "21.4"})
     mock_send.assert_called_once_with(
         hass, "smartbox_device_1_0_status", {"mtemp": "21.4"}
@@ -1313,7 +1314,7 @@ async def test_node_status_update_forwards_frame_equal_to_cache(hass):
     unrelated change pushed a different frame.
     """
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(
@@ -1331,7 +1332,7 @@ async def test_node_status_update_forwards_frame_equal_to_cache(hass):
 
         frame = dict(mock_node.status)
         with patch(
-            "custom_components.smartbox.models.async_dispatcher_send"
+            "custom_components.smartbox.device.async_dispatcher_send"
         ) as mock_send:
             device._node_status_update(SmartboxNodeType.HTR, 0, frame)
         mock_node.update_status.assert_called_once_with(frame)
@@ -1341,7 +1342,7 @@ async def test_node_status_update_forwards_frame_equal_to_cache(hass):
 async def test_node_status_update_skips_non_ok_frames(hass):
     """sync_status != ok frames are not dispatched to entities."""
     with patch(
-        "custom_components.smartbox.models.SmartboxDevice.initialise_nodes",
+        "custom_components.smartbox.device.SmartboxDevice.initialise_nodes",
         new_callable=NonCallableMock,
     ):
         device = SmartboxDevice(
@@ -1352,7 +1353,7 @@ async def test_node_status_update_skips_non_ok_frames(hass):
         device._nodes = {(SmartboxNodeType.HTR, 0): mock_node}
 
         with patch(
-            "custom_components.smartbox.models.async_dispatcher_send"
+            "custom_components.smartbox.device.async_dispatcher_send"
         ) as mock_send:
             device._node_status_update(SmartboxNodeType.HTR, 0, {"sync_status": "lost"})
         # The sync marker still enters the node cache (the poll path uses it

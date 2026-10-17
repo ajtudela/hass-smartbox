@@ -22,7 +22,7 @@ from smartbox import (
 from smartbox.error import APIUnavailableError, InvalidAuthError, SmartboxError
 from smartbox.retry import backoff_delay
 
-# Session methods the integration calls (models.py, __init__.py, config_flow.py).
+# Session methods the integration calls (node.py, device.py, __init__.py, config_flow.py).
 SESSION_METHODS = (
     "get_devices",
     "get_homes",
@@ -47,7 +47,7 @@ SESSION_METHODS = (
     "set_node_prog",
 )
 
-# UpdateManager subscriptions wired in SmartboxDevice (models.py).
+# UpdateManager subscriptions wired in SmartboxDevice (device.py).
 SUBSCRIPTION_METHODS = (
     "subscribe_to_device_connected",
     "subscribe_to_device_away_status",
@@ -121,7 +121,7 @@ def test_async_session_surface() -> None:
 
 
 def test_update_manager_surface() -> None:
-    """UpdateManager keeps the constructor/subscription model models.py uses."""
+    """UpdateManager keeps the constructor/subscription model device.py uses."""
     init_params = list(inspect.signature(UpdateManager.__init__).parameters)
     assert init_params[:3] == ["self", "session", "device_id"]
 
@@ -152,7 +152,7 @@ def test_availability_surface() -> None:
     assert params["unavailable_delay"].default > 0
     assert callable(UpdateManager.get_node_availability)
     # subscribe_to_node_availability keeps an explicit callback parameter,
-    # like every other subscription wired in models.py.
+    # like every other subscription wired in device.py.
     sub_params = inspect.signature(
         UpdateManager.subscribe_to_node_availability,
     ).parameters

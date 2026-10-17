@@ -21,7 +21,7 @@ from custom_components.smartbox import (
     update_listener,
 )
 from custom_components.smartbox.const import DOMAIN
-from custom_components.smartbox.models import SmartboxDevice
+from custom_components.smartbox.device import SmartboxDevice
 
 # Key -> entity domain of the legacy per-node registry entries to re-home.
 _LEGACY_KEYS = {

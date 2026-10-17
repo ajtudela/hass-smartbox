@@ -54,10 +54,8 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity import SmartboxBoxEntity, SmartBoxNodeEntity
-from .models import (
+from .protocol import (
     ProgDict,
-    SmartboxDevice,
-    SmartboxNode,
     get_boost_end_datetime,
     get_current_prog_profile,
     get_next_prog_change,
@@ -73,6 +71,8 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
+    from .device import SmartboxDevice
+    from .node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=15)

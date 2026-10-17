@@ -7,14 +7,14 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 
 from .entity import SmartBoxNodeEntity
-from .models import priority_available
+from .node import priority_available
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from . import SmartboxConfigEntry
-    from .models import SmartboxNode
+    from .node import SmartboxNode
 
 _LOGGER = logging.getLogger(__name__)
 
