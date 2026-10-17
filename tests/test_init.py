@@ -23,6 +23,8 @@ from custom_components.smartbox import (
 from custom_components.smartbox.const import DOMAIN
 from custom_components.smartbox.core.device import SmartboxDevice
 
+from .mocks import get_device_by_identifier
+
 # Key -> entity domain of the legacy per-node registry entries to re-home.
 _LEGACY_KEYS = {
     "away_status": SWITCH_DOMAIN,
@@ -256,7 +258,9 @@ async def test_box_device_created_and_legacy_entities_rehomed(
         for device_dict in await mock_smartbox.session.get_devices()
     }
     for dev_id in ("device_1", "device_2"):
-        box_device = device_registry.async_get_device(identifiers={(DOMAIN, dev_id)})
+        box_device = get_device_by_identifier(
+            device_registry, config_entry.entry_id, (DOMAIN, dev_id)
+        )
         assert box_device is not None
         assert box_device.name == device_dicts[dev_id]["name"]
         assert box_device.sw_version == device_dicts[dev_id]["fw_version"]

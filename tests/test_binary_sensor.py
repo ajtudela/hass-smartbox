@@ -5,7 +5,11 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.smartbox.const import DOMAIN
 
-from .mocks import get_connected_binary_sensor_entity_id, get_entity_id_from_unique_id
+from .mocks import (
+    get_connected_binary_sensor_entity_id,
+    get_device_by_identifier,
+    get_entity_id_from_unique_id,
+)
 
 
 async def test_connected_sensor_updates_without_polling(
@@ -56,8 +60,8 @@ async def test_connected_sensor_is_on_box_device(hass, mock_smartbox, config_ent
             get_entity_id_from_unique_id(hass, BINARY_SENSOR_DOMAIN, unique_id)
             == entity_id
         )
-        box_device = device_registry.async_get_device(
-            identifiers={(DOMAIN, device_dict["dev_id"])}
+        box_device = get_device_by_identifier(
+            device_registry, config_entry.entry_id, (DOMAIN, device_dict["dev_id"])
         )
         assert box_device is not None
         entity_entry = entity_registry.async_get(entity_id)

@@ -10,7 +10,7 @@ from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.helpers import entity_registry
+from homeassistant.helpers import device_registry as dr, entity_registry
 from smartbox import AsyncSmartboxSession
 from smartbox.reseller import SmartboxReseller
 
@@ -235,6 +235,24 @@ def get_node_unique_id(
     mock_device: dict[str, Any], mock_node: dict[str, Any], entity_type: str
 ) -> str:
     return f"{mock_device['dev_id']}_{mock_node['addr']}_{entity_type}"
+
+
+def get_device_by_identifier(registry, config_entry_id, identifier):
+    """Return the entry's registry device with an identifier.
+
+    ``async_get_device`` and the mapping access to ``registry.devices`` are
+    deprecated in recent Home Assistant (identifiers are no longer unique
+    across config entries) and their replacements do not exist in older
+    releases, so go through ``async_entries_for_config_entry``.
+    """
+    return next(
+        (
+            device
+            for device in dr.async_entries_for_config_entry(registry, config_entry_id)
+            if identifier in device.identifiers
+        ),
+        None,
+    )
 
 
 def get_entity_id_from_unique_id(hass, platform, unique_id):
