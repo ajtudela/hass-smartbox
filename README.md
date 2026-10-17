@@ -77,9 +77,10 @@ api-notes.md "Transports — socket_io vs ws_user"):
   visible in Settings → Devices → diagnostics as
   `runtime_data.transport`.
 
-The transport is chosen by `SMARTBOX_WS_BACKEND` in
-`custom_components/smartbox/const.py` — set it to `"socket_io"` to
-force the legacy per-device connections.
+The transport is chosen with the **Transport** option of the integration
+(Settings → Devices & services → Smartbox → Configure): `Automatic`
+(default) uses `ws_user` when the server supports it, and `Per-device
+(socket.io)` forces the legacy per-device connections.
 
 ## Features
 
