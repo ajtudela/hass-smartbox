@@ -1,47 +1,24 @@
 <!-- record:begin -->
-> **Maintained here.** This is the decoded web app's statics record this
-> repository cites (`docs/webapi-spec.md`); corrections and new findings are
-> recorded in this file.
+> **Maintained here.** This is the decoded web app's statics record this repository cites (`docs/webapi-spec.md`); corrections and new findings are recorded in this file.
 <!-- record:end -->
 
-> **Role.** The decoded web app's API surface (statics): endpoints, bodies,
-> the schedule model, and the local box API. It records what that bundle
-> does. Wire acceptance is settled in `api-contract.md`; the current apps'
-> behavior (mobile 2.40.4 + web) is `api-ws-user.md`.
+> **Role.** The decoded web app's API surface (statics): endpoints, bodies, the schedule model, and the local box API. It records what that bundle does. Wire acceptance is settled in `api-contract.md`; the current apps' behavior (mobile 2.40.4 + web) is `api-ws-user.md`.
 
 # Web API spec — as used by the vendor app (Helki platform)
 
-**Provenance:** statically extracted from the official Android app
-`com.technotherm.lhzapp` v1.420.1 (APK sha256 `43df21cf…d4df1`),
-`assets/www/app.js` — the Cordova packaging of the same "Helki" Vue SPA that
-powers `app.smart-control.eu` (plus native BLE/ESP-Touch provisioning
-bridges). Cross-checked against live wire probes (see `api-contract.md`)
-("Observed behaviour") and against the 2.7 `smartbox` library's `session.py`
-surface; the 3.0 `smartbox` library supersedes that implementation.
+**Provenance:** statically extracted from the official Android app `com.technotherm.lhzapp` v1.420.1 (APK sha256 `43df21cf…d4df1`), `assets/www/app.js` — the Cordova packaging of the same "Helki" Vue SPA that powers `app.smart-control.eu` (plus native BLE/ESP-Touch provisioning bridges). Cross-checked against live wire probes (see `api-contract.md`) ("Observed behaviour") and against the 2.7 `smartbox` library's `session.py` surface; the 3.0 `smartbox` library supersedes that implementation.
 
-**Status markers:** ✔ = matches the 2.7 reference library's behaviour at the
-time of extraction; ⚠ = discrepancy or unverified-on-our-hardware item
-(each has an entry in §Discrepancies). These markers are historical: the
-3.0 integration's implemented surface is `api-contract.md` §3.1/§9, and a ✔
-here does not mean the 3.0 client calls that endpoint. Everything here is
-cloud-API over HTTPS — the current builds dial
-`https://users-api.helki.com` (`api-contract.md` §1.1 has the host
-history); the local-LAN API of the box is documented at the end (§Local
-API, informational).
+**Status markers:** ✔ = matches the 2.7 reference library's behaviour at the time of extraction; ⚠ = discrepancy or unverified-on-our-hardware item (each has an entry in §Discrepancies). These markers are historical: the 3.0 integration's implemented surface is `api-contract.md` §3.1/§9, and a ✔ here does not mean the 3.0 client calls that endpoint. Everything here is cloud-API over HTTPS — the current builds dial `https://users-api.helki.com` (`api-contract.md` §1.1 has the host history); the local-LAN API of the box is documented at the end (§Local API, informational).
 
 ---
 
 ## 1. Auth ✔
 
-- `POST /client/token`, headers `Authorization: Basic <client_basic_auth>`,
-  `Content-Type: application/x-www-form-urlencoded`, body form-encoded:
+- `POST /client/token`, headers `Authorization: Basic <client_basic_auth>`, `Content-Type: application/x-www-form-urlencoded`, body form-encoded:
   - sign-in: `grant_type=password`, `username`, `password`
   - refresh: `grant_type=refresh_token`, `refresh_token`
-- Response: `{access_token, refresh_token, expires_in}` → all later calls
-  `Authorization: Bearer <access_token>`.
-- Brand headers on every call: `x-serialid: <reseller serial id>`, and
-  `x-referer: <scheme+host of frontend>` where set (matches
-  `smartbox/reseller.py`). Library implementation ✔ identical.
+- Response: `{access_token, refresh_token, expires_in}` → all later calls `Authorization: Bearer <access_token>`.
+- Brand headers on every call: `x-serialid: <reseller serial id>`, and `x-referer: <scheme+host of frontend>` where set (matches `smartbox/reseller.py`). Library implementation ✔ identical.
 
 ## 2. Device / home level
 
@@ -89,8 +66,7 @@ API, informational).
 
 ### 3.1 Charge level field by model code
 
-The web app's `getChargeLevel` derives the model code from the node version's
-`pid` and picks the status field by it:
+The web app's `getChargeLevel` derives the model code from the node version's `pid` and picks the status field by it:
 
 ```js
 switch (((data.version || {}).pid || "").toUpperCase().slice(2, 4)) {
@@ -101,92 +77,40 @@ switch (((data.version || {}).pid || "").toUpperCase().slice(2, 4)) {
 }
 ```
 
-The slice is positional: characters 3–4 (indices 2–3) of the PID, so the
-four-character PID `081c` yields `1C`. Shorter PIDs yield the default branch.
-Provenance: decoded web-app helper; the snippet and the storage-heater case
-(`081c`) were reported against the upstream integration in PR #45
-(2025-12-07). The version endpoint carrying `pid` is recorded in
-`api-contract.md` §3.1 E24.
+The slice is positional: characters 3–4 (indices 2–3) of the PID, so the four-character PID `081c` yields `1C`. Shorter PIDs yield the default branch. Provenance: decoded web-app helper; the snippet and the storage-heater case (`081c`) were reported against the upstream integration in PR #45 (2025-12-07). The version endpoint carrying `pid` is recorded in `api-contract.md` §3.1 E24.
 
 ## 4. Status write semantics (as exercised by the app)
 
-(The current apps' write surface — endpoints and bodies — is
-`api-ws-user.md` §2.3; this section keeps the decoded web app's view.)
+(The current apps' write surface — endpoints and bodies — is `api-ws-user.md` §2.3; this section keeps the decoded web app's view.)
 
 App-side node managers build these bodies (all to `POST .../status`):
 
 1. Setpoint: `{stemp: "20.0", units: "C"}` — ✔ identical to integration.
-2. Setpoint in auto: same body; app *optionally* adds `"mode": "modified_auto"`
-   (auto→temp-bump mapping) gated on capability
-   `INDEPENDENT_TEMP_AND_MODE_ON_UPDATE`; a live probe shows fw 1.9
-   does **not** flip mode on the wire when only `{stemp, units}` is sent.
-3. Mode change: `{mode: "manual"|"auto"|"off"|…}`; when the capability above
-   is absent, MANUAL carries the temp too: `{mode, stemp, units}` (3-key!).
-4. Profile temps: `{ice_temp, eco_temp, comf_temp, units}` (4-key, all
-   temperature-category).
+2. Setpoint in auto: same body; app *optionally* adds `"mode": "modified_auto"` (auto→temp-bump mapping) gated on capability `INDEPENDENT_TEMP_AND_MODE_ON_UPDATE`; a live probe shows fw 1.9 does **not** flip mode on the wire when only `{stemp, units}` is sent.
+3. Mode change: `{mode: "manual"|"auto"|"off"|…}`; when the capability above is absent, MANUAL carries the temp too: `{mode, stemp, units}` (3-key!).
+4. Profile temps: `{ice_temp, eco_temp, comf_temp, units}` (4-key, all temperature-category).
 5. Lock: `{locked: bool}` ✔ single-key.
 
-**Refined one-key rule (supersedes the absolute pin in the pre-contract notes):**
-multi-key status POSTs are accepted **within a category** (temp-keys+units,
-mode+stemp+units) — the app does this in production. The observed silent
-drop happened on a **4-key mixed-category** body
-(`{locked, stemp, units, mode}`). Integration's sequential single-key posts
-remain the safe pattern; do not change without a live A/B probe.
+**Refined one-key rule (supersedes the absolute pin in the pre-contract notes):** multi-key status POSTs are accepted **within a category** (temp-keys+units, mode+stemp+units) — the app does this in production. The observed silent drop happened on a **4-key mixed-category** body (`{locked, stemp, units, mode}`). Integration's sequential single-key posts remain the safe pattern; do not change without a live A/B probe.
 
-Mode-change sequencing: before switching away from `boost`/`runback`, the app
-first POSTs the deactivate for the previous mode, then activates the new one
-(`deactivatePreviousMode()` → `activateMode()`). Not applicable to plain htr
-without those modes active.
+Mode-change sequencing: before switching away from `boost`/`runback`, the app first POSTs the deactivate for the previous mode, then activates the new one (`deactivatePreviousMode()` → `activateMode()`). Not applicable to plain htr without those modes active.
 
-`modified_auto`: exists as an app-level mode value; on fw 1.9 the device does
-not reflect it on the wire when not explicitly sent. Sending it explicitly
-(the §4 item 2 body) DOES engage it (live-probed 2026-09-28): the mode flips, the heater follows, and the
-override persists until reverted with `{"mode": "auto"}` (no self-revert
-within a 60 s window; the app's UX reverts at the next differing programme
-temperature). CONFIRMED by direct capture of the web app on this hardware
-(2026-09-28): bumping the temp in auto posts exactly
-`{"stemp":"20.5","units":"C","mode":"modified_auto"}` — the 3-key body is
-the app's production behavior on these units. The HA integration now sends
-this body for setpoints in auto, gated on `modified_auto_span` in setup
-(the app's INDEPENDENT_TEMP_AND_MODE_ON_UPDATE capability is not
-wire-visible).
-Also: off-grid setpoints silently quantize to the 0.5 °C grid — round
-before POSTing; the app's UI step is 0.5 °C / 1 °F (user-verified against
-the app, 2026-09-28).
+`modified_auto`: exists as an app-level mode value; on fw 1.9 the device does not reflect it on the wire when not explicitly sent. Sending it explicitly (the §4 item 2 body) DOES engage it (live-probed 2026-09-28): the mode flips, the heater follows, and the override persists until reverted with `{"mode": "auto"}` (no self-revert within a 60 s window; the app's UX reverts at the next differing programme temperature). CONFIRMED by direct capture of the web app on this hardware (2026-09-28): bumping the temp in auto posts exactly `{"stemp":"20.5","units":"C","mode":"modified_auto"}` — the 3-key body is the app's production behavior on these units. The HA integration now sends this body for setpoints in auto, gated on `modified_auto_span` in setup (the app's INDEPENDENT_TEMP_AND_MODE_ON_UPDATE capability is not wire-visible). Also: off-grid setpoints silently quantize to the 0.5 °C grid — round before POSTing; the app's UI step is 0.5 °C / 1 °F (user-verified against the app, 2026-09-28).
 
 
 ## 5. Schedule model (the scheduling feature's core)
 
-- `prog.prog` = **7 day-arrays** (Sun..Sat; day order confirmed in
-  `api-contract.md` §5.4), each holding **N profile-index ints**, one per
-  slot: 24 slots @ 60 min (hourly, `prog_resolution: 0`), or
-  48 @ 30 min when capability `MULTIPLE_SCHEDULE_RESOLUTIONS` is active
-  (`prog_resolution: 1`).
-- Profile index order (plain htr): **0=ICE, 1=ECO, 2=COMFORT**
-  (`getIndexSortedScheduleProfiles()`); UI profile id → API index via
-  `getApiScheduleProfile()` = index in that list (unknown → 0).
-- UI schedule = per day, slots `{start, end, id}` in **minutes from midnight**,
-  `id` = profile. Conversion to raw: expand each slot into
-  `ceil((end-start)/slotMinutes)` repeated indices; pad the day to 24 h.
-  Reconstruction (raw → UI): collapse runs of equal indices; last slot ends
+- `prog.prog` = **7 day-arrays** (Sun..Sat; day order confirmed in `api-contract.md` §5.4), each holding **N profile-index ints**, one per slot: 24 slots @ 60 min (hourly, `prog_resolution: 0`), or 48 @ 30 min when capability `MULTIPLE_SCHEDULE_RESOLUTIONS` is active (`prog_resolution: 1`).
+- Profile index order (plain htr): **0=ICE, 1=ECO, 2=COMFORT** (`getIndexSortedScheduleProfiles()`); UI profile id → API index via `getApiScheduleProfile()` = index in that list (unknown → 0).
+- UI schedule = per day, slots `{start, end, id}` in **minutes from midnight**, `id` = profile. Conversion to raw: expand each slot into `ceil((end-start)/slotMinutes)` repeated indices; pad the day to 24 h. Reconstruction (raw → UI): collapse runs of equal indices; last slot ends
   1440.
-- Resolution change: `setScheduleMethod(method)` → **setup POST
-  `{prog_resol: m, prog_resolution: m}`** (2-key setup write; the app merges
-  into the full setup first — merge rules as §3/setup).
-- Temperature edit per profile: app clamps against neighbour profiles
-  (`scheduleTemperatureOffset`) then sends the 4-key status post (§4 item 4).
-  Simpler equivalent: single-key posts per temp key + units — **verify one
-  variant live before relying on it**.
-- Websocket: schedule changes arrive as `/htr/<addr>/prog` update frames
-  (observed live) — the integration's websocket handler must
-  store `prog` frames like `status` frames (verify current handling during
-  implementation).
+- Resolution change: `setScheduleMethod(method)` → **setup POST `{prog_resol: m, prog_resolution: m}`** (2-key setup write; the app merges into the full setup first — merge rules as §3/setup).
+- Temperature edit per profile: app clamps against neighbour profiles (`scheduleTemperatureOffset`) then sends the 4-key status post (§4 item 4). Simpler equivalent: single-key posts per temp key + units — **verify one variant live before relying on it**.
+- Websocket: schedule changes arrive as `/htr/<addr>/prog` update frames (observed live) — the integration's websocket handler must store `prog` frames like `status` frames (verify current handling during implementation).
 
 ## 6. Discrepancies & open items (app vs library vs integration)
 
-History: the adjudications below were made against the pre-rewrite stack
-(the retired library plus the integration); the CLOSED rows stay as the
-record, and the still-open rows are marked.
+History: the adjudications below were made against the pre-rewrite stack (the retired library plus the integration); the CLOSED rows stay as the record, and the still-open rows are marked.
 
 | # | Item | Severity | Action |
 |---|---|---|---|
@@ -200,14 +124,4 @@ record, and the still-open rows are marked.
 
 ## Appendix — Local API of the box (informational, CLOSED)
 
-`http://<box>:80`: `GET /info` open (devid, timezone); everything else 401 +
-`WWW-Authenticate: HelkiDigest <16 printable-ASCII bytes, hex-encoded>`;
-response token = 32 chars, length-validated only; nonce reusable;
-wrong-but-well-formed → 401 + fresh nonce; malformed → 400. Routes exist
-behind auth (`/mgr/nodes`, `/dev_data`, `/htr/N/*`, `/mgr/cloud`,
-`/mgr/status`, `/mgr/away_status`, `/mgr/rtc/time`, `/mgr/discovery`, …) —
-mirroring the cloud API. `/mgr/wifi/scan|network|start` exist only in SoftAP
-provisioning mode (open, no auth; body `{essid, pass|encrypted_pass}`).
-No vendor client implements the digest (web SPA, APK dex and JS all lack it)
-— the box is cloud-tethered; local control would require impersonating the
-provider endpoint. Investigation closed 2026-09-26.
+`http://<box>:80`: `GET /info` open (devid, timezone); everything else 401 + `WWW-Authenticate: HelkiDigest <16 printable-ASCII bytes, hex-encoded>`; response token = 32 chars, length-validated only; nonce reusable; wrong-but-well-formed → 401 + fresh nonce; malformed → 400. Routes exist behind auth (`/mgr/nodes`, `/dev_data`, `/htr/N/*`, `/mgr/cloud`, `/mgr/status`, `/mgr/away_status`, `/mgr/rtc/time`, `/mgr/discovery`, …) — mirroring the cloud API. `/mgr/wifi/scan|network|start` exist only in SoftAP provisioning mode (open, no auth; body `{essid, pass|encrypted_pass}`). No vendor client implements the digest (web SPA, APK dex and JS all lack it) — the box is cloud-tethered; local control would require impersonating the provider endpoint. Investigation closed 2026-09-26.

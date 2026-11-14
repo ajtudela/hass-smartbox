@@ -86,7 +86,7 @@ rules:
     comment: Cloud-only integration; there is no local discovery record to update.
   docs-data-update:
     status: done
-    comment: README and ARCHITECTURE describe the websocket push plus the REST polling split.
+    comment: README and docs/architecture.md describe the websocket push plus the REST polling split.
   docs-examples: done
   docs-known-limitations:
     status: done

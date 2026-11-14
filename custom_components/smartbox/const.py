@@ -46,7 +46,7 @@ MAX_TEMP_LIMIT_DEFAULT = 30.0
 # these names re-export them for the adapter and the test fixtures.
 SMARTBOX_UNAVAILABLE_DELAY = UNAVAILABLE_DELAY
 SMARTBOX_WRITE_CONFIRM_TIMEOUT = WRITE_CONFIRM_TIMEOUT
-GITHUB_ISSUES_URL = "https://github.com/jandado/hass-smartbox/issues"
+GITHUB_ISSUES_URL = "https://github.com/ajtudela/hass-smartbox/issues"
 
 HEATER_NODE_TYPES = [
     SmartboxNodeType.ACM,

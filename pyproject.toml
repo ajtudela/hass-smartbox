@@ -10,11 +10,12 @@ readme = "README.md"
 requires-python = ">=3.14.2"
 authors = [
   { name="Alberto Tudela", email="ajtudela@gmail.com" },
+  { name="Jan Dado" },
   { name="Delmael", email="delmael@outlook.com" },
   { name="graham33", email="graham@grahambennett.org" },
 ]
 maintainers = [
-  { name="Jan Dado" },
+  { name="Alberto Tudela" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -25,6 +26,7 @@ license-files = ["LICENSE"]
 dependencies = [
     "aiohttp>=3,<4",
     "homeassistant>=2026.5.0",
+    "smartbox>=3.0.0",
 ]
 
 [dependency-groups]
@@ -46,9 +48,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jandado/hass-smartbox"
-Issues = "https://github.com/jandado/hass-smartbox/issues"
-Upstream = "https://github.com/ajtudela/hass-smartbox"
+Homepage = "https://github.com/ajtudela/hass-smartbox"
+Issues = "https://github.com/ajtudela/hass-smartbox/issues"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -146,7 +147,9 @@ env_list = ["3.14"]
 skip_install = true
 description = "Run test under {base_python}"
 dependency_groups = ["dev"]
-deps = ["smartbox@https://github.com/jandado/smartbox/archive/refs/tags/v3.0.0.tar.gz"]
+# smartbox is a project dependency but tox skips the project install
+# (skip_install); the suite imports smartbox.protocol/core directly.
+deps = ["smartbox>=3.0.0"]
 commands = [["python", "-m", "pytest", "--cov=custom_components.smartbox", "--cov-branch", "--cov-fail-under=95", "--cov-append", "--cov-report=term", "--cov-report=xml", "--junitxml=junit.xml"]]
 
 [tool.tox.env.min]
@@ -160,7 +163,7 @@ dependency_groups = []
 deps = [
   "pytest-homeassistant-custom-component==0.13.329",
   "pytest-mock>=3.14.0",
-  "smartbox@https://github.com/jandado/smartbox/archive/refs/tags/v3.0.0.tar.gz",
+  "smartbox>=3.0.0",
 ]
 # The suite's per-test timeout, xdist and coverage plugins come from the
 # harness; only pytest-mock is outside it. Fail loudly if the pin drifts.

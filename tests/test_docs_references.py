@@ -28,7 +28,6 @@ SCANNED_ROOT_FILES = (
     "README.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
-    "ARCHITECTURE.md",
     "AGENTS.md",
 )
 RETIRED = "api-notes"

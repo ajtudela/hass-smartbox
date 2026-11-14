@@ -27,8 +27,6 @@ jobs:
         run: uv lock --check
       - name: Install the project
         run: uv sync --all-extras --dev
-      - name: Install the smartbox library
-        run: uv pip install "smartbox@https://github.com/jandado/smartbox/archive/refs/tags/v3.0.0.tar.gz"
       - name: Lint with ruff
         run: uv run ruff check custom_components tests tools
       - name: Check formatting with ruff

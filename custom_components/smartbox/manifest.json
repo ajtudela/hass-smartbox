@@ -5,11 +5,11 @@
   "codeowners": ["@ajtudela", "@Delmael", "@jandado"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/jandado/hass-smartbox",
+  "documentation": "https://github.com/ajtudela/hass-smartbox",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/jandado/hass-smartbox/issues",
+  "issue_tracker": "https://github.com/ajtudela/hass-smartbox/issues",
   "loggers": ["smartbox"],
   "quality_scale": "custom",
-  "requirements": ["smartbox@https://github.com/jandado/smartbox/archive/refs/tags/v3.0.0.tar.gz"],
+  "requirements": ["smartbox>=3.0.0"],
   "version": "3.1.0"
 }
