@@ -407,7 +407,7 @@ Commands:
 > The initial version of this integration was made by [graham33](https://github.com/graham33) but it was not maintained.
 
 # Support
-Ajtudela [![Buy a coffee to ajtudela][buymeacoffee-shield]][buymeacoffee-ajtudela]
+[![Buy a coffee to ajtudela][buymeacoffee-shield]][buymeacoffee-ajtudela]
 
 [buymeacoffee-ajtudela]: https://www.buymeacoffee.com/ajtudela
 

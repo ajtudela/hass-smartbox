@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import tomllib
 
-from packaging.requirements import Requirement
 from packaging.version import Version
 
 import custom_components.smartbox
