@@ -247,6 +247,15 @@ def test_reseller_overrides_apply_to_every_auth_field(monkeypatch):
     assert config.referer == "https://override.test/"
 
 
+def test_reseller_overrides_without_api_host(monkeypatch):
+    """Non-host overrides keep the row's default API host."""
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(RESELLER_OVERRIDES, "api", {"serial_id": 99})
+    reseller = reseller_from_entry_data(data)
+    assert reseller.serial_id == 99
+    assert reseller.api_host == "users-api.helki.com"
+
+
 def test_reseller_overrides_normalize_https_host(monkeypatch):
     """A full HTTPS URL is reduced to the hostname the row expects."""
     data = {"api_name": "api", "username": "u", "password": "p"}
