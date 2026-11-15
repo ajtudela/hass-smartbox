@@ -121,6 +121,13 @@ async def smartbox_stack(hass, mock_smartbox, config_entry):
 def _check_state(hass, mock_node, mock_node_status, state):
     assert state.state == get_hvac_mode(mock_node["type"], mock_node_status)
     assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
+    if (
+        mock_node["type"] == SmartboxNodeType.HTR_MOD
+        and "selected_temp" in mock_node_status
+    ):
+        assert state.attributes["selected_temp"] == mock_node_status["selected_temp"]
+    else:
+        assert "selected_temp" not in state.attributes
 
     assert round_temp(hass, state.attributes[ATTR_CURRENT_TEMPERATURE]) == round_temp(
         hass,
@@ -1195,6 +1202,40 @@ async def test_reads_render_without_raising_before_any_status_body_arrives() -> 
     assert entity.preset_mode == PRESET_HOME
     # the htr_mod preset IS the status mode, so with no body there is none
     assert _heater_over_engine(engine, SmartboxNodeType.HTR_MOD).preset_mode is None
+
+
+def test_selected_temp_attribute_follows_the_status():
+    """The live profile is exposed; a status without the key omits it."""
+    entity = _entity_with_world(
+        {"mode": "auto", "selected_temp": "ice", "units": "C"},
+        node_type=SmartboxNodeType.HTR_MOD,
+    )
+    assert entity.extra_state_attributes["selected_temp"] == "ice"
+
+    entity = _entity_with_world(
+        {"mode": "auto", "units": "C"},
+        node_type=SmartboxNodeType.HTR_MOD,
+    )
+    assert "selected_temp" not in entity.extra_state_attributes
+
+
+def test_selected_temp_attribute_is_htr_mod_only():
+    """A different node family carrying the key does not expose it."""
+    entity = _entity_with_world(
+        {"mode": "auto", "selected_temp": "eco", "units": "C"},
+        node_type=SmartboxNodeType.HTR,
+    )
+    assert "selected_temp" not in entity.extra_state_attributes
+
+
+@pytest.mark.parametrize("value", [4, "", None, False])
+def test_selected_temp_attribute_requires_a_non_empty_string(value):
+    """Ill-typed or empty server values stay out of the state attributes."""
+    entity = _entity_with_world(
+        {"mode": "auto", "selected_temp": value, "units": "C"},
+        node_type=SmartboxNodeType.HTR_MOD,
+    )
+    assert "selected_temp" not in entity.extra_state_attributes
 
 
 class _NoopFanout:

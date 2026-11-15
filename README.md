@@ -145,6 +145,11 @@ Every heater also exposes the 'away' and 'boost' presets (boost where the device
 | self\_learn   | *                      | AUTO         | SELF\_LEARN |
 | presence      | *                      | AUTO         | ACTIVITY    |
 
+On `htr_mod` nodes, the climate entity also exposes the device's live
+`selected_temp` profile (`comfort`, `eco`, `ice` or `off`) as a read-only
+state attribute when the status carries it. This is the active profile; the
+Schedule sensor's state remains the programme's expected profile.
+
 The target temperature step is 0.5 °C / 1.0 °F. On the fw-1.9 `htr` family, the maximum target temperature is clamped to the node's `max_stemp_limit` when the device advertises one.
 
 If a heater or box is paired to the account after the integration has set up, the snapshot triggers a fresh REST identity read and the entity builders add the new device and node entities in place. A lagging identity is retried with a short backoff; if it still fails, a repair issue names the pending nodes and asks for a reload.
