@@ -38,6 +38,11 @@ from custom_components.smartbox import (
     auth_config_from_entry_data,
 )
 from custom_components.smartbox.history import HistoryImport
+import custom_components.smartbox.reseller as reseller_mod
+from custom_components.smartbox.reseller import (
+    RESELLER_OVERRIDES,
+    reseller_from_entry_data,
+)
 from tests.fake_transport import FakeTransport
 from tests.test_utils import until
 
@@ -207,6 +212,123 @@ async def test_auth_config_from_entry_data(config_entry, reseller):
     assert config.username == config_entry.data["username"]
     assert config.password == config_entry.data["password"]
     assert config.referer == "https://web_url/"
+
+
+def test_auth_config_uses_the_elnur_host():
+    """Elnur keeps its own API host; the other rows share users-api."""
+    data = {"api_name": "api-elnur", "username": "u", "password": "p"}
+    config = auth_config_from_entry_data(data)
+    assert config.api_host == "https://api-elnur.helki.com"
+
+
+def test_reseller_overrides_apply_to_every_auth_field(monkeypatch):
+    """A manual override replaces the row before AuthConfig is built."""
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "api",
+        {
+            "api_host": "api-test.helki.com",
+            "basic_auth": "override_credentials",
+            "serial_id": 99,
+            "web_url": "https://override.test/",
+        },
+    )
+    reseller = reseller_from_entry_data(data)
+    assert reseller.api_host == "api-test.helki.com"
+    assert reseller.basic_auth == "override_credentials"
+    assert reseller.serial_id == 99
+    assert reseller.web_url == "https://override.test/"
+
+    config = auth_config_from_entry_data(data)
+    assert config.api_host == "https://api-test.helki.com"
+    assert config.basic_auth_creds == "override_credentials"
+    assert config.serial_id == "99"
+    assert config.referer == "https://override.test/"
+
+
+def test_reseller_overrides_normalize_https_host(monkeypatch):
+    """A full HTTPS URL is reduced to the hostname the row expects."""
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "api",
+        {"api_host": "https://api-test.helki.com/"},
+    )
+    reseller = reseller_from_entry_data(data)
+    assert reseller.api_host == "api-test.helki.com"
+    assert auth_config_from_entry_data(data).api_host == "https://api-test.helki.com"
+
+
+def test_reseller_overrides_use_the_entry_brand_key(monkeypatch):
+    """Shared-tenant rows are overridden by the configured brand key."""
+    data = {"api_name": "api-smartcontrol", "username": "u", "password": "p"}
+    base = reseller_from_entry_data(data)
+    assert base.api_url == "api-lhz"
+    assert base.serial_id == 17
+
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "api-smartcontrol",
+        {
+            "api_host": "api-smartcontrol.helki.com",
+            "serial_id": 99,
+        },
+    )
+    reseller = reseller_from_entry_data(data)
+    assert reseller.api_url == "api-lhz"
+    assert reseller.api_host == "api-smartcontrol.helki.com"
+    assert reseller.serial_id == 99
+    assert (
+        auth_config_from_entry_data(data).api_host
+        == "https://api-smartcontrol.helki.com"
+    )
+
+
+def test_reseller_overrides_reject_unknown_fields(monkeypatch):
+    """The manual table accepts only the documented auth fields."""
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(RESELLER_OVERRIDES, "api", {"api_url": "other"})
+    with pytest.raises(ValueError, match="api_url"):
+        reseller_from_entry_data(data)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://api.test",
+        "api.test/path",
+        "api.test?x=1",
+        "api.test#x",
+        "https://user@api.test",
+        "api.test:bad",
+        "",
+        " api.test",
+    ],
+)
+def test_reseller_overrides_reject_invalid_hosts(monkeypatch, value):
+    """api_host accepts only an HTTPS/hostname origin without extras."""
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(RESELLER_OVERRIDES, "api", {"api_host": value})
+    with pytest.raises(ValueError, match="api_host"):
+        reseller_from_entry_data(data)
+
+
+def test_reseller_override_logs_once(monkeypatch, caplog):
+    """An active override is visible once, without logging its values."""
+    monkeypatch.setattr(reseller_mod, "_LOGGED_OVERRIDES", set())
+    data = {"api_name": "api", "username": "u", "password": "p"}
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "api",
+        {"api_host": "api-test.helki.com", "basic_auth": "override_credentials"},
+    )
+    with caplog.at_level(logging.WARNING):
+        reseller_from_entry_data(data)
+        reseller_from_entry_data(data)
+    assert caplog.text.count("Manual reseller override active") == 1
+    assert "api-test.helki.com" not in caplog.text
+    assert "override_credentials" not in caplog.text
 
 
 # --- adapter monitor over the engine's supervision task ---

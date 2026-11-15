@@ -6,7 +6,7 @@ How the integration is put together, and why it is shaped this way. It is writte
 
 A Home Assistant custom integration (domain `smartbox`) for Smartbox electric heaters. It talks to the vendor's cloud directly: REST calls for reads and writes, plus one `ws_user` websocket per account for pushed updates. A "box" (the site gateway) carries several heater nodes; both become Home Assistant devices.
 
-Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.0.0` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.0.2` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 ## The three layers
 

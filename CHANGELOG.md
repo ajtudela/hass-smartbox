@@ -5,10 +5,15 @@
 ### Added
 
 - The climate entity on `htr_mod` nodes exposes the device's live `selected_temp` profile (`comfort`/`eco`/`ice`/`off`) as a read-only state attribute when the status carries it. The Schedule sensor remains the programme view.
+- `custom_components/smartbox/reseller.py` has a `RESELLER_OVERRIDES` table for manual connection tests. It can replace `api_host`, `basic_auth`, `serial_id` and `web_url` for an existing config-entry brand. An active override is logged once and reported in diagnostics without printing the credential.
 
 ### Changed
 
-- The `smartbox` library is now published on PyPI; the dependency pins use the registry instead of the GitHub tag tarball: `manifest.json` requires `smartbox>=3.0.0`, the pyproject dependency and the tox test environments match, and the CI workflow no longer needs a separate library install step (`uv sync` covers it). A test keeps the manifest and pyproject pins identical.
+- The `smartbox` library is now published on PyPI; the dependency pins use the registry instead of the GitHub tag tarball: `manifest.json` requires `smartbox>=3.0.2`, the pyproject dependency and the tox test environments match, and the CI workflow no longer needs a separate library install step (`uv sync` covers it). A test keeps the manifest and pyproject pins identical.
+
+### Fixed
+
+- Elnur uses its own API host (`api-elnur.helki.com`); the reseller table now carries a per-row host, and the token grant, REST client, ws_user probe and transport all use it. Other ws_user brands keep the shared `users-api.helki.com` host; the legacy EHC row carries `api-ehc.helki.com` but remains unsupported by the 3.x socket transport.
 
 ## 3.1.0 (2026-11-12)
 

@@ -138,13 +138,14 @@ def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
 
     The reseller table supplies the endpoint identity: the Basic auth string
     is passed VERBATIM, the reseller identity travels only via ``x-serialid``
-    / ``x-referer``, and the REST host is the one the vendor apps dial
-    (``users-api.helki.com``; the reseller row's ``api_url`` is the brand
-    key, not a host).
+    / ``x-referer``, and the REST host is the row's ``api_host`` (normally
+    ``users-api.helki.com``; Elnur uses ``api-elnur.helki.com``). The row's
+    ``api_url`` is the brand key, not a host. ``RESELLER_OVERRIDES`` can
+    replace the documented auth fields for manual testing.
     """
     reseller = reseller_from_entry_data(data)
     return AuthConfig(
-        api_host=api_base_url(),
+        api_host=api_base_url(reseller),
         basic_auth_creds=reseller.basic_auth,
         serial_id=str(reseller.serial_id),
         username=data[CONF_USERNAME],

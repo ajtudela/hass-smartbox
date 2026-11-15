@@ -24,9 +24,11 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
+from smartbox.protocol.errors import ResellerNotExistError
 
 from . import ws_user_flapping_issue_id
-from .const import DOMAIN
+from .const import CONF_API_NAME, DOMAIN
+from .reseller import RESELLER_OVERRIDES, api_base_url, reseller_from_entry_data
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -57,6 +59,7 @@ async def async_get_config_entry_diagnostics(
     labels = _device_labels(runtime)
     diagnostics_data: dict[str, Any] = {
         "entry": async_redact_data(config_entry.as_dict(), TO_REDACT),
+        "reseller_override": _reseller_override_diagnostics(config_entry),
         # A runtime is absent while the entry is failing/retrying setup.
         "runtime": _runtime_diagnostics(runtime, labels),
         "ws_user_recovery": _ws_user_recovery_diagnostics(hass, config_entry),
@@ -77,6 +80,26 @@ async def async_get_config_entry_diagnostics(
         key: _scrub_identifiers(value, labels)
         for key, value in diagnostics_data.items()
     }
+
+
+def _reseller_override_diagnostics(
+    config_entry: SmartboxConfigEntry,
+) -> dict[str, Any]:
+    """Report whether a manual override is active and the effective host."""
+    api_name = config_entry.data.get(CONF_API_NAME)
+    overrides = (
+        RESELLER_OVERRIDES.get(api_name, {}) if isinstance(api_name, str) else {}
+    )
+    fields = sorted(overrides)
+    try:
+        reseller = reseller_from_entry_data(config_entry.data)
+        return {
+            "active": bool(overrides),
+            "fields": fields,
+            "api_host": api_base_url(reseller),
+        }
+    except (KeyError, ValueError, ResellerNotExistError) as ex:
+        return {"active": bool(overrides), "fields": fields, "error": str(ex)}
 
 
 def _device_labels(runtime: SmartboxRuntime | None) -> dict[str, str]:
