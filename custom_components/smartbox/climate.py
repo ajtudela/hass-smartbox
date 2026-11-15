@@ -524,15 +524,22 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
 
         These are display/template data, not controls: the climate target is
         the editable active temperature, and the config numbers hold the
-        defaults. A lost body carries no locked key: it is OMITTED (no stale
-        last-known value is kept - the entity is unavailable while lost, and
-        the next ok frame restores the attribute).
+        defaults. On ``htr_mod`` nodes, ``selected_temp`` is exposed when the
+        status carries it. It is the live profile label (comfort/eco/ice/off),
+        not a temperature; unmodelled labels are passed through for
+        diagnostics. A lost body carries neither key: both are OMITTED (no
+        stale last-known value is kept - the entity is unavailable while lost,
+        and the next ok frame restores them).
         """
         if self._lost or self._status_blank:
             return {}
         attributes: dict[str, Any] = {}
         if "locked" in self._status:
             attributes[ATTR_LOCKED] = self._status["locked"]
+        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+            value = self._status.get("selected_temp")
+            if isinstance(value, str) and value:
+                attributes["selected_temp"] = value
         if self._boost:
             mode = self._boost_mode_value
             if mode is not None:

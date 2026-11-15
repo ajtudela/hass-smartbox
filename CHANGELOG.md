@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- The climate entity on `htr_mod` nodes exposes the device's live `selected_temp` profile (`comfort`/`eco`/`ice`/`off`) as a read-only state attribute when the status carries it. The Schedule sensor remains the programme view.
+
 ### Changed
 
 - The `smartbox` library is now published on PyPI; the dependency pins use the registry instead of the GitHub tag tarball: `manifest.json` requires `smartbox>=3.0.0`, the pyproject dependency and the tox test environments match, and the CI workflow no longer needs a separate library install step (`uv sync` covers it). A test keeps the manifest and pyproject pins identical.
