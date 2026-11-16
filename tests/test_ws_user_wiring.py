@@ -247,6 +247,21 @@ def test_reseller_overrides_apply_to_every_auth_field(monkeypatch):
     assert config.referer == "https://override.test/"
 
 
+def test_reseller_override_can_replace_the_elnur_host(monkeypatch):
+    """The hard-coded Elnur exception is still manually overridable."""
+    data = {"api_name": "api-elnur", "username": "u", "password": "p"}
+    assert auth_config_from_entry_data(data).api_host == "https://api-elnur.helki.com"
+
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "api-elnur",
+        {"api_host": "https://override.example.test/"},
+    )
+    reseller = reseller_from_entry_data(data)
+    assert reseller.api_host == "override.example.test"
+    assert auth_config_from_entry_data(data).api_host == "https://override.example.test"
+
+
 def test_reseller_overrides_without_api_host(monkeypatch):
     """Non-host overrides keep the row's default API host."""
     data = {"api_name": "api", "username": "u", "password": "p"}
