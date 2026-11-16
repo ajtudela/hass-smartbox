@@ -6,9 +6,9 @@
 
 ## State of 3.1.2
 
-- Library `3.0.2` and integration `3.1.1` are the current stable releases. Integration `3.1.2` is in flight.
+- Library `3.0.2` and integration `3.1.2` are the current stable releases.
 - The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
-- In flight: integration 3.1.2 pins `smartbox>=3.0.2`, adds `RESELLER_OVERRIDES`, and reports active overrides in diagnostics.
+- Integration 3.1.2 pins `smartbox>=3.0.2`, adds `RESELLER_OVERRIDES`, and reports active overrides in diagnostics.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch

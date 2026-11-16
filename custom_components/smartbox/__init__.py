@@ -78,7 +78,7 @@ if TYPE_CHECKING:
 
     from homeassistant.core import Event, HomeAssistant
 
-__version__ = "3.1.1"
+__version__ = "3.1.2"
 
 _LOGGER = logging.getLogger(__name__)
 
