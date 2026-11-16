@@ -13,6 +13,7 @@ from custom_components.smartbox.diagnostics import (
     _scrub_identifiers,
     async_get_config_entry_diagnostics,
 )
+from custom_components.smartbox.reseller import RESELLER_OVERRIDES
 
 _ENTRY_DATA = {
     "api_name": "test_api_name_1",
@@ -248,6 +249,28 @@ async def test_diagnostics_registry_sections(hass, mock_smartbox, config_entry):
     assert len(result["hass_entities"]) == len(
         er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
     )
+
+
+async def test_diagnostics_reports_reseller_override(
+    hass, config_entry, reseller, monkeypatch
+):
+    """A manual override is visible, with its field names and effective host."""
+    monkeypatch.setitem(
+        RESELLER_OVERRIDES,
+        "test_api_name_1",
+        {
+            "api_host": "https://api-test.helki.com/",
+            "serial_id": 99,
+            "basic_auth": "secret_override",
+        },
+    )
+    result = await async_get_config_entry_diagnostics(hass, config_entry)
+    assert result["reseller_override"] == {
+        "active": True,
+        "fields": ["api_host", "basic_auth", "serial_id"],
+        "api_host": "https://api-test.helki.com",
+    }
+    assert "secret_override" not in str(result)
 
 
 async def test_diagnostics_absent_runtime(hass, mock_smartbox, config_entry):

@@ -17,25 +17,25 @@ Home Assistant integration for Haverland (and other brands) heating smartboxes.
 
 ## Supported resellers
 
-The setup flow offers these providers. The link identifies the brand/account; every provider dials the same API host (`users-api.helki.com`), so the link is not the integration's endpoint. Several names share a tenant/backend with another brand, as noted.
+The setup flow offers these providers. The link identifies the brand/account; most providers dial the shared API host (`users-api.helki.com`), Elnur dials `api-elnur.helki.com`, and the legacy EHC app stays on its own host, so the link is not the integration's endpoint. Several names share a tenant/backend with another brand, as noted.
 
 | Brand | Provider link | Notes |
 |---|---|---|
 | Helki | https://app.helki.com/ | Generic Helki/Smartbox account |
 | Lucht LHZ | https://smartcontrol.lucht-lhz.de/ | |
-| Electric Heating Company | https://control.electric-heatingcompany.co.uk/ | Legacy socket.io web app (2026-11-03) |
+| Electric Heating Company | https://control.electric-heatingcompany.co.uk/ | Legacy socket.io web app on `api-ehc.helki.com` (2025-11-28; 3.x unverified) |
 | Climastar | https://avantwifi.climastar.es/ | |
-| Elnur | https://remotecontrol.elnur.es/ | |
+| Elnur | https://remotecontrol.elnur.es/ | Own API host `api-elnur.helki.com`; ws_user app (2026-10-30) |
 | Valderoma | https://wifi.valderoma.fr/ | Shares the Climastar tenant |
 | iHeat Control | https://app.iheatcontrol.com/ | Shares the Electrorad tenant |
 | HJM | https://api.calorhjm.com/ | Configured brand link |
-| Electrorad | https://app.controls-electrorad.co.uk/ | Legacy socket.io web app (2026-11-03) |
+| Electrorad | https://app.controls-electrorad.co.uk/ | ws_user app; migrated from socket.io (2026-11-06) |
 | Haverland | https://i2control.haverland.com/ | |
 | Tevolve | https://tevolve.termoweb.net/ | Selectable; live login unverified |
 | Technotherm | https://ttiapp.technotherm.com/ | Shares the Lucht LHZ tenant |
 | SmartControl | https://app.smart-control.eu/ | Shares the Lucht LHZ tenant |
 
-Accounts whose backend only serves the retired `socket_io` transport need 2.6.x; the 3.0 line requires `ws_user`. The public web-app check above is a hint: the other eleven provider apps ship the `ws_user` client, while the EHC and Electrorad apps still serve the legacy `socket.io` app (re-checked 2026-11-03). The setup probe is authoritative for an individual account — if it reports `unsupported`, stay on 2.6.x. See the websocket warning below.
+Accounts whose backend only serves the retired `socket_io` transport need 2.6.x; the 3.0 line requires `ws_user`. The public web-app check above is a hint: twelve provider apps ship the `ws_user` client, while the EHC public app remains legacy `socket.io` (2026-11-15 audit). The setup probe is authoritative for an individual account — if it reports `unsupported`, stay on 2.6.x. See the websocket warning below.
 
 ## Installation
 
@@ -51,7 +51,7 @@ Accounts whose backend only serves the retired `socket_io` transport need 2.6.x;
 1. Open your Home Assistant configuration directory (where `configuration.yaml` lives).
 1. Create `custom_components/` if it does not exist.
 1. Copy the **whole** `custom_components/smartbox/` directory from this repository (or the release archive) into it, preserving `brand/`, `translations/`, `frontend/`, and the JSON/YAML files. The `frontend/` directory carries the bundled program card; the integration serves it automatically, so there is no separate Lovelace resource or HACS plugin to install.
-1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.0.0"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
+1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.0.2"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
 1. Restart Home Assistant
 1. Hard-refresh the browser (`Ctrl+Shift+R` / `Cmd+Shift+R`) after the restart or an upgrade, so the new frontend module is loaded.
 
@@ -101,7 +101,7 @@ Since `3.1.0` the integration runs on the separate `smartbox` library:
 * `smartbox.core` — the versioned state store + engine: snapshot ingestion, websocket-frame merging, availability tracking and write-confirmation windows.
 * `custom_components/smartbox` — the HA adapter: config flow, entity platforms, diagnostics.
 
-`manifest.json` pins the library tag, so HACS/HA installs it. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+`manifest.json` requires the `smartbox` package from PyPI, so HACS/HA installs it. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 See [architecture.md](docs/architecture.md) for the layer rules, the repository map, and the read and write flows.
 
@@ -110,7 +110,7 @@ See [architecture.md](docs/architecture.md) for the layer rules, the repository 
 Status updates arrive over the `ws_user` channel (the vendor web apps' transport): ONE connection for the whole account. A client-side 60-second heartbeat, alongside the proxy's own PINGs, supervises the session — the periodic "Server has stopped communicating" aborts of the legacy per-device `socket_io` transport disappear. The server cuts the socket at the access token's 4-hour expiry (~4-second outage while it reconnects with a fresh token); that is the steady state, by design.
 
 > [!WARNING]
-> **BREAKING:** the socket_io fallback is GONE. Every reseller key dials the same host (`users-api.helki.com`); the key selects the tenant's credentials, serial id and referer, not a host. The setup probes `ws_user` once with a fresh token, and a host that does not serve it cannot work with this version (the config entry fails with an "unsupported" error). `ws_user` is live-verified on that shared host; tenant deployments other than the probed one are unverified, not known-bad. Accounts whose backend only serves socket_io must stay on 2.6.x; the legacy EHC and Electrorad web apps are the known examples from the 2026-11-03 public-app check. Transient probe trouble (a 5xx-ing or unreachable host) retries via the normal `ConfigEntryNotReady` retry — a transport verdict is never inferred from transient trouble.
+> **BREAKING:** the socket_io fallback is GONE. Most reseller keys dial the shared host (`users-api.helki.com`); Elnur dials `api-elnur.helki.com`. The key selects the tenant's credentials, serial id, referer and API host. The setup probes `ws_user` once with a fresh token, and a host that does not serve it cannot work with this version (the config entry fails with an "unsupported" error). `ws_user` is live-verified on the shared host; tenant deployments other than the probed one are unverified, not known-bad. Accounts whose backend only serves socket_io must stay on 2.6.x; the legacy EHC public app is the known example (2026-11-15 audit). Electrorad migrated to `ws_user` on 2026-11-06. Transient probe trouble (a 5xx-ing or unreachable host) retries via the normal `ConfigEntryNotReady` retry — a transport verdict is never inferred from transient trouble.
 
 The transport is visible in Settings → Devices → diagnostics as `runtime.transport`.
 
@@ -229,7 +229,7 @@ See [Node availability](#node-availability) for what the Unavailable state means
 These are the boundaries of what the integration can do; the linked sections explain the details.
 
 * **Cloud-only.** State and commands travel through the vendor cloud; there is no local or LAN control. Without internet the entities keep their last values until the feed is declared stale and they turn Unavailable. The 4-hour token refresh also cuts the socket for a few seconds (see [Websocket transport](#websocket-transport)).
-* **`ws_user` accounts only.** Accounts whose backend only serves the retired `socket_io` transport must stay on 2.6.x. The setup probe decides; the two known examples are the legacy EHC and Electrorad web apps (see [Supported resellers](#supported-resellers)).
+* **`ws_user` accounts only.** Accounts whose backend only serves the retired `socket_io` transport must stay on 2.6.x. The setup probe decides; the remaining known example is the legacy EHC public app. Electrorad migrated to `ws_user` (2026-11-06; see [Supported resellers](#supported-resellers)).
 * **No real-time consumption.** The API exposes hourly counters with a 15–20 minute blind window at the top of each hour, so the total consumption sensor can lag by about an hour and never updates in real time (see [Consumption](#consumption)).
 * **Coarse polling where the wire is silent.** PMO power polls every 60 seconds (configurable), the RTC drift every 5 minutes, and consumption every 15 minutes. These are the only values that do not arrive by push.
 * **Writes are confirmed, not guaranteed.** A write is applied optimistically and the node turns Unavailable if it does not confirm within the window; the vendor app behaves the same way. The server read-through can also lag several seconds after a successful POST (see [Write confirmation](#write-confirmation)).
@@ -342,6 +342,17 @@ There might be a huge negative consumption in your energy dashboard. The consump
 If your reseller (which uses a smartbox) is not in the list, open a [Reseller Github issue] on this integration's tracker.
 
 ## Debugging
+
+### Manual connection overrides
+
+For testing a vendor-side host or tenant change before it lands in a release,
+edit `custom_components/smartbox/reseller.py` and add an entry to
+`RESELLER_OVERRIDES`, keyed by the config entry's API name. The fields are
+`api_host` (hostname or `https://` URL), `basic_auth`, `serial_id` and
+`web_url` (the referer); these values replace the built-in row. Leave the
+table empty for normal operation. The edit is overwritten by an integration
+update; use it only for a controlled test. The `smartbox` CLI exposes the
+same overrides plus `--api-host`.
 
 ### Diagnostics
 

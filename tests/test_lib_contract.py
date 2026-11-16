@@ -1,10 +1,9 @@
-"""Contract tests pinning the vendored layer's values.
+"""Contract tests pinning the shipped protocol values.
 
 The protocol layer owns the reseller table, the ``SmartboxNodeType``
 enum (``const.py``) and the shared backoff helper. The pinned VALUES
-below are copied from the ``smartbox`` library (v2.7.0, the origin of
-these facts) and must not drift: they are what the vendor's hosts answer
-to.
+below originated in the ``smartbox`` library's v2.7.0 table and were
+extended with the 3.0.2 per-reseller API host; they must not drift.
 """
 
 import pytest
@@ -64,7 +63,7 @@ def test_backoff_delay_saturates() -> None:
 
 
 def test_reseller_table_values_pinned() -> None:
-    """Table values pinned against the ``smartbox`` library's (v2.7.0)."""
+    """Table values pinned against the shipped ``smartbox`` library."""
     resellers = AvailableResellers.resellers
     assert resellers["api"] == SmartboxReseller(
         name="Helki",
@@ -77,10 +76,13 @@ def test_reseller_table_values_pinned() -> None:
     assert resellers["api-lhz"].serial_id == 2
     assert resellers["api-ehc"].name == "Electric Heating Company"
     assert resellers["api-ehc"].serial_id == 3
+    assert resellers["api-ehc"].api_host == "api-ehc.helki.com"
     assert resellers["api-climastar"].name == "Climastar"
     assert resellers["api-climastar"].serial_id == 5
     assert resellers["api-elnur"].name == "Elnur"
     assert resellers["api-elnur"].serial_id == 7
+    assert resellers["api-elnur"].api_host == "api-elnur.helki.com"
+    assert resellers["api"].api_host == "users-api.helki.com"
     assert resellers["api-valderoma"].name == "Valderoma"
     assert resellers["api-valderoma"].api_url == "api-climastar"
     assert resellers["api-valderoma"].serial_id == 8

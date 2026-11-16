@@ -19,7 +19,7 @@
           "password": "Password"
         },
         "data_description": {
-          "api_name": "Select the brand your Smartbox account was created with. Every provider uses the same API host; this choice selects the tenant credentials."
+          "api_name": "Select the brand your Smartbox account was created with. The brand selects the tenant credentials, API host and referer."
         }
       },
       "reconfigure": {
@@ -31,7 +31,7 @@
           "password": "Password"
         },
         "data_description": {
-          "api_name": "Select the brand your Smartbox account was created with. Every provider uses the same API host; this choice selects the tenant credentials."
+          "api_name": "Select the brand your Smartbox account was created with. The brand selects the tenant credentials, API host and referer."
         }
       },
       "reauth_confirm": {

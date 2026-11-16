@@ -2,14 +2,14 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-12. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-15. Keep this a 90-second read and prune entries as they close.*
 
-## State of 3.1.0
+## State of 3.1.2
 
-- Library `3.0.0` and integration `3.1.0` are the current stable releases. `main` is fast-forwarded to the 3.1 split line, and the library `main` is fast-forwarded to `3.0`.
-- The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card and Sunday-first schedule fix are shipped.
-- The stable install check on HAOS and the GitHub release publication remain the final verification steps.
-- In flight (unreleased): the library is now on PyPI, so the dependency pins use the registry (`smartbox>=3.0.0` in `manifest.json`, pyproject and tox) instead of the GitHub tag tarball; the docs and a manifest↔pyproject consistency test follow the change.
+- Library `3.0.2` and integration `3.1.1` are the current stable releases. Integration `3.1.2` is in flight.
+- The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
+- In flight: integration 3.1.2 pins `smartbox>=3.0.2`, adds `RESELLER_OVERRIDES`, and reports active overrides in diagnostics.
+- Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch
 
