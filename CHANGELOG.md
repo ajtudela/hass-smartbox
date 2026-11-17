@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The supported-reseller table lists Perry Home (`api-perry`). The library row is selectable; a live login remains unverified.
+
+### Changed
+
+- The integration pins `smartbox>=3.1.0`, the current library release.
+
 ## 3.1.2 (2026-11-15)
 
 ### Added
