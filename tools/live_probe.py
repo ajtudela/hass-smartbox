@@ -39,6 +39,7 @@ from smartbox.protocol import (
     AuthConfig,
     AuthError,
     AvailableResellers,
+    GrantCallback,
     ManagedTokenSource,
     NodeRef,
     ResellerNotExistError,
@@ -46,6 +47,7 @@ from smartbox.protocol import (
     SmartboxError,
     Snapshot,
     SocketClosed,
+    TokenBundle,
     TokenManager,
     TransportUnavailableError,
     TransportUnsupportedError,
@@ -56,6 +58,7 @@ from smartbox.protocol import (
     check_ws_user_support,
     jwt_user_id,
 )
+from smartbox.token_cache import FileTokenCache, account_stamp
 
 if TYPE_CHECKING:
     from smartbox.protocol.reseller import SmartboxReseller
@@ -131,16 +134,29 @@ def build_config(env: dict[str, str]) -> tuple[SmartboxReseller, AuthConfig]:
 class Stack:
     """One shared builder: (TokenManager, SmartboxClient, transport factory)."""
 
-    def __init__(self, config: AuthConfig) -> None:
+    def __init__(
+        self,
+        config: AuthConfig,
+        *,
+        initial_tokens: TokenBundle | None = None,
+        on_grant: GrantCallback | None = None,
+    ) -> None:
         """Hold the config; the session/client are built on ``__aenter__``."""
         self.config = config
+        self._initial_tokens = initial_tokens
+        self._on_grant = on_grant
         self._session: ClientSession | None = None
         self.client: SmartboxClient | None = None
 
     async def __aenter__(self) -> Self:
         """Open the HTTP session + client (shared, closed on ``__aexit__``)."""
         self._session = ClientSession()
-        self.client = SmartboxClient(self.config, session=self._session)
+        self.client = SmartboxClient(
+            self.config,
+            session=self._session,
+            initial_tokens=self._initial_tokens,
+            on_grant=self._on_grant,
+        )
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:
@@ -265,15 +281,30 @@ async def _auth_command(stack: Stack) -> int:
     return 0
 
 
-async def _probe_command(stack: Stack) -> int:
+async def _probe_command(stack: Stack, *, seeded: bool = False) -> int:
+    """Probe the endpoint; a seeded cache gets one retry with a fresh grant."""
+
+    async def probe(token: str) -> None:
+        await check_ws_user_support(token, stack.config.api_host, stack.session)
+
     bundle = await stack.auth.get_token()
     try:
-        await check_ws_user_support(
-            bundle.access_token, stack.config.api_host, stack.session
-        )
+        await probe(bundle.access_token)
     except TransportUnsupportedError as e:
-        print(f"ws_user: UNSUPPORTED ({e})")
-        return 1
+        if not seeded:
+            print(f"ws_user: UNSUPPORTED ({e})")
+            return 1
+        print("note: cached token rejected; retrying the probe with a fresh grant")
+        await stack.auth.invalidate(bundle.access_token)
+        bundle = await stack.auth.get_token()
+        try:
+            await probe(bundle.access_token)
+        except TransportUnsupportedError as retry_err:
+            print(f"ws_user: UNSUPPORTED ({retry_err})")
+            return 1
+        except TransportUnavailableError as retry_err:
+            print(f"ws_user: UNAVAILABLE ({retry_err})")
+            return 1
     except TransportUnavailableError as e:
         print(f"ws_user: UNAVAILABLE ({e})")
         return 1
@@ -618,22 +649,42 @@ def build_parser() -> argparse.ArgumentParser:
         prog="live_probe.py",
         description="Live-wire probe against the real hosts (.env-driven).",
     )
+    parser.add_argument(
+        "--token-cache",
+        metavar="PATH",
+        default=None,
+        help="Persist the refresh token between runs (ignored by 'auth').",
+    )
+    cache_option = argparse.ArgumentParser(add_help=False)
+    cache_option.add_argument(
+        "--token-cache",
+        metavar="PATH",
+        default=argparse.SUPPRESS,
+        help="Persist the refresh token between runs.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("auth", help="password grant + one refresh grant")
 
-    sub.add_parser("probe", help="ws_user capability probe verdict")
+    sub.add_parser(
+        "probe", help="ws_user capability probe verdict", parents=[cache_option]
+    )
 
-    reads = sub.add_parser("reads", help="devices + nodes raw reads")
+    reads = sub.add_parser(
+        "reads", help="devices + nodes raw reads", parents=[cache_option]
+    )
     _add_read_selection(reads)
 
-    ws = sub.add_parser("ws", help="subscribe the ws_user transport")
+    ws = sub.add_parser(
+        "ws", help="subscribe the ws_user transport", parents=[cache_option]
+    )
     ws.add_argument("--duration", type=float, default=60.0)
     ws.add_argument("--heartbeat", type=float, default=60.0)
 
     write = sub.add_parser(
         "write",
         help=f"WriteApi ops (guarded; pass {GUARD_FLAG})",
+        parents=[cache_option],
     )
     write.add_argument("--dev", required=True, help="target dev_id")
     write.add_argument(
@@ -659,7 +710,9 @@ def build_parser() -> argparse.ArgumentParser:
     for name in _WRITE_READBACK:
         _build_write_op_parser(op_sub, name)
 
-    all_cmd = sub.add_parser("all", help="probe + reads (daily sanity menu)")
+    all_cmd = sub.add_parser(
+        "all", help="probe + reads (daily sanity menu)", parents=[cache_option]
+    )
     _add_read_selection(all_cmd)
 
     return parser
@@ -720,12 +773,35 @@ async def _dispatch(args: argparse.Namespace) -> int:
     """Open one shared stack and run the selected command."""
     env = _load_and_check_env()
     reseller, config = build_config(env)
-    async with Stack(config) as stack:
+    cache: FileTokenCache | None = None
+    stored: TokenBundle | None = None
+    if args.token_cache and args.command != "auth":
+        cache = FileTokenCache(
+            Path(args.token_cache),
+            account=account_stamp(
+                env["SMARTBOX_API_NAME"],
+                config.serial_id,
+                config.username,
+                config.api_host,
+            ),
+        )
+        stored = await cache.async_load()
+        print(
+            f"cache: {cache.path} ({'loaded' if stored is not None else 'no record'})"
+        )
+    elif args.token_cache:
+        print("note: 'auth' exercises fresh grants; --token-cache ignored")
+    async with Stack(
+        config,
+        initial_tokens=stored,
+        on_grant=cache.async_save if cache is not None else None,
+    ) as stack:
         print(f"== reseller: {reseller.name} (key: {env['SMARTBOX_API_NAME']}) ==")
+        seeded = stack.auth.seed_accepted and stack.auth.last_grant != "password"
         if args.command == "auth":
             return await _auth_command(stack)
         if args.command == "probe":
-            return await _probe_command(stack)
+            return await _probe_command(stack, seeded=seeded)
         if args.command == "reads":
             return await _reads_command(stack, args)
         if args.command == "ws":
@@ -733,7 +809,7 @@ async def _dispatch(args: argparse.Namespace) -> int:
         if args.command == "write":
             return await _write_command(stack, args)
         if args.command == "all":
-            code = await _probe_command(stack)
+            code = await _probe_command(stack, seeded=seeded)
             return await _reads_command(stack, args) if code == 0 else code
         msg = f"unknown command: {args.command!r}"
         raise ValueError(msg)

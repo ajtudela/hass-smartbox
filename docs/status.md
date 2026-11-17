@@ -9,12 +9,13 @@
 - Library `3.1.0` and integration `3.1.2` are the current stable releases.
 - The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
 - Integration 3.1.2 pins `smartbox>=3.0.2`; the next release moves the pin to `>=3.1.0`. Both add `RESELLER_OVERRIDES` and report active overrides in diagnostics.
-- The next release lists Perry Home and skips empty node slots (`installed: false`) in discovery and membership; token persistence follows in the same release.
+- The next release lists Perry Home, skips empty node slots (`installed: false`) in discovery and membership, and persists the token bundle across restarts.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
+- After the next release: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.
 - Write confirmation: the 6 s countdown starts when the POST returns; the in-flight hold covers a token refresh or a slow request. Revisit if writes to a box still look slow.

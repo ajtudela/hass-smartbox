@@ -122,6 +122,8 @@ def _runtime_for(engine, transport):
         client=MagicMock(),
         transport=transport,
         auth=MagicMock(),
+        token_store=MagicMock(),
+        token_origin="granted",
         identity=MagicMock(),
         fanout=smartbox_init.EngineChangeFanOut(engine),
         membership=MagicMock(),

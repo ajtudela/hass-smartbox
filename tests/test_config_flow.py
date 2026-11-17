@@ -18,6 +18,7 @@ from smartbox.protocol.reseller import SmartboxReseller
 
 from custom_components.smartbox import config_flow as config_flow_mod
 from custom_components.smartbox.config_flow import SmartboxConfigFlow
+from custom_components.smartbox.token_store import token_store_for
 
 from .const import (
     CONF_API_NAME,
@@ -810,3 +811,94 @@ async def test_reconfigure_loaded_entry_reloads_once(
     assert result["reason"] == "reconfigure_successful"
     schedule.assert_not_called()
     assert entry.runtime_data is not before
+
+
+# --- stored tokens are dropped when the credentials change ---
+
+
+async def test_reauth_clears_the_stored_token(
+    hass: HomeAssistant, mock_smartbox, reseller, mock_validate_credentials
+) -> None:
+    """A refreshed password must mint its own session, not resume the old one."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="test_api_name_1_user@email.com",
+        data=MOCK_SMARTBOX_CONFIG[DOMAIN],
+    )
+    entry.add_to_hass(hass)
+    store = token_store_for(hass, entry.entry_id, entry.data)
+    await store.async_save(_stub_token_bundle())
+
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={CONF_USERNAME: "user@email.com", CONF_PASSWORD: "new_password"},
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert await token_store_for(hass, entry.entry_id, entry.data).async_load() is None
+
+
+async def test_reconfigure_clears_the_stored_token(
+    hass: HomeAssistant, mock_smartbox, reseller
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="test_api_name_1_user@email.com",
+        title="Test API name user@email.com",
+        data={
+            CONF_API_NAME: "test_api_name_1",
+            CONF_USERNAME: "user@email.com",
+            CONF_PASSWORD: "old_password",
+        },
+    )
+    entry.add_to_hass(hass)
+    store = token_store_for(hass, entry.entry_id, entry.data)
+    await store.async_save(_stub_token_bundle())
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": entry.entry_id,
+        },
+    )
+    with patch(_VALIDATE_CREDENTIALS, new=AsyncMock()):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_API_NAME: "test_api_name_1",
+                CONF_USERNAME: "user@email.com",
+                CONF_PASSWORD: "new_password",
+            },
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert await token_store_for(hass, entry.entry_id, entry.data).async_load() is None
+
+
+async def test_failed_reauth_keeps_the_stored_token(
+    hass: HomeAssistant, mock_smartbox, reseller
+) -> None:
+    """A typo must not discard the session the entry already had."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="test_api_name_1_user@email.com",
+        data=MOCK_SMARTBOX_CONFIG[DOMAIN],
+    )
+    entry.add_to_hass(hass)
+    store = token_store_for(hass, entry.entry_id, entry.data)
+    await store.async_save(_stub_token_bundle())
+
+    result = await entry.start_reauth_flow(hass)
+    with patch(_VALIDATE_CREDENTIALS, new=AsyncMock(side_effect=AuthError("bad"))):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_USERNAME: "user@email.com", CONF_PASSWORD: "wrong"},
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    loaded = await token_store_for(hass, entry.entry_id, entry.data).async_load()
+    assert loaded is not None
