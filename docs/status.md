@@ -2,13 +2,14 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-15. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-17. Keep this a 90-second read and prune entries as they close.*
 
-## State of 3.1.2
+## State of 3.1.2 and the next release
 
-- Library `3.0.2` and integration `3.1.2` are the current stable releases.
+- Library `3.1.0` and integration `3.1.2` are the current stable releases.
 - The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
-- Integration 3.1.2 pins `smartbox>=3.0.2`, adds `RESELLER_OVERRIDES`, and reports active overrides in diagnostics.
+- Integration 3.1.2 pins `smartbox>=3.0.2`; the next release moves the pin to `>=3.1.0`. Both add `RESELLER_OVERRIDES` and report active overrides in diagnostics.
+- The next release lists Perry Home. The empty-slot and token-persistence changes follow in the same release.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch

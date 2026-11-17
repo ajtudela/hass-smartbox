@@ -3,7 +3,8 @@
 The protocol layer owns the reseller table, the ``SmartboxNodeType``
 enum (``const.py``) and the shared backoff helper. The pinned VALUES
 below originated in the ``smartbox`` library's v2.7.0 table and were
-extended with the 3.0.2 per-reseller API host; they must not drift.
+extended with the 3.0.2 per-reseller API host and the 3.1.0 Perry row;
+they must not drift.
 """
 
 import pytest
@@ -79,6 +80,9 @@ def test_reseller_table_values_pinned() -> None:
     assert resellers["api-ehc"].api_host == "api-ehc.helki.com"
     assert resellers["api-climastar"].name == "Climastar"
     assert resellers["api-climastar"].serial_id == 5
+    assert resellers["api-perry"].name == "Perry"
+    assert resellers["api-perry"].serial_id == 6
+    assert resellers["api-perry"].api_host == "users-api.helki.com"
     assert resellers["api-elnur"].name == "Elnur"
     assert resellers["api-elnur"].serial_id == 7
     assert resellers["api-elnur"].api_host == "api-elnur.helki.com"
@@ -122,6 +126,20 @@ def test_tevolve_reseller_row() -> None:
         basic_auth="NWM0OWRjZTk3NzUxMDM1MTUwNmM0MmRiOnRldm9sdmU=",
         serial_id=15,
     )
+
+
+def test_dormant_tenant_ids_are_not_selectable() -> None:
+    """Serials 18 and 20 map to tenants that cannot use the 3.x transport.
+
+    Sangha "WiMa" (``fr.sangha.wifi``, build 2022-12-14) and Ath Italia
+    "ATH WiFi" (``it.athitalia.wifi``, build 2023-01-11) both predate
+    ``ws_user``, and their web portals are gone: ``wifi.sangha.fr`` is a parked
+    domain and ``wifi.athitalia.it`` refuses connections. The ids are recorded
+    in the library table as comments so the mapping survives without offering a
+    row that can never connect.
+    """
+    assert "api-sangha" not in AvailableResellers.resellers
+    assert "api-ath" not in AvailableResellers.resellers
 
 
 def test_reseller_lookup_known_and_unknown() -> None:
