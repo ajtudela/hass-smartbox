@@ -534,6 +534,19 @@ async def test_box_device_created_and_per_node_entries_rehomed(
     )
 
 
+@pytest.mark.asyncio
+async def test_node_device_model_shows_type_and_addr(hass, mock_smartbox, config_entry):
+    """The node device model carries the wire type and slot address."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    node_device = get_device_by_identifier(dr.async_get(hass), (DOMAIN, "device_2_1"))
+
+    assert node_device is not None
+    assert node_device.model == "htr_mod (addr 1)"
+    assert node_device.model_id == "product_id_2_1"
+
+
 # --- ws_user repair-issue lifecycle ---
 
 
