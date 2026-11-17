@@ -194,7 +194,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, caplog):
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
             )
-            assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
+            assert state.attributes[ATTR_LOCKED] is bool(mock_node_status["locked"])
             _check_temp_state(hass, mock_node_status, state)
 
             # mtemp bump arrives as a websocket status frame
@@ -275,7 +275,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry):
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
             )
-            assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
+            assert state.attributes[ATTR_LOCKED] is bool(mock_node_status["locked"])
             assert float(state.state) == pytest.approx(float(mock_node_status["power"]))
 
             # make sure it's inactive/not charging
@@ -402,7 +402,7 @@ async def test_basic_charge_level(hass, mock_smartbox, config_entry):
             mock_node_status = await mock_smartbox.session.get_status(
                 mock_device["dev_id"], mock_node
             )
-            assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
+            assert state.attributes[ATTR_LOCKED] is bool(mock_node_status["locked"])
             assert int(state.state) == pytest.approx(
                 int(mock_node_status["charge_level"])
             )
@@ -510,7 +510,11 @@ def test_node_sensor_locked_attribute_omitted_when_absent():
     sensor._node_state = lambda: NodeState(status={"stemp": "20.0", "units": "C"})
     assert sensor.extra_state_attributes == {}
     sensor._node_state = lambda: NodeState(status={"locked": True})
-    assert sensor.extra_state_attributes == {ATTR_LOCKED: True}
+    assert sensor.extra_state_attributes[ATTR_LOCKED] is True
+    sensor._node_state = lambda: NodeState(status={"locked": 0})
+    assert sensor.extra_state_attributes[ATTR_LOCKED] is False
+    sensor._node_state = lambda: NodeState(status={"locked": 1})
+    assert sensor.extra_state_attributes[ATTR_LOCKED] is True
 
 
 async def test_update_statistics_start(hass, mock_smartbox, config_entry):

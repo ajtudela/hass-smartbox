@@ -221,11 +221,13 @@ class SmartboxNodeSensorEntity(SmartboxNodeAdapterEntity, SensorEntity):
         """Return extra states of the sensor.
 
         ``locked`` is omitted when the wire never carried it, so templates see
-        absence rather than a None-valued key.
+        absence rather than a None-valued key. The wire uses bool on htr and
+        0/1 on acm; the attribute is normalized to bool
+        (hass-smartbox docs/api-contract.md §7 item 18).
         """
         if "locked" not in self._status:
             return {}
-        return {ATTR_LOCKED: self._status["locked"]}
+        return {ATTR_LOCKED: bool(self._status["locked"])}
 
 
 class TemperatureSensor(SmartboxNodeSensorEntity):

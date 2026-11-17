@@ -234,7 +234,7 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "stemp": "20.3",
             "units": "C",
             "sync_status": "ok",
-            "locked": 0,
+            "locked": False,
             "active": True,
             "power": "510",
             "duty": 50,
@@ -248,7 +248,7 @@ MOCK_SMARTBOX_NODE_STATUS: dict[str, list[dict[str, Any]]] = {
             "comf_temp": "22.0",
             "units": "C",
             "sync_status": "ok",
-            "locked": False,
+            "locked": 0,
             # acm nodes have a 'charging' state rather than 'active'
             "charging": True,
             "charge_level": 2,

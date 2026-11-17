@@ -118,9 +118,18 @@ async def smartbox_stack(hass, mock_smartbox, config_entry):
     return await seed_stack(hass, mock_smartbox)
 
 
+@pytest.mark.parametrize(("locked", "expected"), [(0, False), (1, True)])
+def test_locked_attribute_normalizes_int(locked, expected):
+    """An acm-style 0/1 locked value becomes a real bool on climate."""
+    heater = object.__new__(SmartboxHeater)
+    heater._node = SimpleNamespace(node_type=SmartboxNodeType.HTR)
+    heater._node_state = lambda: NodeState(status={"locked": locked})
+    assert heater.extra_state_attributes[ATTR_LOCKED] is expected
+
+
 def _check_state(hass, mock_node, mock_node_status, state):
     assert state.state == get_hvac_mode(mock_node["type"], mock_node_status)
-    assert state.attributes[ATTR_LOCKED] == mock_node_status["locked"]
+    assert state.attributes[ATTR_LOCKED] is bool(mock_node_status["locked"])
     if (
         mock_node["type"] == SmartboxNodeType.HTR_MOD
         and "selected_temp" in mock_node_status
