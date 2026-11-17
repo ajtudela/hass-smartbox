@@ -360,6 +360,7 @@ The rules this integration's store applies to pushed frames (the vendor apps' ro
 
 - a frame is applied only when path and body are both truthy: an empty body neither replaces a stored slot nor counts as reachability evidence `[doc api-ws-user.md §1.4]`. A snapshot's empty slot body follows the same rule: `status: {}` / `setup: {}` is “no body yet”, not a value and not a reachability signal `[merging.py:165-176]`;
 - frames update what the snapshot created: a frame for an unknown dev id is dropped (both apps do), and a slot frame for a node the node list does not hold is dropped, so a removed node cannot be resurrected by a late frame `[doc api-ws-user.md §1.3/§1.4]`;
+- an `installed: false` node-list entry is an empty slot: it is not a node, adds no store node, and no per-node read is attempted. The empty slot's status read returned 404 on the reporting Haverland box `[live 2026-11-16, user report on issue #50]`; setup/version behavior on an empty slot remains `**[unverified]**`;
 - the box power-limit frame body is either an object carrying `power_limit` or the bare digit string; both forms land in the one numeric slot `[doc api-ws-user.md §1.4]`;
 - a malformed frame is logged and dropped so the pump survives (the vendor apps close the socket and reconnect on a parse error — deliberate divergence: dropping keeps a single bad frame from costing a reconnect) `[doc api-ws-user.md §1.3]`.
 

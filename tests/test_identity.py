@@ -27,6 +27,13 @@ from custom_components.smartbox.identity import (
 HOME = {"id": "h1", "devs": [{"dev_id": "dev1", "name": "Box"}]}
 NODE = {"node_type": "htr", "type": "htr", "addr": 2, "name": "Heater"}
 PMO_NODE = {"node_type": "pmo", "type": "pmo", "addr": 9, "name": "PMO"}
+UNINSTALLED_NODE = {
+    "node_type": "htr_mod",
+    "type": "htr_mod",
+    "addr": 5,
+    "name": "",
+    "installed": False,
+}
 
 STATUS = {"mtemp": "190", "units": "C"}
 SETUP = {"mode": "auto"}
@@ -77,6 +84,19 @@ async def test_pmo_node_skips_the_status_read():
     pmo = (await async_discover_identity(client, None)).nodes[1]
     assert pmo.node_type == SmartboxNodeType.PMO
     assert pmo.status == {}
+
+
+async def test_discovery_skips_uninstalled_slots():
+    """An empty slot is not a node; discovery must not read it."""
+    client = make_client(nodes=[UNINSTALLED_NODE, NODE])
+
+    identity = await async_discover_identity(client, None)
+
+    assert [node.node_id for node in identity.nodes] == ["dev1_2"]
+    assert identity.complete is True
+    assert client.get_node_status.call_count == 1
+    assert client.get_node_setup.call_count == 1
+    assert client.get_node_version.call_count == 1
 
 
 # --- drifted payloads: exact exception types ---
@@ -292,6 +312,16 @@ async def test_membership_reads_boxes_node_ids_and_raw_lists():
     assert membership.unconfirmed_dev_ids == frozenset()
     assert membership.node_keys == {"dev1_2": "htr/2", "dev1_9": "pmo/9"}
     assert membership.raw_nodes == {"dev1": (NODE, PMO_NODE)}
+
+
+async def test_membership_ignores_uninstalled_slots():
+    """An empty slot is absent from membership, so it cannot block removal."""
+    client = make_client(nodes=[UNINSTALLED_NODE, NODE, PMO_NODE])
+
+    membership = await async_discover_membership(client)
+
+    assert membership.node_ids == frozenset({"dev1_2", "dev1_9"})
+    assert membership.unconfirmed_dev_ids == frozenset()
 
 
 async def test_membership_marks_a_box_unconfirmed_for_a_malformed_node():

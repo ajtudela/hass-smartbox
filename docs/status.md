@@ -9,7 +9,7 @@
 - Library `3.1.0` and integration `3.1.2` are the current stable releases.
 - The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
 - Integration 3.1.2 pins `smartbox>=3.0.2`; the next release moves the pin to `>=3.1.0`. Both add `RESELLER_OVERRIDES` and report active overrides in diagnostics.
-- The next release lists Perry Home. The empty-slot and token-persistence changes follow in the same release.
+- The next release lists Perry Home and skips empty node slots (`installed: false`) in discovery and membership; token persistence follows in the same release.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch
