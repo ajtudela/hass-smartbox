@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Box power-limit entities are no longer created for boxless heaters (heaters not paired with a Smartbox controller), whose box power-limit endpoint the API rejects. Existing box power-limit entities are removed for those devices on setup. The parent device, connected state and away switch remain.
+
 ## 3.1.3 (2026-11-17)
 
 ### Added

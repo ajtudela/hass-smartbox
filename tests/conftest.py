@@ -235,6 +235,16 @@ def _identity_client_seams(mock_smartbox: MockSmartbox, router: _WriteRouter):
         ),
         patch.object(
             SmartboxClient,
+            "get_power_limit",
+            new=AsyncMock(side_effect=mock_smartbox.get_power_limit),
+        ),
+        patch.object(
+            SmartboxClient,
+            "get_dev_data",
+            new=AsyncMock(side_effect=mock_smartbox.get_dev_data),
+        ),
+        patch.object(
+            SmartboxClient,
             "get_nodes",
             new=AsyncMock(side_effect=mock_smartbox.get_nodes),
         ),

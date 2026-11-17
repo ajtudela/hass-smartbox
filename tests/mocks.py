@@ -20,6 +20,7 @@ from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.helpers import entity_registry
 from smartbox.protocol.client import NodeRef
+from smartbox.protocol.errors import SmartboxError
 
 from custom_components.smartbox.const import DOMAIN, HEATER_NODE_TYPES, SmartboxNodeType
 from tests.const import CONF_DEVICE_IDS
@@ -355,6 +356,29 @@ class MockSmartbox:
 
     async def get_devices(self) -> list[dict[str, Any]]:
         return [dict(device) for device in self._devices]
+
+    async def get_power_limit(self, dev_id: str) -> dict[str, str]:
+        """Probe the box power-limit endpoint; None means no htr_system."""
+        limit = self._device_power.get(dev_id)
+        if limit is None:
+            msg = "box power limit not available"
+            raise SmartboxError(msg)
+        return {"power_limit": str(limit)}
+
+    async def get_dev_data(self, dev_id: str) -> dict[str, Any]:
+        """Return a snapshot-shaped device payload for capability confirmation."""
+        data: dict[str, Any] = {
+            "nodes": deepcopy(self._node_info[dev_id]),
+            "connected": True,
+            "away_status": dict(self._node_away[dev_id]),
+        }
+        limit = self._device_power.get(dev_id)
+        if limit is not None:
+            data["htr_system"] = {
+                "power_limit": {"power_limit": str(limit)},
+                "setup": {"power_limit": int(limit)},
+            }
+        return data
 
     async def get_nodes(self, dev_id: str) -> list[dict[str, Any]]:
         return deepcopy(self._node_info[dev_id])

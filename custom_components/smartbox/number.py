@@ -49,7 +49,8 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from . import SmartboxConfigEntry
+    from . import SmartboxConfigEntry, SmartboxRuntime
+    from .adapter import EngineChangeFanOut
     from .entity_builder import EntityGroup
 
 _LOGGER = logging.getLogger(__name__)
@@ -106,6 +107,18 @@ class SmartboxNodeNumberEntity(SmartboxNodeAdapterEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
 
+def _build_device_entities(
+    device: SmartboxDeviceInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the box power-limit number when the device exposes it."""
+    if not device.box_power_limit_available:
+        return []
+    return [([PowerLimit(device, entry, runtime, fanout, "power_limit")], True)]
+
+
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 - HA platform signature
     entry: SmartboxConfigEntry,
@@ -117,16 +130,12 @@ async def async_setup_entry(
     runtime = entry.runtime_data
     fanout = runtime.fanout
 
-    # Power limit lives on the box device itself; always created (a limit
-    # of 0 means "no limit" and is managed by the no_power_limit switch).
+    # Power limit lives on the box device itself; a limit of 0 means "no
+    # limit" and is managed by the no_power_limit switch. Boxless devices
+    # reject the endpoint, so they get neither entity.
     def build_device(device: SmartboxDeviceInfo) -> list[EntityGroup]:
-        """Build the box power-limit number."""
-        return [
-            (
-                [PowerLimit(device, entry, runtime, fanout, "power_limit")],
-                True,
-            )
-        ]
+        """Build the box power-limit number when the device exposes it."""
+        return _build_device_entities(device, entry, runtime, fanout)
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the number entities this node's setup exposes."""

@@ -547,6 +547,74 @@ async def test_node_device_model_shows_type_and_addr(hass, mock_smartbox, config
     assert node_device.model_id == "product_id_2_1"
 
 
+@pytest.mark.asyncio
+async def test_boxless_device_skips_box_power_limit_entities(
+    hass, mock_smartbox, config_entry
+):
+    """No htr_system means no box power-limit number or switch."""
+    mock_smartbox._device_power = {
+        **mock_smartbox._device_power,
+        "device_1": None,
+    }
+    registry = er.async_get(hass)
+    box_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, "device_1")},
+    )
+    registry.async_get_or_create(
+        NUMBER_DOMAIN,
+        DOMAIN,
+        "device_1_power_limit",
+        suggested_object_id="device_1_power_limit",
+        config_entry=config_entry,
+        device_id=box_device.id,
+    )
+    registry.async_get_or_create(
+        SWITCH_DOMAIN,
+        DOMAIN,
+        "device_1_no_power_limit",
+        suggested_object_id="device_1_no_power_limit",
+        config_entry=config_entry,
+        device_id=box_device.id,
+    )
+    registry.async_get_or_create(
+        SWITCH_DOMAIN,
+        DOMAIN,
+        "device_1_away_status",
+        suggested_object_id="device_1_away_status",
+        config_entry=config_entry,
+        device_id=box_device.id,
+    )
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert (
+        registry.async_get_entity_id(NUMBER_DOMAIN, DOMAIN, "device_1_power_limit")
+        is None
+    )
+    assert (
+        registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_1_no_power_limit")
+        is None
+    )
+    assert (
+        registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_1_away_status")
+        is not None
+    )
+    assert (
+        registry.async_get_entity_id(BINARY_SENSOR_DOMAIN, DOMAIN, "device_1_connected")
+        is not None
+    )
+    assert (
+        registry.async_get_entity_id(NUMBER_DOMAIN, DOMAIN, "device_2_power_limit")
+        is not None
+    )
+    assert (
+        registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_2_no_power_limit")
+        is not None
+    )
+
+
 # --- ws_user repair-issue lifecycle ---
 
 

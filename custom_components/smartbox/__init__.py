@@ -68,7 +68,7 @@ from .const import DOMAIN, SMARTBOX_UNAVAILABLE_DELAY, SMARTBOX_WRITE_CONFIRM_TI
 from .devices import async_ensure_box_devices
 from .entity_builder import EntityBuilder
 from .history import HistoryImport
-from .identity import SmartboxIdentity, async_discover_identity
+from .identity import SmartboxDeviceInfo, SmartboxIdentity, async_discover_identity
 from .membership import MembershipWatcher, clear_node_added_issue
 from .reseller import api_base_url, reseller_from_entry_data
 from .services import ServiceTargets, async_register_services, async_unregister_services
@@ -159,6 +159,38 @@ def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
         password=data[CONF_PASSWORD],
         referer=reseller.web_url or None,
     )
+
+
+def _async_prune_boxless_power_limit_entities(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    devices: tuple[SmartboxDeviceInfo, ...],
+) -> None:
+    """Remove box power-limit entities from devices without htr_system.
+
+    Older builds created these on every parent device. The platform builders
+    no longer add them for boxless devices, so existing registry entries
+    would otherwise linger as unavailable. The capability probe only removes
+    them when the box power-limit endpoint rejects the device or returns a
+    value-less 2xx, and a snapshot-shaped dev_data has no htr_system
+    (docs/api-contract.md §7 item 17); transport, auth and
+    inconclusive-payload cases keep the capability flag true and are not
+    pruned here.
+    """
+    stale = {
+        f"{device.dev_id}_{key}"
+        for device in devices
+        if not device.box_power_limit_available
+        for key in ("power_limit", "no_power_limit")
+    }
+    if not stale:
+        return
+    entity_registry = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(
+        entity_registry, entry.entry_id
+    ):
+        if registry_entry.platform == DOMAIN and registry_entry.unique_id in stale:
+            entity_registry.async_remove(registry_entry.entity_id)
 
 
 def _async_rehome_device_entities(
@@ -558,6 +590,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         hass, entry.entry_id, runtime.identity.devices
     )
     _async_rehome_device_entities(hass, entry, box_device_ids)
+    _async_prune_boxless_power_limit_entities(hass, entry, runtime.identity.devices)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Every platform has registered its builders; membership additions can

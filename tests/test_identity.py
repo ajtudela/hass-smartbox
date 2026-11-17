@@ -7,10 +7,11 @@ that protocol-layer errors propagate RAW for setup to map.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
-from smartbox.protocol.errors import SmartboxError, TransportUnavailableError
+from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig
 
 from custom_components.smartbox.const import SmartboxNodeType
@@ -47,6 +48,13 @@ def make_client(
     """AsyncMock SmartboxClient serving one home + the given nodes list."""
     client = AsyncMock()
     client.get_grouped_devices.return_value = [HOME] if homes is None else homes
+    client.get_power_limit.return_value = {"power_limit": "0"}
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+        "htr_system": {"setup": {}},
+    }
     client.get_nodes.return_value = [NODE, PMO_NODE] if nodes is None else nodes
     client.get_node_status.return_value = STATUS
     client.get_node_setup.return_value = SETUP
@@ -63,6 +71,8 @@ async def test_discovery_reads_all_node_facts():
     assert len(identity.devices) == 1
     assert len(identity.nodes) == 2
     assert identity.complete is True
+    assert identity.devices[0].box_power_limit_available is True
+    client.get_power_limit.assert_awaited_once_with("dev1")
     node = identity.nodes[0]
     assert isinstance(node, SmartboxNodeInfo)
     assert isinstance(node.device, SmartboxDeviceInfo)
@@ -84,6 +94,179 @@ async def test_pmo_node_skips_the_status_read():
     pmo = (await async_discover_identity(client, None)).nodes[1]
     assert pmo.node_type == SmartboxNodeType.PMO
     assert pmo.status == {}
+
+
+async def test_discovery_marks_a_device_without_box_power_limit():
+    """A rejected probe plus a boxless snapshot means no box power limit."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+async def test_empty_htr_system_confirms_absence():
+    """An empty htr_system counts as absent (pinned behaviour)."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+        "htr_system": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+async def test_discovery_probes_the_box_while_reading_nodes():
+    """The capability probe and the nodes read share one round trip."""
+    client = make_client()
+    gate = asyncio.Event()
+
+    async def get_power_limit(_dev_id):
+        await asyncio.wait_for(gate.wait(), timeout=1.0)
+        return {"power_limit": "0"}
+
+    async def get_nodes(_dev_id):
+        gate.set()
+        return [NODE, PMO_NODE]
+
+    client.get_power_limit.side_effect = get_power_limit
+    client.get_nodes.side_effect = get_nodes
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+
+
+async def test_discovery_keeps_box_power_limit_when_snapshot_has_htr_system():
+    """A broad 4xx on a boxed device does not remove its power limit."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("forbidden")
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+
+
+@pytest.mark.parametrize(
+    "dev_data",
+    [
+        {},
+        [],
+        {"devData": {"nodes": [], "away_status": {}}},
+        {"nodes": [], "connected": True, "htr_system": "drifted"},
+        # all snapshot keys present, but htr_system is not a mapping
+        {"nodes": [], "connected": True, "away_status": {}, "htr_system": "drifted"},
+        {"nodes": []},  # one snapshot key is not a snapshot
+        {"nodes": [], "connected": True},  # a truncated snapshot keeps the surface
+    ],
+)
+async def test_discovery_keeps_box_power_limit_when_confirmation_is_inconclusive(
+    dev_data,
+):
+    """Only a snapshot-shaped, htr_system-free payload confirms absence."""
+    client = make_client()
+    client.get_power_limit.return_value = {}
+    client.get_dev_data.return_value = dev_data
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+
+
+@pytest.mark.parametrize("error", [SmartboxError("no data"), OSError("disk")])
+async def test_confirmation_read_failure_keeps_box_power_limit(error):
+    """A failed confirmation read keeps the existing power-limit surface."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.side_effect = error
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+
+
+async def test_empty_success_body_uses_snapshot_confirmation():
+    """A 2xx without power_limit is not absent until the snapshot agrees."""
+    client = make_client()
+    client.get_power_limit.return_value = {}
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+@pytest.mark.parametrize("value", [None, "", {}, []])
+async def test_value_less_success_body_uses_snapshot_confirmation(value):
+    """A 2xx with an unusable power_limit is not positive evidence."""
+    client = make_client()
+    client.get_power_limit.return_value = {"power_limit": value}
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+@pytest.mark.parametrize("payload", [None, []])
+async def test_non_mapping_success_body_uses_snapshot_confirmation(payload):
+    """A 2xx whose body is not a mapping is not positive evidence."""
+    client = make_client()
+    client.get_power_limit.return_value = payload
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+@pytest.mark.parametrize("value", [0, "0", "1500"])
+async def test_real_power_limit_value_skips_confirmation(value):
+    """Zero is a valid 'no limit' value and stays positive."""
+    client = make_client()
+    client.get_power_limit.return_value = {"power_limit": value}
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+    client.get_dev_data.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "error", [AuthError("auth"), TransportUnavailableError("network")]
+)
+async def test_discovery_keeps_box_power_limit_when_the_probe_is_inconclusive(error):
+    """Auth or transport failures keep the existing box-power-limit surface."""
+    client = make_client()
+    client.get_power_limit.side_effect = error
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
+    client.get_dev_data.assert_not_awaited()
 
 
 async def test_discovery_skips_uninstalled_slots():
