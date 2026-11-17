@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from smartbox.core.merging import boost_config, normalize_node_addr
+from smartbox.core.merging import boost_config, is_empty_slot, normalize_node_addr
 from smartbox.core.state import node_device_id
 from smartbox.protocol.client import NodeRef, SmartboxClient
 from smartbox.protocol.errors import SmartboxError
@@ -237,6 +237,34 @@ def _device_info_from_dev(
     )
 
 
+def _readable_node_entries(
+    entries: list[Any], dev_id: str
+) -> tuple[list[Mapping[str, Any]], bool]:
+    """Keep one box's installed, well-formed ``mgr/nodes`` entries.
+
+    Empty slots (``installed: false``) are not nodes and are not read
+    (hass-smartbox docs/api-contract.md §6.6); skipping them does not make
+    discovery incomplete. A malformed entry does make it incomplete: removal
+    reconciliation must not infer absence from a list it could not fully parse.
+    """
+    complete = True
+    readable: list[Mapping[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            complete = False
+            continue
+        if is_empty_slot(entry):
+            continue
+        try:
+            _node_ref_from_info(entry)
+        except SmartboxError as ex:
+            complete = False
+            _LOGGER.warning("Skipping malformed node on %r: %s", dev_id, ex)
+            continue
+        readable.append(entry)
+    return readable, complete
+
+
 def _node_ref_from_info(node_info: Mapping[str, Any]) -> NodeRef:
     """Validate one ``mgr/nodes`` entry into a node reference.
 
@@ -349,23 +377,10 @@ async def async_discover_identity(
                 continue
             device = _device_info_from_dev(dev, home_id, reseller)
             devices.append(device)
-            entries: list[Mapping[str, Any]] = []
-            for entry in await client.get_nodes(device.dev_id):
-                if not isinstance(entry, Mapping):
-                    complete = False
-                    continue
-                try:
-                    _node_ref_from_info(entry)
-                except SmartboxError as ex:
-                    # One malformed node entry must not hide every other
-                    # node on the account, but it does make this discovery
-                    # unfit for setup-time removal reconciliation.
-                    complete = False
-                    _LOGGER.warning(
-                        "Skipping malformed node on %r: %s", device.dev_id, ex
-                    )
-                    continue
-                entries.append(entry)
+            entries, entries_complete = _readable_node_entries(
+                await client.get_nodes(device.dev_id), device.dev_id
+            )
+            complete = complete and entries_complete
             nodes.extend(
                 await _gather_reads(
                     *(_read_node(client, device, entry) for entry in entries)
@@ -388,6 +403,10 @@ def _membership_nodes(
     for entry in entries:
         if not isinstance(entry, Mapping):
             confirmed = False
+            continue
+        if is_empty_slot(entry):
+            # An emptied slot is absent from membership: a stale registry
+            # device must not cancel its own removal confirmation.
             continue
         try:
             ref = _node_ref_from_info(entry)

@@ -10,6 +10,10 @@
 
 - The integration pins `smartbox>=3.1.0`, the current library release.
 
+### Fixed
+
+- Setup no longer aborts when a box lists empty node slots (`installed: false`). Node discovery skips them before reading status/setup/version, and membership treats them as absent so an emptied slot cannot keep a stale registry device alive. The library keeps empty slots out of the engine's node membership, so a later installation in that slot is still discovered as a new node.
+
 ## 3.1.2 (2026-11-15)
 
 ### Added
