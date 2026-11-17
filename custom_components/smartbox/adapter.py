@@ -344,6 +344,10 @@ class SmartboxNodeAdapterEntity(SmartboxAdapterEntity):
             identifiers={(DOMAIN, self._node.node_id)},
             name=self._node.name,
             manufacturer=self._reseller.name,
+            # The wire node list calls this field `addr`; the vendor exposes
+            # a numeric product id but no human model label, so show the type
+            # and slot together.
+            model=f"{self._node.node_type} (addr {self._node.addr})",
             model_id=str(self._node.pid),
             hw_version=str(self._node.hw_version),
             configuration_url=self._configuration_url,

@@ -6,6 +6,7 @@
 
 - The supported-reseller table lists Perry Home (`api-perry`). The library row is selectable; a live login remains unverified.
 - The token bundle is persisted in Home Assistant's storage and resumed on setup, so a restart continues the existing vendor session instead of minting a new login; the rotated refresh token is written after every grant. Reauth, reconfigure and entry removal clear the stored bundle. The record is stamped with the account and effective API host, so a host override or credential change starts fresh.
+- Node devices show the node type and wire address in the device model field, e.g. `htr_mod (addr 7)`.
 
 ### Changed
 
