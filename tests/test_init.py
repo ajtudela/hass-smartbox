@@ -6,8 +6,9 @@ per-node registry entry re-home and node links.
 """
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
@@ -33,6 +34,7 @@ from smartbox.protocol import (
     TransportUnavailableError,
     TransportUnsupportedError,
 )
+from smartbox.protocol.auth import TokenBundle
 
 import custom_components.smartbox as smartbox_init
 from custom_components.smartbox import (
@@ -48,9 +50,12 @@ from custom_components.smartbox.const import (
 )
 from custom_components.smartbox.history import HistoryImport
 from custom_components.smartbox.services import ServiceTargets, remove_service_if_last
-from tests.const import MOCK_SMARTBOX_CONFIG
+from custom_components.smartbox.token_store import token_store_for
+from tests.const import CONF_PASSWORD, MOCK_SMARTBOX_CONFIG
 from tests.fake_transport import FakeTransport
+from tests.fakes import make_jwt
 from tests.mocks import get_device_by_identifier
+from tests.test_utils import stored_token_bundle
 
 # Key -> entity domain of the per-node registry entries to re-home.
 _REHOMED_TEST_KEYS = {
@@ -407,6 +412,23 @@ async def test_unload_completes_when_transport_close_hangs(
     assert config_entry.state is ConfigEntryState.NOT_LOADED
 
 
+@pytest.mark.asyncio
+async def test_teardown_closes_the_store_when_engine_stop_fails():
+    """A failed stop must not leave the token store accepting writes."""
+    runtime = SimpleNamespace(
+        membership=SimpleNamespace(close=Mock()),
+        engine=SimpleNamespace(stop=AsyncMock(side_effect=RuntimeError("boom"))),
+        transport=SimpleNamespace(close=AsyncMock()),
+        token_store=SimpleNamespace(close=Mock()),
+    )
+
+    with pytest.raises(RuntimeError):
+        await smartbox_init._async_teardown_runtime(runtime)
+
+    runtime.transport.close.assert_awaited_once()
+    runtime.token_store.close.assert_called_once()
+
+
 # --- box device creation + per-node registry re-home ---
 
 
@@ -720,3 +742,236 @@ async def test_async_setup_skips_the_card_when_the_asset_is_missing(
         assert await smartbox_init.async_setup(hass, {})
     http.async_register_static_paths.assert_not_awaited()
     add_url.assert_not_called()
+
+
+# --- token persistence across restarts ---
+
+# The mock_smartbox fixture stubs TokenManager.get_token; these tests
+# need the real one, so they patch the class attribute back.
+_REAL_GET_TOKEN = smartbox_init.TokenManager.get_token
+
+
+def _token_store(hass, entry):
+    return token_store_for(hass, entry.entry_id, entry.data)
+
+
+@pytest.mark.asyncio
+async def test_setup_restores_the_stored_token(hass, mock_smartbox, config_entry):
+    """A bundle from the previous process is used without a password grant."""
+    stored = stored_token_bundle()
+    await _token_store(hass, config_entry).async_save(stored)
+    probe = AsyncMock()
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(side_effect=AssertionError("a grant ran")),
+        ) as grant,
+        patch("custom_components.smartbox.check_ws_user_support", probe),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    grant.assert_not_awaited()
+    probe.assert_awaited_once()
+    assert probe.await_args.args[0] == "stored-access"
+    assert config_entry.runtime_data.token_origin == "restored"
+
+
+@pytest.mark.asyncio
+async def test_setup_persists_the_granted_bundle(hass, mock_smartbox, config_entry):
+    """The first password grant is written through the manager's seam."""
+    granted = TokenBundle(
+        access_token="granted-access",
+        refresh_token="granted-refresh",
+        expires_at=datetime.now(UTC) + timedelta(hours=4),
+    )
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(return_value=granted),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    loaded = await _token_store(hass, config_entry).async_load()
+    assert loaded is not None
+    assert loaded.refresh_token == "granted-refresh"
+    assert config_entry.runtime_data.token_origin == "granted"
+
+
+@pytest.mark.asyncio
+async def test_setup_persists_a_rotated_refresh_token(
+    hass, mock_smartbox, config_entry
+):
+    """A refresh grant, not only the initial password grant, updates the record."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle(lifetime_s=1))
+    rotated = TokenBundle(
+        access_token="rotated-access",
+        refresh_token="rotated-refresh",
+        expires_at=datetime.now(UTC) + timedelta(hours=4),
+    )
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(return_value=rotated),
+        ) as grant,
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    grant.assert_awaited_once()
+    loaded = await _token_store(hass, config_entry).async_load()
+    assert loaded is not None
+    assert loaded.refresh_token == "rotated-refresh"
+    assert config_entry.runtime_data.token_origin == "restored"
+
+
+@pytest.mark.asyncio
+async def test_reload_keeps_the_stored_token(hass, mock_smartbox, config_entry):
+    """The unload/reload path must not clear the bundle."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle())
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    assert await hass.config_entries.async_reload(config_entry.entry_id)
+
+    loaded = await _token_store(hass, config_entry).async_load()
+    assert loaded is not None
+    assert loaded.refresh_token == "stored-refresh"
+
+
+@pytest.mark.asyncio
+async def test_rejected_restored_token_is_replaced_before_judging_the_endpoint(
+    hass, mock_smartbox, config_entry
+):
+    """A stale stored token must not be read as an unsupported ws endpoint."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle())
+    fresh = TokenBundle(
+        access_token="fresh-access",
+        refresh_token="fresh-refresh",
+        expires_at=datetime.now(UTC) + timedelta(hours=4),
+    )
+    probe = AsyncMock(side_effect=[TransportUnsupportedError("401"), None])
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(return_value=fresh),
+        ),
+        patch("custom_components.smartbox.check_ws_user_support", probe),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    assert probe.await_count == 2
+    assert probe.await_args_list[0].args[0] == "stored-access"
+    assert probe.await_args_list[1].args[0] == "fresh-access"
+    assert config_entry.runtime_data.token_origin == "restored"
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_clears_the_stored_token(hass, config_entry):
+    store = _token_store(hass, config_entry)
+    await store.async_save(stored_token_bundle())
+
+    await smartbox_init.async_remove_entry(hass, config_entry)
+
+    assert await _token_store(hass, config_entry).async_load() is None
+
+
+@pytest.mark.asyncio
+async def test_unload_clears_tokens_when_credentials_changed(
+    hass, mock_smartbox, config_entry
+):
+    """The unload-time guard discards a rotation the flow's clear missed."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle())
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()):
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data={**config_entry.data, CONF_PASSWORD: "new-password"},
+        )
+    assert await smartbox_init.async_unload_entry(hass, config_entry)
+
+    assert (
+        await token_store_for(
+            hass, config_entry.entry_id, config_entry.data
+        ).async_load()
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_unload_retires_the_runtime_store(hass, mock_smartbox, config_entry):
+    """A grant completing after unload must not rewrite the record."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle())
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    runtime = config_entry.runtime_data
+
+    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    await runtime.token_store.async_save(stored_token_bundle(refresh="late-refresh"))
+
+    loaded = await _token_store(hass, config_entry).async_load()
+    assert loaded is not None
+    assert loaded.refresh_token == "stored-refresh"
+
+
+@pytest.mark.asyncio
+async def test_rejected_seed_reports_a_fresh_session(hass, mock_smartbox, config_entry):
+    """The manager's claim check can refuse a record; diagnostics must say so."""
+    foreign = TokenBundle(
+        access_token=make_jwt(
+            {
+                "userId": "u1",
+                "email": "other@example.test",
+                "serialId": 1,
+                "exp": 9999999999,
+            }
+        ),
+        refresh_token="foreign-refresh",
+        expires_at=datetime.now(UTC) + timedelta(hours=4),
+    )
+    await _token_store(hass, config_entry).async_save(foreign)
+    fresh = stored_token_bundle()
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(return_value=fresh),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+
+    assert config_entry.runtime_data.token_origin == "granted"
+
+
+@pytest.mark.asyncio
+async def test_transient_probe_failure_is_not_retried_with_a_fresh_grant(
+    hass, mock_smartbox, config_entry
+):
+    """Only a deterministic rejection of a restored token earns the retry."""
+    await _token_store(hass, config_entry).async_save(stored_token_bundle())
+    probe = AsyncMock(side_effect=TransportUnavailableError("down"))
+
+    with (
+        patch.object(smartbox_init.TokenManager, "get_token", _REAL_GET_TOKEN),
+        patch.object(
+            smartbox_init.TokenManager,
+            "_grant_with_retry",
+            AsyncMock(side_effect=AssertionError("a grant ran")),
+        ) as grant,
+        patch("custom_components.smartbox.check_ws_user_support", probe),
+    ):
+        assert not await hass.config_entries.async_setup(config_entry.entry_id)
+
+    grant.assert_not_awaited()

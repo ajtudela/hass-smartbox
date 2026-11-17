@@ -80,6 +80,7 @@ async def test_diagnostics_new_stack_facts(hass, mock_smartbox, config_entry):
     # The token expiry key tracks the TokenManager's cached bundle (None
     # in these tests: the stubbed grant never populates the cache).
     assert "token_expiry" in runtime_section
+    assert runtime_section["token_origin"] == "granted"
     # Feed (websocket) facts: whether values are flowing and the outage
     # history.
     assert runtime_section["feed"] == {
@@ -280,6 +281,7 @@ async def test_diagnostics_absent_runtime(hass, mock_smartbox, config_entry):
         "transport": None,
         "supervision": None,
         "token_expiry": None,
+        "token_origin": None,
         "feed": None,
         "membership": None,
         "statistics_import": None,

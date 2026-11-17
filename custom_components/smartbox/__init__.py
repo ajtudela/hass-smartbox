@@ -72,6 +72,7 @@ from .identity import SmartboxIdentity, async_discover_identity
 from .membership import MembershipWatcher, clear_node_added_issue
 from .reseller import api_base_url, reseller_from_entry_data
 from .services import ServiceTargets, async_register_services, async_unregister_services
+from .token_store import TokenStore, token_store_for
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -110,15 +111,21 @@ type SmartboxConfigEntry = ConfigEntry[SmartboxRuntime]
 class SmartboxRuntime:
     """Runtime data (one import surface, no globals).
 
-    Stored on ``entry.runtime_data`` for the entity platforms. Nothing about
-    the runtime outlives the entry: the ws_user recovery streak lives on the
-    monitor task, so there is no cross-reload state in ``hass.data``.
+    Stored on ``entry.runtime_data`` for the entity platforms. Runtime state
+    does not outlive the entry: the ws_user recovery streak lives on the
+    monitor task, so a reload rebuilds it. The token-store lock table in
+    ``hass.data`` is the one cross-reload coordination object; it serializes
+    storage access and is not runtime state.
     """
 
     engine: SmartboxEngine
     client: SmartboxClient
     transport: WsUserTransport
     auth: TokenManager
+    token_store: TokenStore
+    # "restored" when setup resumed the stored bundle, "granted" when it
+    # minted a fresh session (first run, dead storage, or a rejected restore).
+    token_origin: str
     identity: SmartboxIdentity
     fanout: EngineChangeFanOut
     membership: MembershipWatcher
@@ -346,11 +353,16 @@ async def _async_teardown_runtime(runtime: SmartboxRuntime) -> None:
     idempotent and bounded.
     """
     runtime.membership.close()
-    await runtime.engine.stop()
-    with contextlib.suppress(Exception):
-        await asyncio.wait_for(
-            runtime.transport.close(), _WS_USER_TEARDOWN_TIMEOUT_SECONDS
-        )
+    try:
+        await runtime.engine.stop()
+    finally:
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(
+                runtime.transport.close(), _WS_USER_TEARDOWN_TIMEOUT_SECONDS
+            )
+        # Retire the store last: grants that completed during teardown were
+        # still worth saving, later ones must not undo a credential-change clear.
+        runtime.token_store.close()
 
 
 async def _async_build_runtime(
@@ -361,20 +373,63 @@ async def _async_build_runtime(
     AuthConfig -> TokenManager (via the client) -> SmartboxClient ->
     SmartboxEngine (write host) -> WsUserTransport -> REST identity
     discovery (:mod:`.identity`). The
-    capability probe runs before anything is supervised: one fresh token, then
-    the one-shot ``check_ws_user_support``. There is no socket_io transport, so
-    a deterministic probe rejection fails setup, while transient probe trouble
-    propagates raw and retries via ``ConfigEntryNotReady``. Protocol-layer
+    capability probe runs before anything is supervised: one token (the stored
+    bundle when present, otherwise a password grant), then the one-shot
+    ``check_ws_user_support``. A restored token that the endpoint rejects is
+    replaced by a fresh grant and probed once more, since the 401/403 verdict
+    is only deterministic for a fresh grant. There is no socket_io transport,
+    so a deterministic probe rejection fails setup, while transient probe
+    trouble propagates raw and retries via ``ConfigEntryNotReady``. Protocol-layer
     errors propagate raw for the caller to map.
     """
     config = auth_config_from_entry_data(entry.data)
     websession = async_get_clientsession(hass)
-    client = SmartboxClient(config, session=websession)
-    auth = client.auth
-    token_bundle = await auth.get_token()
-    await check_ws_user_support(
-        token_bundle.access_token, config.api_host, client.session
+    token_store = token_store_for(hass, entry.entry_id, entry.data)
+    stored = await token_store.async_load()
+    client = SmartboxClient(
+        config,
+        session=websession,
+        on_grant=token_store.async_save,
+        initial_tokens=stored,
     )
+    auth = client.auth
+    # Resume the previous session when a bundle survived the restart: the
+    # refresh grant keeps the server-side session, so restarts stop creating
+    # a new "login" row. Missing or unusable storage falls back to the
+    # password grant exactly as before.
+    token_bundle = await auth.get_token()
+    try:
+        await check_ws_user_support(
+            token_bundle.access_token, config.api_host, client.session
+        )
+    except TransportUnsupportedError:
+        if not auth.seed_accepted:
+            raise
+        # A 401/403 verdict is only deterministic for a fresh grant; a stored
+        # access token may have been revoked in the vendor app since.
+        _LOGGER.debug(
+            "ws_user probe rejected the restored token; retrying with a fresh grant"
+        )
+        await auth.invalidate(token_bundle.access_token)
+        token_bundle = await auth.get_token()
+        await check_ws_user_support(
+            token_bundle.access_token, config.api_host, client.session
+        )
+    # A password grant creates a vendor login row; a refresh continues the
+    # stored session. Report what actually happened, not what was on disk.
+    origin = (
+        "restored"
+        if auth.seed_accepted and auth.last_grant != "password"
+        else "granted"
+    )
+    if origin == "restored":
+        _LOGGER.debug(
+            "Resumed stored smartbox session for entry %s (expires %s)",
+            entry.entry_id,
+            token_bundle.expires_at.isoformat(),
+        )
+    else:
+        _LOGGER.debug("Minted a fresh smartbox session for entry %s", entry.entry_id)
     identity = await async_discover_identity(
         client, reseller_from_entry_data(entry.data)
     )
@@ -412,6 +467,8 @@ async def _async_build_runtime(
         client=client,
         transport=transport,
         auth=auth,
+        token_store=token_store,
+        token_origin=origin,
         identity=identity,
         # ONE fan-out (one engine subscription) per config entry, shared
         # by every platform's entities (see adapter.py module docstring).
@@ -571,6 +628,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
             # while its transport is still tearing down. (HA itself clears
             # entry.runtime_data once the platforms unloaded.)
             await _async_teardown_runtime(runtime)
+            if dict(entry.data) != dict(runtime.entry_data):
+                # Credentials changed (reauth/reconfigure): the reloaded
+                # runtime must mint its own session. Clearing after teardown
+                # also discards any rotation the retired runtime completed
+                # during the window.
+                await token_store_for(hass, entry.entry_id, entry.data).async_clear()
     finally:
         if runtime is not None and not unloaded:
             runtime.membership.resume()
@@ -583,9 +646,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:
-    """Drop the entry's repair issues (nothing else outlives the entry)."""
+    """Drop the entry's repair issues and its stored tokens."""
     ir.async_delete_issue(hass, DOMAIN, ws_user_flapping_issue_id(entry))
     clear_node_added_issue(hass, entry)
+    await token_store_for(hass, entry.entry_id, entry.data).async_clear()
 
 
 async def update_listener(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:

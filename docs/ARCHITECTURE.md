@@ -72,7 +72,7 @@ flowchart TB
 
 The only layer that touches the network:
 
-- `auth.py`, `jwt.py` — the token lifecycle: one grant per password, refresh rotation, serialized token calls.
+- `auth.py`, `jwt.py` — the token lifecycle: one grant per password, refresh rotation, serialized token calls. The integration persists the granted bundle in `.storage` and restores it at setup; the library's `on_grant` seam rewrites it after every grant.
 - `client.py` — the REST client: reads, plus the named write operations from `writes.py`, addressed via `paths.py`.
 - `transport.py`, `ws_user.py` — the transport seam and the `ws_user` socket: a fresh token per connect, escalating backoff, a connect watchdog, bounded teardown.
 - `values.py` — wire normalization: units, quantization, the schedule shape; one owner per rule.
@@ -123,6 +123,7 @@ custom_components/smartbox/   the integration
 ├── diagnostics.py, system_health.py
 ├── const.py                  domain constants, node types, defaults
 ├── reseller.py               entry data → reseller identity
+├── token_store.py            per-entry token bundle in .storage
 ├── manifest.json, icons.json, brand/, services.yaml,
 │   strings.json, translations/
 
@@ -172,7 +173,7 @@ Availability moves on evidence: a lost marker opens an unavailable window, an ok
 - Availability only moves on evidence — lost markers, ok frames, the close grace — so a stale value cannot keep rendering as available.
 - Writes are serialized per node, applied optimistically, and confirmed per slot; each confirmation is generation-owned, so overlapping writes do not disarm each other.
 - Time is a seam: every sleep and monotonic clock read goes through `smartbox.protocol.timing`, which is how tests exercise timeout logic without waiting. `asyncio` deadlines stay on `loop.time()` (asyncio compares against its own clock), and wall-clock reads that must match the wire (JWT `exp`, sample epochs) use `time.time()` deliberately.
-- Teardown is total: unloading an entry clears its deadlines, timers and listeners; nothing outlives the config entry.
+- Teardown is total: unloading an entry clears its deadlines, timers and listeners; only the per-entry token record in `.storage` deliberately survives a reload (it is removed on entry removal or a credential change).
 - Layers import downward only — adapter → core → protocol — and the protocol layer stays free of Home Assistant and of the other layers.
 - Module docstrings are the contract for their module — the engine's ordering rules, the named writes' wire rules, the feed's liveness rules; read them before changing behaviour there.
 - Entity identities are stable: `translation_key` mirrors the per-entity key and `unique_id` is `<node_id>_<key>` (or `<dev_id>_<key>` for box entities); changing a formula costs users their history.

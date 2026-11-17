@@ -54,6 +54,7 @@ from .const import (
     DOMAIN,
     HistoryConsumptionStatus,
 )
+from .token_store import token_store_for
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -253,6 +254,7 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                     entity_registry, entry.entry_id
                 ) or dr.async_entries_for_config_entry(device_registry, entry.entry_id):
                     return self.async_abort(reason="account_mismatch")
+            await token_store_for(self.hass, entry.entry_id, entry.data).async_clear()
             self.hass.config_entries.async_update_entry(
                 entry,
                 unique_id=unique_id,
@@ -302,6 +304,11 @@ class SmartboxConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 self._abort_if_unique_id_mismatch(reason="invalid_auth")
                 entry = self._get_reauth_entry()
+                # The stored bundle belongs to the old session; the new
+                # credentials must mint their own.
+                await token_store_for(
+                    self.hass, entry.entry_id, entry.data
+                ).async_clear()
                 self.hass.config_entries.async_update_entry(
                     entry, data={**entry.data, **user_input}
                 )

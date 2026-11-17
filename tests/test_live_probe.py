@@ -15,10 +15,10 @@ import json
 import time
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from smartbox.protocol import NodeRef, WriteApi
+from smartbox.protocol import NodeRef, TransportUnsupportedError, WriteApi
 
 from tests.fakes import make_jwt
 from tools.live_probe import (
@@ -28,6 +28,7 @@ from tools.live_probe import (
     _print_json,
     _print_token_facts,
     _PrintingWriteHost,
+    _probe_command,
     _run_write_op,
     build_config,
     build_parser,
@@ -419,3 +420,57 @@ def test_write_subparser_sleep_flag_defaults_zero():
                 "45",
             ]
         )
+
+
+def test_parser_accepts_a_token_cache_path(tmp_path):
+    path = str(tmp_path / "probe.json")
+    for argv in (
+        ["--token-cache", path, "reads"],
+        ["reads", "--token-cache", path],
+    ):
+        args = build_parser().parse_args(argv)
+        assert args.token_cache == path
+
+
+async def test_probe_retries_a_seeded_token_once():
+    auth = SimpleNamespace(
+        get_token=AsyncMock(
+            side_effect=[
+                SimpleNamespace(access_token="cached"),
+                SimpleNamespace(access_token="fresh"),
+            ]
+        ),
+        invalidate=AsyncMock(),
+    )
+    stack = SimpleNamespace(
+        config=SimpleNamespace(api_host="https://api.example.test"),
+        session=object(),
+        auth=auth,
+    )
+    probe = AsyncMock(side_effect=[TransportUnsupportedError("401"), None])
+
+    with patch("tools.live_probe.check_ws_user_support", probe):
+        assert await _probe_command(stack, seeded=True) == 0
+
+    auth.invalidate.assert_awaited_once_with("cached")
+    assert probe.await_count == 2
+
+
+async def test_probe_does_not_retry_a_fresh_grant():
+    """A cache the library discarded is not a seeded retry opportunity."""
+    auth = SimpleNamespace(
+        get_token=AsyncMock(return_value=SimpleNamespace(access_token="fresh")),
+        invalidate=AsyncMock(),
+    )
+    stack = SimpleNamespace(
+        config=SimpleNamespace(api_host="https://api.example.test"),
+        session=object(),
+        auth=auth,
+    )
+    probe = AsyncMock(side_effect=TransportUnsupportedError("401"))
+
+    with patch("tools.live_probe.check_ws_user_support", probe):
+        assert await _probe_command(stack, seeded=False) == 1
+
+    auth.invalidate.assert_not_awaited()
+    assert probe.await_count == 1

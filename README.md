@@ -106,6 +106,15 @@ Since `3.1.0` the integration runs on the separate `smartbox` library:
 
 See [architecture.md](docs/architecture.md) for the layer rules, the repository map, and the read and write flows.
 
+### Session persistence
+
+The integration stores the vendor token bundle in Home Assistant's private
+`.storage` and resumes it after a restart. The refresh grant continues the
+existing vendor session, so HA restarts no longer create a new login row for
+each start; the rotated refresh token is rewritten after every grant. Reauth,
+reconfigure and entry removal clear the stored bundle. Diagnostics expose
+`runtime.token_origin` as `restored` or `granted` so the path taken is visible.
+
 ### Websocket transport
 
 Status updates arrive over the `ws_user` channel (the vendor web apps' transport): ONE connection for the whole account. A client-side 60-second heartbeat, alongside the proxy's own PINGs, supervises the session — the periodic "Server has stopped communicating" aborts of the legacy per-device `socket_io` transport disappear. The server cuts the socket at the access token's 4-hour expiry (~4-second outage while it reconnects with a fresh token); that is the steady state, by design.
@@ -370,6 +379,7 @@ The diagnostics file is grouped by the question it answers:
 | `runtime.transport` | Whether the websocket is running, the short-cycle and auth-rejection streaks, and the last close code/reason. |
 | `runtime.supervision` | Whether the failure is terminal (`unsupported`, `auth_failed`, `terminal_error`) or still retrying. |
 | `runtime.token_expiry` | When the current access token expires. |
+| `runtime.token_origin` | Whether setup resumed the stored bundle (`restored`) or minted a fresh login (`granted`). |
 | `runtime.feed` | Whether values are flowing, the reason and duration of a gap, the outage count, and the grace window. |
 | `runtime.membership` | Nodes still awaiting materialization and whether the reload repair issue is raised. |
 | `runtime.statistics_import` | Which first-setup imports are pending or completed, and the failure count, last error and remaining backoff. |
@@ -414,7 +424,14 @@ SMARTBOX_PASSWORD=...
 
 Commands:
 
-- `uv run python tools/live_probe.py auth` — password grant + one refresh grant (rotation check).
+- `uv run python tools/live_probe.py --token-cache PATH <command>` —
+  reuse one vendor session across runs (`auth` ignores the cache: it
+  exists to exercise fresh grants). The record is stamped with the
+  reseller/account and effective API host, so a shared path cannot restore
+  another account's session; the file is `0600`, written atomically, and
+  holds a live refresh token.
+- `uv run python tools/live_probe.py auth` — password grant + one
+  refresh grant (rotation check).
 - `... probe` — ws_user capability probe verdict.
 - `... reads [--dev DEV_ID] [--node TYPE:ADDR]` — grouped devices, then per node the raw status/setup/version JSON (and `--samples-from/--samples-to` for the samples window).
 - `... ws [--duration 60] [--heartbeat 60]` — subscribe the ws_user transport; event counts, bounded update previews, transport facts.

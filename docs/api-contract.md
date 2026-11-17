@@ -124,6 +124,7 @@ GET retry policy: `_request_with_retry` retries `APIUnavailableError` only, on G
 - Each refresh grant ROTATES the refresh token and the OLD one remains valid (reuse verified with a >4 h-old token minting fresh pairs repeatedly) `[live 2026-10-02]`. The library keeps only the newest pair `[code session.py:366-379]`.
 - Parallel password logins return the BYTE-IDENTICAL access token (deterministic re-issue); multiple concurrent sockets on the same token all work; no session invalidation exists — HA, web app and mobile app coexist by design `[live 2026-10-02]`.
 - Refresh-token server-side TTL was never captured (open, §7); the one-password-login fallback makes it irrelevant for availability `[live 2026-09-26]`.
+- `GET /client/sessions` returns `{sid, createdAt, lastUsedAt, userAgent, ip, current}` per login `[live 2026-11-14]`. A password grant inserts a NEW session row; two consecutive refresh grants kept the same `sid` and `createdAt`, so a refresh continues the existing session `[live 2026-11-14]`. Rows persist until closed (`DELETE /client/sessions/{sid}`) or expired; 198 rows spanning six weeks were observed `[live 2026-11-14]`. Persistence policy (resuming the bundle across restarts) belongs to the integration; the wire fact is that a refresh continues the row and a password grant adds one.
 
 ### 2.3 Recovery doctrine
 

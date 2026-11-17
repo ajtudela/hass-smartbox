@@ -1,6 +1,7 @@
 """Shared assertion/temperature helpers for the test suites."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 import math
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.protocol.auth import TokenBundle
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -150,3 +152,16 @@ def live_fixture(name: str) -> dict:
         msg = f"vendored live fixture {name} is missing from {_LIVE_FIXTURES}"
         raise FileNotFoundError(msg)
     return json.loads(path.read_text())
+
+
+def stored_token_bundle(
+    access: str = "stored-access",
+    refresh: str = "stored-refresh",
+    lifetime_s: float = 4 * 3600,
+) -> TokenBundle:
+    """Return a bundle shaped like a stored record, for persistence tests."""
+    return TokenBundle(
+        access_token=access,
+        refresh_token=refresh,
+        expires_at=datetime.now(UTC) + timedelta(seconds=lifetime_s),
+    )

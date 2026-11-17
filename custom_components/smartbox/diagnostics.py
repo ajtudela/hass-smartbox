@@ -195,6 +195,7 @@ def _runtime_diagnostics(
             "transport": None,
             "supervision": None,
             "token_expiry": None,
+            "token_origin": None,
             "feed": None,
             "membership": None,
             "statistics_import": None,
@@ -218,6 +219,8 @@ def _runtime_diagnostics(
             if (expiry := runtime.auth.token_expiry) is None
             else expiry.isoformat()
         ),
+        # Whether setup resumed the stored bundle or minted a fresh session.
+        "token_origin": runtime.token_origin,
         # Feed (websocket) state: whether values are still flowing, why the
         # feed went down, how long it has been down and the outage history.
         "feed": runtime.engine.feed.facts,
