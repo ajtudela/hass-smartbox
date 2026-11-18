@@ -5,11 +5,13 @@
 ### Fixed
 
 - Box power-limit entities are no longer created for boxless heaters (heaters not paired with a Smartbox controller), whose box power-limit endpoint the API rejects. Existing box power-limit entities are removed for those devices on setup. The parent device, connected state and away switch remain.
+- `htr_mod` climate entities now follow the vendor app's setpoint contract: a 1 °C step, the union of the comfort and eco ranges while either is active (10–28 °C; ice fixed to the slot's temperature, in whole degrees on Fahrenheit nodes too), the app's recomposition in both directions (a target at or below 18 °C selects `eco` and places `comfort_temp`/`eco_offset` within 4–8 °C, keeping the stored comfort unless the gap cannot reach; above 18 °C selects `comfort` with the stored offset; an off-grid stored comfort is snapped to a whole degree), a target reported clamped into that range, and `mode: manual` on every setpoint write. The limits apply to the Haverland product codes the app dispatches on (`pid[2:4]` = `0A`/`FF`) and to nodes whose version has not been read yet; other `htr_mod` hardware keeps the previous temperature arithmetic (hass-smartbox docs/api-contract.md §7 item 7).
 - A write-confirmation timeout now runs one GET of the written slot instead of marking the node Unavailable. A lost-marked read marks it Unavailable; data is reconciled; an API failure changes nothing. A write the server accepted but ignored leaves the entity usable and logs the mismatch. Lost frames during a pending write arm the normal lost window. This follows the vendor app’s lost/feed availability model; offline detection now waits for lost evidence rather than a write timeout.
 - The `locked` attribute is normalized to `bool`; htr nodes report a boolean and acm nodes report `0`/`1` (hass-smartbox docs/api-contract.md §7 item 18). Templates that compared the acm attribute to `0`/`1` should compare to `false`/`true`.
 
 ### Changed
 
+- `climate.set_temperature` on `htr_mod` nodes now accepts any target in the 10–28 °C union while comfort or eco is active; the write selects the profile from the target, so an automation can set 17 °C from `comfort` or 21 °C from `eco` without a preset change. Only targets outside 10–28 °C are rejected, and the `ice` profile stays fixed to the slot's own value.
 - The integration pins `smartbox>=3.2.0,<3.3`, which carries the write-timeout verification and the app-shaped htr_mod body without `units`. The upper bound keeps a future minor or major release from installing until the integration is updated for it.
 
 ## 3.1.3 (2026-11-17)

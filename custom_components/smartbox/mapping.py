@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import lru_cache
 import logging
+import math
 from typing import Any
 
 # HA's component root re-exports these public names without __all__;
@@ -35,6 +36,7 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 )
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import TemperatureConverter
 from smartbox.protocol.values import bounded_repr
 
 from .const import (
@@ -238,15 +240,175 @@ def get_target_temperature(node_type: str, status: dict[str, Any]) -> float | No
     return float(status["stemp"])
 
 
+# --- htr_mod setpoint policy (vendor-app parity) ---
+# The app's factory dispatches on the product code (pid[2:4]) and each
+# controller carries its own constants; this table is that dispatch in data
+# form (docs/api-contract.md §1.9, §7 item 7).
+
+
+@dataclass(frozen=True)
+class HtrModPolicy:
+    """Setpoint grid and profile bounds for one htr_mod hardware policy.
+
+    ``step_c`` is the controller's setpoint step in Celsius. The eco offset
+    ladder is integral, so the offset search walks comfort in 1 C steps.
+    """
+
+    step_c: float
+    comfort_c: tuple[float, float]
+    eco_max_c: float
+    offset_c: tuple[int, int]
+
+    @property
+    def eco_min_c(self) -> float:
+        """Return the eco floor: the comfort floor less the largest offset."""
+        return self.comfort_c[0] - self.offset_c[1]
+
+
+# HaverlandHtrModController: the only htr_mod controller in the 2.54.2 bundles.
+_HAVERLAND_HTR_MOD = HtrModPolicy(
+    step_c=1.0,
+    comfort_c=(18.0, 28.0),
+    eco_max_c=18.0,
+    offset_c=(4, 8),
+)
+_HTR_MOD_POLICIES = {"0a": _HAVERLAND_HTR_MOD, "ff": _HAVERLAND_HTR_MOD}
+
+
+def htr_mod_policy(model_code: str | None) -> HtrModPolicy | None:
+    """Return the htr_mod setpoint policy for a product code, if any.
+
+    "0A" (heater module) and "FF" (legacy heater) are the codes the vendor
+    app's factory routes to its htr_mod controller. An unread version returns
+    the Haverland policy, because every htr_mod controller in the 2.54.2
+    bundles is that one; other codes keep the plain pass-through.
+    """
+    if model_code is None:
+        return _HAVERLAND_HTR_MOD
+    return _HTR_MOD_POLICIES.get(model_code.lower())
+
+
+def htr_mod_setpoint_limits(
+    status: dict[str, Any], policy: HtrModPolicy
+) -> tuple[float, float] | None:
+    """Return the editable setpoint range for the selected profile, in the node's unit.
+
+    Comfort and eco share the union of both ranges: the setpoint builder picks
+    the profile from the target (above 18 C comfort, at or below 18 C eco), so
+    the 18 C boundary has to be crossable from either one. Ice is the slot's
+    own fixed temperature.
+    """
+    selected = status.get("selected_temp")
+    unit = get_temperature_unit(status) or UnitOfTemperature.CELSIUS
+
+    def as_node(celsius: float) -> float:
+        value = TemperatureConverter.convert(celsius, UnitOfTemperature.CELSIUS, unit)
+        if unit == UnitOfTemperature.FAHRENHEIT:
+            # The wire stores Fahrenheit setpoints on whole degrees
+            # (values.format_setpoint), so the advertised bounds sit on that
+            # grid rather than at 64.4.
+            return float(math.floor(value + 0.5))
+        return value
+
+    if selected in ("comfort", "eco"):
+        return as_node(policy.eco_min_c), as_node(policy.comfort_c[1])
+    if selected == "ice":
+        try:
+            ice = float(status["ice_temp"])
+        except KeyError, TypeError, ValueError:
+            return None
+        return ice, ice
+    return None
+
+
+def _htr_mod_snap(temp: float, step: float) -> float:
+    """Snap a setpoint to the policy's grid (half up)."""
+    return math.floor(temp / step + 0.5) * step
+
+
+def _htr_mod_eco_split(
+    target: int, comfort: float, policy: HtrModPolicy
+) -> tuple[int, int]:
+    """Return the comfort temperature and eco offset that place eco at ``target``.
+
+    The app walks ``comfort_temp`` in whole-degree steps until the gap fits;
+    for a target inside the eco range the first fit is the stored comfort
+    itself, or the offset range's nearest bound.
+    """
+    low, high = policy.offset_c
+    # The offset ladder is integral, so the stored comfort snaps to a whole
+    # degree (half up) before the walk; the app compares the raw value and
+    # fails to fit when it is off-grid.
+    start = min(
+        max(math.floor(comfort + 0.5), int(policy.comfort_c[0])),
+        int(policy.comfort_c[1]),
+    )
+    offset = start - target
+    if offset < low:
+        return target + low, low
+    if offset > high:
+        return target + high, high
+    return start, offset
+
+
+def _htr_mod_temperature_write(
+    status: dict[str, Any], temp: float, policy: HtrModPolicy
+) -> HtrModWrite:
+    """Compose an htr_mod setpoint the way the app's builder does.
+
+    The builder always sends ``mode: "manual"``: a setpoint is a manual
+    request, and the app leaves the programme to get one.
+    """
+    check_status_key("comfort_temp", SmartboxNodeType.HTR_MOD, status)
+    target = _htr_mod_snap(temp, policy.step_c)
+    low, high = policy.eco_min_c, policy.comfort_c[1]
+    if not low <= target <= high:
+        msg = (
+            f"Can't place an htr_mod setpoint of {target:g} C: the hardware"
+            f" policy accepts {low:g}-{high:g} C"
+        )
+        raise ValueError(msg)
+    if target > policy.eco_max_c:
+        check_status_key("eco_offset", SmartboxNodeType.HTR_MOD, status)
+        return HtrModWrite(
+            on=True,
+            mode="manual",
+            selected_temp="comfort",
+            comfort_temp=target,
+            eco_offset=status["eco_offset"],
+            units=status["units"],
+        )
+    # The app's offset search walks whole degrees, on the policy's grid.
+    comfort, offset = _htr_mod_eco_split(
+        int(target), float(status["comfort_temp"]), policy
+    )
+    return HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=float(comfort),
+        eco_offset=f"{offset:.1f}",
+        units=status["units"],
+    )
+
+
 def temperature_write(
     node_type: str,
     status: dict[str, Any],
     temp: float,
     setup: dict[str, Any] | None = None,
+    model_code: str | None = None,
 ) -> TemperatureWrite:
     """Map a target-temperature change onto the operation that performs it."""
     check_status_key("units", node_type, status)
     if node_type == SmartboxNodeType.HTR_MOD:
+        policy = htr_mod_policy(model_code)
+        if (
+            policy is not None
+            and status.get("units") == "C"
+            and status.get("selected_temp") in ("comfort", "eco")
+        ):
+            return _htr_mod_temperature_write(status, temp, policy)
         if status["selected_temp"] == "comfort":
             target_temp = temp
         elif status["selected_temp"] == "eco":
@@ -264,7 +426,9 @@ def temperature_write(
             raise KeyError(msg)
         return HtrModWrite(
             on=True,
-            mode=status["mode"],
+            # The app's setpoint builder sends manual on every setpoint, on any
+            # node scale; this pass-through keeps that part of the body.
+            mode="manual",
             selected_temp=status["selected_temp"],
             comfort_temp=target_temp,
             eco_offset=status["eco_offset"],
