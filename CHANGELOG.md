@@ -5,7 +5,12 @@
 ### Fixed
 
 - Box power-limit entities are no longer created for boxless heaters (heaters not paired with a Smartbox controller), whose box power-limit endpoint the API rejects. Existing box power-limit entities are removed for those devices on setup. The parent device, connected state and away switch remain.
+- A write-confirmation timeout now runs one GET of the written slot instead of marking the node Unavailable. A lost-marked read marks it Unavailable; data is reconciled; an API failure changes nothing. A write the server accepted but ignored leaves the entity usable and logs the mismatch. Lost frames during a pending write arm the normal lost window. This follows the vendor app’s lost/feed availability model; offline detection now waits for lost evidence rather than a write timeout.
 - The `locked` attribute is normalized to `bool`; htr nodes report a boolean and acm nodes report `0`/`1` (hass-smartbox docs/api-contract.md §7 item 18). Templates that compared the acm attribute to `0`/`1` should compare to `false`/`true`.
+
+### Changed
+
+- The integration pins `smartbox>=3.2.0,<3.3`, which carries the write-timeout verification and the app-shaped htr_mod body without `units`. The upper bound keeps a future minor or major release from installing until the integration is updated for it.
 
 ## 3.1.3 (2026-11-17)
 

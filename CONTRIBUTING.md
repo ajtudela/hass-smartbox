@@ -51,7 +51,7 @@ For how the code is structured — the layer rules, the repository map and the t
 
 ```
 uv sync --all-extras --dev
-# uv sync installs smartbox>=3.1.0 from PyPI (same pin manifest.json gives
+# uv sync installs smartbox>=3.2.0,<3.3 from PyPI (same pin manifest.json gives
 # Home Assistant). To develop against local library changes instead,
 # install the sibling checkout editable over it:
 uv pip install --python .venv/bin/python -e ../smartbox

@@ -357,8 +357,7 @@ async def test_lost_marked_frame_does_not_cancel_pending():
         )
         await tick()
         node = engine.node("dev1", "htr/2")
-        assert node.available is False  # timeout fired
-        # the marker changed no slot, so the timeout is the only report
+        assert node.available is False  # the lost window owns availability
         assert node.status == {**STATUS, "mode": "manual"}
         assert [c.kind for c in recorder.changes] == ["availability"]
         # ...and a later ok frame recovers
@@ -379,8 +378,8 @@ async def test_rearm_on_second_write_single_pending():
         assert len(armed_deadlines(engine, "write")) == 1  # refreshed, never doubled
         await tick()
         flips = [c for c in recorder.changes if c.kind == "availability"]
-        assert len(flips) == 1  # ONE timeout flip for both writes
-        assert flips[0].node.available is False
+        assert flips == []
+        assert engine.node("dev1", "htr/2").available is True
     finally:
         await engine.stop()
 
@@ -388,7 +387,7 @@ async def test_rearm_on_second_write_single_pending():
 # --- pending suppression of lost flips ---
 
 
-async def test_transient_lost_frames_during_pending_schedule_nothing():
+async def test_transient_lost_frames_during_pending_arm_a_window():
     engine, recorder, transport = await make_engine()
     try:
         await engine.set_mode("dev1", NODE_REF, "manual")
@@ -398,14 +397,15 @@ async def test_transient_lost_frames_during_pending_schedule_nothing():
         await transport.deliver_update(
             "dev1", "/htr/2/prog", {"prog": {}, "sync_status": "lost"}
         )
-        assert armed_deadlines(engine, "lost") == []  # nothing scheduled while pending
+        assert len(armed_deadlines(engine, "lost")) == 1  # the window owns availability
         recorder.changes.clear()
-        # the ok status frame confirms the write
+        # the ok status frame confirms the write and cancels the window
         await transport.deliver_update(
             "dev1", "/htr/2/status", {**STATUS, "mode": "manual"}
         )
         await tick()
         assert armed_deadlines(engine, "write") == []
+        assert armed_deadlines(engine, "lost") == []
         # the lost frames changed no slot, and the confirming ok body equals
         # what the optimistic merge already stored: the whole sequence is silent
         assert recorder.changes == []
@@ -414,14 +414,14 @@ async def test_transient_lost_frames_during_pending_schedule_nothing():
         await engine.stop()
 
 
-async def test_setup_write_pending_suppresses_lost_flip_and_confirms():
+async def test_setup_write_pending_lost_window_is_cancelled_by_confirmation():
     engine, recorder, transport = await make_engine()
     try:
         await engine.set_window_mode("dev1", NODE_REF, ON)
         assert len(armed_deadlines(engine, "write")) == 1
-        # a lost frame while the setup write is pending: schedules NOTHING
+        # a lost frame while the setup write is pending arms the lost window
         await transport.deliver_update("dev1", "/htr/2/status", dict(LOST))
-        assert armed_deadlines(engine, "lost") == []
+        assert len(armed_deadlines(engine, "lost")) == 1
         recorder.changes.clear()
         # no ok STATUS frame ever comes - the full-setup frame confirms
         await transport.deliver_update(
@@ -429,8 +429,8 @@ async def test_setup_write_pending_suppresses_lost_flip_and_confirms():
         )
         await tick()
         assert armed_deadlines(engine, "write") == []
-        # setup frame confirms the pending; the snapshot's ok status had
-        # already marked the node available, so no availability event
+        assert armed_deadlines(engine, "lost") == []
+        # the confirming setup frame cancels the lost window; no availability event
         assert [c.kind for c in recorder.changes] == []
         assert engine.node("dev1", "htr/2").available is True
     finally:
@@ -442,9 +442,9 @@ async def test_lost_frame_while_pending_does_not_prevent_timeout():
     try:
         await engine.set_mode("dev1", NODE_REF, "manual")
         await transport.deliver_update("dev1", "/htr/2/status", dict(LOST))
-        assert armed_deadlines(engine, "lost") == []  # suppressed...
+        assert len(armed_deadlines(engine, "lost")) == 1
         await tick()
-        # ...but the pending timeout is still the authoritative path
+        # the lost window, not the write timeout, owns availability
         node = engine.node("dev1", "htr/2")
         assert node.available is False
         flips = [c for c in recorder.changes if c.kind == "availability"]
@@ -460,18 +460,16 @@ async def test_knobs_are_shrinkable(seams):
     try:
         await engine.set_mode("dev1", NODE_REF, "manual")
         await tick()
-        assert seams.sleep.delays == [0.5]  # confirm timeout knob honored
-        assert engine.node("dev1", "htr/2").available is False
+        assert seams.sleep.delays == [0.5, 1.0]  # confirm timeout + settle
+        assert engine.node("dev1", "htr/2").available is True
         # the lost window uses its own knob
         recorder = Recorder()
         engine.subscribe(recorder)
         await transport.deliver_update("dev1", "/htr/2/status", dict(LOST))
         await tick()
-        assert seams.sleep.delays == [0.5, 0.25]
-        # already unavailable (the timeout fired) and the marker changed no
-        # slot: the lost window reports nothing
+        assert seams.sleep.delays == [0.5, 1.0, 0.25]
         assert engine.node("dev1", "htr/2").available is False
-        assert recorder.changes == []
+        assert [c.kind for c in recorder.changes] == ["availability"]
     finally:
         await engine.stop()
 
@@ -609,8 +607,8 @@ async def test_snapshot_lost_setup_marks_an_ok_status_unavailable():
         await engine.stop()
 
 
-async def test_snapshot_lost_setup_does_not_flip_while_a_write_is_pending():
-    """A lost setup marker mid-write is suppressed like a lost status."""
+async def test_snapshot_lost_setup_arms_a_lost_window_while_a_write_is_pending():
+    """A lost setup marker mid-write arms the normal lost window."""
     engine, recorder, _transport = await make_engine()
     try:
         await engine.set_mode("dev1", NODE_REF, "manual")
@@ -633,13 +631,11 @@ async def test_snapshot_lost_setup_does_not_flip_while_a_write_is_pending():
         await engine.stop()
 
 
-async def test_snapshot_lost_status_does_not_flip_while_a_write_is_pending():
-    """The pending timeout stays the authoritative Unavailable path.
+async def test_snapshot_lost_status_arms_a_lost_window_while_a_write_is_pending():
+    """A snapshot lost marker mid-write arms the normal lost window.
 
-    A snapshot landing mid-write (typically around a reconnect) carries the
-    box's current view; a lost-marked status there is the same
-    write-correlated noise the frame path suppresses, so it must not flip
-    the node ahead of the pending.
+    The snapshot is a full account view, so its lost marker is availability
+    evidence; the write timeout separately verifies the write with a GET.
     """
     engine, recorder, _transport = await make_engine()
     try:
@@ -651,8 +647,34 @@ async def test_snapshot_lost_status_does_not_flip_while_a_write_is_pending():
         )
         assert engine.node("dev1", "htr/2").available is True
         assert not any(c.kind == "availability" for c in recorder.changes)
-        # once the write resolves (here no frame ever arrives), the pending
-        # timeout still flips the node
+        # the lost window owns availability; the write itself is verified
+        assert len(armed_deadlines(engine, "lost")) == 1
+        await tick()
+        assert engine.node("dev1", "htr/2").available is False
+    finally:
+        await engine.stop()
+
+
+async def test_snapshot_lost_status_with_confirming_setup_arms_a_window():
+    """A lost status plus a confirming setup keeps the grace window."""
+    engine, recorder, _transport = await make_engine()
+    try:
+        await engine.set_window_mode("dev1", NODE_REF, ON)
+        recorder.changes.clear()
+        await engine.handle_event(
+            Snapshot(
+                payload=make_snapshot(
+                    [
+                        node_entry(
+                            status=dict(LOST),
+                            setup={"priority": 0, "window_mode_enabled": ON},
+                        )
+                    ]
+                )
+            )
+        )
+        assert engine.node("dev1", "htr/2").available is True
+        assert len(armed_deadlines(engine, "lost")) == 1
         await tick()
         assert engine.node("dev1", "htr/2").available is False
     finally:
@@ -703,7 +725,7 @@ async def test_snapshot_without_the_written_slot_does_not_confirm():
         )
         assert len(armed_deadlines(engine, "write")) == 1
         await tick()
-        assert engine.node("dev1", "htr/2").available is False
+        assert engine.node("dev1", "htr/2").available is True
     finally:
         await engine.stop()
 
@@ -804,46 +826,6 @@ async def test_ok_setup_frame_cancels_an_armed_lost_window():
         assert [c.kind for c in recorder.changes] == ["setup"]
     finally:
         await engine.stop()
-
-
-async def test_superseded_write_watcher_does_not_flip_a_re_armed_node(
-    seams, monkeypatch
-):
-    """A re-armed write restarts its window; the old watcher must not fire.
-
-    Two writes land back to back, then the FIRST watcher's deadline is
-    released while the second write is still pending: the node stays
-    available and the live pending survives. Re-arming cancels the
-    superseded watcher, so this pins the cancel; the generation re-check
-    that backs it up is pinned separately below.
-    """
-    gated = GatedSleep(seams.clock)
-    monkeypatch.setattr(timing, "sleep", gated)
-    engine, recorder, _transport = await make_engine()
-    try:
-        await engine.set_mode("dev1", NODE_REF, "manual")
-        await tick()
-        assert len(gated.gates) == 1
-        await engine.set_boost("dev1", NODE_REF, ON)
-        await tick()
-        assert len(gated.gates) == 2
-        recorder.changes.clear()
-
-        gated.release(0)  # the superseded write's deadline elapses
-        await tick()
-        assert engine.node("dev1", "htr/2").available is True
-        assert len(armed_deadlines(engine, "write")) == 1
-
-        gated.release(1)  # the live write's deadline elapses
-        await tick()
-        assert engine.node("dev1", "htr/2").available is False
-        assert armed_deadlines(engine, "write") == []
-    finally:
-        for gate in gated.gates:
-            if not gate.done():
-                gate.cancel()
-        await engine.stop()
-        await tick()
 
 
 async def test_feed_stays_up_when_a_frame_arrives_inside_the_window():

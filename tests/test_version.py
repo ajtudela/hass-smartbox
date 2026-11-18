@@ -37,7 +37,9 @@ def test_smartbox_library_pins_agree():
         (root / "README.md").read_text(encoding="utf-8"),
         (root / "CONTRIBUTING.md").read_text(encoding="utf-8"),
     ]
-    versions = {
-        match for text in texts for match in re.findall(r"smartbox>=([0-9.]+)", text)
+    specs = {
+        match
+        for text in texts
+        for match in re.findall(r"smartbox(>=[0-9.]+(?:,<[0-9.]+)?)", text)
     }
-    assert versions == {"3.1.0"}, versions
+    assert specs == {">=3.2.0,<3.3"}, specs

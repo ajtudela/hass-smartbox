@@ -492,6 +492,9 @@ class _PrintingWriteHost:
         _print_json(body)
         await self._client.post(path, body)
 
+    async def get_node_status(self, dev_id: str, node: NodeRef) -> dict[str, Any]:
+        return await self._client.get_node_status(dev_id, node)
+
     async def get_node_setup(self, dev_id: str, node: NodeRef) -> dict[str, Any]:
         return await self._client.get_node_setup(dev_id, node)
 

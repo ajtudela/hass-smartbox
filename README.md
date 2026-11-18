@@ -52,7 +52,7 @@ Accounts whose backend only serves the retired `socket_io` transport need 2.6.x;
 1. Open your Home Assistant configuration directory (where `configuration.yaml` lives).
 1. Create `custom_components/` if it does not exist.
 1. Copy the **whole** `custom_components/smartbox/` directory from this repository (or the release archive) into it, preserving `brand/`, `translations/`, `frontend/`, and the JSON/YAML files. The `frontend/` directory carries the bundled program card; the integration serves it automatically, so there is no separate Lovelace resource or HACS plugin to install.
-1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.1.0"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
+1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.2.0,<3.3"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
 1. Restart Home Assistant
 1. Hard-refresh the browser (`Ctrl+Shift+R` / `Cmd+Shift+R`) after the restart or an upgrade, so the new frontend module is loaded.
 
@@ -126,7 +126,7 @@ The transport is visible in Settings → Devices → diagnostics as `runtime.tra
 
 ### Write confirmation
 
-Writes to a node arm a confirmation window: the write is applied optimistically in Home Assistant, and a confirming frame from the node within the window confirms it. If no confirmation arrives (e.g. the heater is unreachable), the node's entities turn Unavailable — the same behavior the vendor app shows when a command does not land.
+Writes to a node arm a confirmation window: the write is applied optimistically in Home Assistant, and a confirming frame from the node within the window confirms it. If no frame arrives, the engine reads the written slot once. A lost-marked read marks the node Unavailable; any data is reconciled into the store; an API failure changes nothing. Availability otherwise follows lost/ok frames and the feed. A node that accepted the write but ignored it stays available, and the ignored write is logged.
 
 ## Features
 
