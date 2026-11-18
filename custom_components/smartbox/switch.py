@@ -77,18 +77,13 @@ async def async_setup_entry(
     fanout = runtime.fanout
 
     def build_device(device: SmartboxDeviceInfo) -> list[EntityGroup]:
-        """Build the box-level switches."""
+        """Build the box-level switches the device actually supports."""
         _LOGGER.debug("Creating away switch for box %r", device.dev_id)
-        _LOGGER.debug("Creating no power limit switch for box %r", device.dev_id)
-        return [
-            (
-                [
-                    AwaySwitch(device, entry, runtime, fanout),
-                    NoPowerLimitSwitch(device, entry, runtime, fanout),
-                ],
-                False,
-            )
-        ]
+        switches: list[Entity] = [AwaySwitch(device, entry, runtime, fanout)]
+        if device.box_power_limit_available:
+            _LOGGER.debug("Creating no power limit switch for box %r", device.dev_id)
+            switches.append(NoPowerLimitSwitch(device, entry, runtime, fanout))
+        return [(switches, False)]
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the switches this node's setup exposes."""

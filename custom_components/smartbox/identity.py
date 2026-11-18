@@ -22,14 +22,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from smartbox.core.merging import boost_config, is_empty_slot, normalize_node_addr
 from smartbox.core.state import node_device_id
 from smartbox.protocol.client import NodeRef, SmartboxClient
-from smartbox.protocol.errors import SmartboxError
+from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig, bounded_repr
 
 from .const import HEATER_NODE_TYPES, SmartboxNodeType
@@ -67,7 +67,7 @@ def boost_available(setup: Mapping[str, Any]) -> bool:
 
 @dataclass(frozen=True)
 class SmartboxDeviceInfo:
-    """Box identity facts for the device registry (name/model/sw/serial/home)."""
+    """Box identity facts for the registry (name/model/sw/serial/home/capability)."""
 
     dev_id: str
     name: str
@@ -76,6 +76,7 @@ class SmartboxDeviceInfo:
     serial_number: Any
     home_id: str | None
     reseller: SmartboxReseller
+    box_power_limit_available: bool = True
 
     @property
     def configuration_url(self) -> str:
@@ -237,6 +238,64 @@ def _device_info_from_dev(
     )
 
 
+_SNAPSHOT_KEYS = ("nodes", "connected", "away_status")
+
+
+async def _confirm_boxless(client: SmartboxClient, dev_id: str) -> bool:
+    """Confirm a rejected power-limit probe with a snapshot-shaped dev_data.
+
+    A rejected probe alone is ambiguous (403, malformed 2xx). Absence is
+    trusted only when dev_data carries all of nodes/connected/away_status and
+    its htr_system is absent or empty; wrapped, truncated, malformed or
+    unreadable payloads keep the surface.
+    """
+    try:
+        dev_data = await client.get_dev_data(dev_id)
+    except (SmartboxError, OSError):  # fmt: skip
+        return False
+    if not isinstance(dev_data, Mapping):
+        return False
+    if not all(key in dev_data for key in _SNAPSHOT_KEYS):
+        return False
+    htr_system = dev_data.get("htr_system")
+    if htr_system is None:
+        return True
+    if not isinstance(htr_system, Mapping):
+        return False
+    return not bool(htr_system)
+
+
+async def _box_power_limit_available(client: SmartboxClient, dev_id: str) -> bool:
+    """Probe the box power limit, confirming absence against the snapshot."""
+    try:
+        payload = await client.get_power_limit(dev_id)
+    except (AuthError, TransportUnavailableError) as ex:
+        # A transport or auth failure says nothing about the capability.
+        _LOGGER.debug(
+            "Could not probe box power limit for %r (%s); keeping it",
+            dev_id,
+            type(ex).__name__,
+        )
+        return True
+    except SmartboxError as ex:
+        # A SmartboxError can be a 403 or a malformed 2xx body. Only a
+        # snapshot-shaped dev_data without htr_system confirms absence.
+        if await _confirm_boxless(client, dev_id):
+            _LOGGER.debug(
+                "Box power limit unavailable for %r (%s)", dev_id, type(ex).__name__
+            )
+            return False
+        return True
+    if isinstance(payload, Mapping):
+        value = payload.get("power_limit")
+        if isinstance(value, (str, int, float)) and str(value).strip():
+            return True
+    if await _confirm_boxless(client, dev_id):
+        _LOGGER.debug("Box power limit returned no value for %r", dev_id)
+        return False
+    return True
+
+
 def _readable_node_entries(
     entries: list[Any], dev_id: str
 ) -> tuple[list[Mapping[str, Any]], bool]:
@@ -346,10 +405,14 @@ async def async_discover_identity(
     """Discover devices and nodes with plain REST reads over the client.
 
     Reads grouped_devs (homes + devs), then per device mgr/nodes and per node
-    setup/status/version - the per-node reads of one device run together, so
-    entry setup pays one round-trip window per device instead of one per
-    field. Protocol-layer errors propagate RAW for ``async_setup_entry`` to
-    map: a half-discovered entry must never load.
+    setup/status/version - the per-node reads of one device run together, and
+    the optional box power-limit probe shares a window with the device's nodes
+    read, so entry setup still pays one round-trip window per device. A
+    rejected or value-less probe may cost one confirmation read.
+    Protocol-layer errors propagate RAW for ``async_setup_entry`` to map: a
+    half-discovered entry must never load; the optional capability probe is
+    the one exception and keeps the existing entity surface on transport or
+    auth failure.
     """
     homes = await client.get_grouped_devices()
     if not isinstance(homes, list):
@@ -376,9 +439,15 @@ async def async_discover_identity(
                 complete = False
                 continue
             device = _device_info_from_dev(dev, home_id, reseller)
+            available, node_payload = await asyncio.gather(
+                _box_power_limit_available(client, device.dev_id),
+                client.get_nodes(device.dev_id),
+            )
+            if not available:
+                device = replace(device, box_power_limit_available=False)
             devices.append(device)
             entries, entries_complete = _readable_node_entries(
-                await client.get_nodes(device.dev_id), device.dev_id
+                node_payload, device.dev_id
             )
             complete = complete and entries_complete
             nodes.extend(

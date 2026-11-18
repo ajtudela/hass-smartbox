@@ -311,15 +311,17 @@ Heaters the box reports as unreachable (node-level `sync_status: "lost"`) show a
 One box-level connectivity sensor (per-node connectivity is shown through the climate entities' availability instead).
 
 ### Switches
-* Box level: away mode, "no power limit"
+* Box level: away mode; "no power limit" only on devices that support a box power limit
 * Per node: window mode, true radiant, boost, child lock (keypad lockout), maximum temperature limit (remembers the last non-zero limit across Home Assistant restarts), "no node power limit" (on the PMO nodes whose setup carries the key)
 
 ### Numbers
-* Box power limit (0 = no limit, max 60000)
+* Box power limit on devices that support it (0 = no limit, max 60000)
 * Per node: node power limit (PMO nodes whose setup carries the key), boost temperature, boost duration, away offset, maximum temperature, and programme temperatures (frost / eco / comfort, where the device reports them)
 
 ### Selects
 * Per node: radiator priority (low / medium / high, fw-1.9 family only) — the device takes it into account itself when enforcing the box power limit
+
+Boxless heaters (heaters not paired with a Smartbox controller) keep the parent device, away mode, connectivity and their node entities, but do not get the box power-limit number or no-limit switch.
 
 ### Dedicated energy monitor
 The PMO devices are available including the power limit entity.
