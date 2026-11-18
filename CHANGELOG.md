@@ -5,6 +5,7 @@
 ### Fixed
 
 - Box power-limit entities are no longer created for boxless heaters (heaters not paired with a Smartbox controller), whose box power-limit endpoint the API rejects. Existing box power-limit entities are removed for those devices on setup. The parent device, connected state and away switch remain.
+- The `locked` attribute is normalized to `bool`; htr nodes report a boolean and acm nodes report `0`/`1` (hass-smartbox docs/api-contract.md §7 item 18). Templates that compared the acm attribute to `0`/`1` should compare to `false`/`true`.
 
 ## 3.1.3 (2026-11-17)
 

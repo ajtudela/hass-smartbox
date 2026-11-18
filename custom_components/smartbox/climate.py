@@ -535,7 +535,9 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             return {}
         attributes: dict[str, Any] = {}
         if "locked" in self._status:
-            attributes[ATTR_LOCKED] = self._status["locked"]
+            # htr reports a bool, acm reports 0/1; expose one type
+            # (hass-smartbox docs/api-contract.md §7 item 18).
+            attributes[ATTR_LOCKED] = bool(self._status["locked"])
         if self._node.node_type == SmartboxNodeType.HTR_MOD:
             value = self._status.get("selected_temp")
             if isinstance(value, str) and value:
