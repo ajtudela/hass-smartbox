@@ -2,23 +2,25 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-17. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-18. Keep this a 90-second read and prune entries as they close.*
 
-## State of 3.1.3
+## State of 3.2.0
 
-- Library `3.1.0` and integration `3.1.3` are the current stable releases.
-- The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped, along with the `smartbox` 3.0.2 per-reseller API host work.
-- Integration 3.1.3 pins `smartbox>=3.1.0`, adds `RESELLER_OVERRIDES`, and reports active overrides in diagnostics. The next integration release pins `smartbox>=3.2.0,<3.3` for write-timeout verification and the app-shaped htr_mod body.
-- Integration 3.1.3 lists Perry Home, skips empty node slots (`installed: false`) in discovery and membership, persists the token bundle across restarts, and shows the node type and `addr` in the device model field.
+- Library `3.2.0` and integration `3.2.0` are the current stable releases.
+- The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped.
+- Integration 3.2.0 pins `smartbox>=3.2.0,<3.3`; the upper bound keeps a future minor from installing until the integration is updated for it. The library carries the write-verification reader (`WriteHost.get_node_status()`) and drops `units` from the htr_mod setpoint body.
+- 3.2.0 ships the boxless power-limit skip, `locked` normalized to `bool`, write verification instead of a write timeout flipping Unavailable, the htr_mod setpoint contract (1 °C grid, the 10–28 °C union while comfort or eco is active with the profile chosen by the target, ice fixed, `mode: manual`), and the accumulator `counters` sample shape for the total-consumption sensor.
+- A soak on the maintainer's instance exercised the four changes above with no errors or warnings.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
-- After 3.1.3: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
+- After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; the boxless reporter to confirm the removed entities stay gone; acm users to confirm `locked` reads `true`/`false`.
+- After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.
-- Write confirmation: the 6 s countdown starts when the POST returns; the in-flight hold covers a token refresh or a slow request. Revisit if writes to a box still look slow.
+- Write confirmation: a timed-out write now ends in one verification GET after the 6 s window plus a 1 s settle; a frame that overtakes the read wins. Revisit if ignored writes appear as `accepted but not applied` without a corresponding device change.
 - Public forum announcement remains on hold.
 
 ## Open items (hardware-gated)
