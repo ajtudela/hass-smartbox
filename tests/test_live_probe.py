@@ -48,11 +48,19 @@ class RecordingWriteHost:
 
     def __init__(self) -> None:
         self.posts: list[tuple[str, object]] = []
+        self.status: dict[str, object] = {}
         self.setup: dict[str, object] = {}
         self.prog: dict[str, object] = {}
 
     async def post(self, path: str, body: object) -> None:
         self.posts.append((path, body))
+
+    async def get_node_status(
+        self,
+        _dev_id: str,
+        _node: NodeRef,
+    ) -> dict[str, object]:
+        return self.status
 
     async def get_node_setup(
         self,

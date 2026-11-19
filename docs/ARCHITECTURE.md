@@ -6,7 +6,7 @@ How the integration is put together, and why it is shaped this way. It is writte
 
 A Home Assistant custom integration (domain `smartbox`) for Smartbox electric heaters. It talks to the vendor's cloud directly: REST calls for reads and writes, plus one `ws_user` websocket per account for pushed updates. A "box" (the site gateway) carries several heater nodes; both become Home Assistant devices.
 
-Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.1.0` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.2.0,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 ## The three layers
 
@@ -163,7 +163,7 @@ Availability moves on evidence: a lost marker opens an unavailable window, an ok
 
 1. Entities and services call named engine operations; these are the only write entry points.
 2. An operation posts over REST. The engine merges the posted body over the store optimistically and serializes writes per node, because a setup or programme POST carries the whole object and two in flight would overwrite each other's keys.
-3. Confirmation is armed just before the POST so a frame already in flight is caught; the 6 s countdown starts when the POST returns (a token refresh or slow request cannot expire it mid-flight). The confirming frame retires the window; a window that expires treats the node as unavailable until it reports again. A write that changes nothing arms nothing, because the wire pushes no frame for a value-equal write.
+3. Confirmation is armed just before the POST so a frame already in flight is caught; the 6 s countdown starts when the POST returns (a token refresh or slow request cannot expire it mid-flight). The confirming frame retires the window. A window that expires runs one GET of the written slot after a short settle: lost-marked data flips the node unavailable, data reconciles the store, and an API failure is no evidence. A write that changes nothing arms nothing, because the wire pushes no frame for a value-equal write.
 
 ## Invariants worth knowing before touching anything
 

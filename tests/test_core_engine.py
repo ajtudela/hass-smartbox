@@ -8,7 +8,6 @@ homes -> devs -> devData nesting).
 
 from __future__ import annotations
 
-import asyncio
 import copy
 import logging
 
@@ -27,6 +26,7 @@ from smartbox.protocol.client import NodeRef
 from smartbox.protocol.events import Snapshot, SocketClosed, Update
 
 from tests.fake_api import FakeSmartbox
+from tests.test_utils import until
 
 NODE_REF = NodeRef("htr", "2")
 STATUS = {"stemp": "20.0", "mtemp": "19.6", "sync_status": "ok"}
@@ -636,7 +636,7 @@ async def test_lost_marked_frame_changes_no_slot_and_schedules_the_flip(
     await engine.handle_event(
         Update(dev_id="d1", path="/htr/2/status", body={"sync_status": "lost"})
     )
-    await asyncio.sleep(0)  # let the lost-flip window elapse (instant seam)
+    await until(lambda: engine.node("d1", "htr/2").available is False)
     # the stored body and its revision are untouched; only availability moved
     node = engine.node("d1", "htr/2")
     assert node.status == STATUS
@@ -1229,7 +1229,7 @@ async def test_empty_body_frame_is_not_reachability_evidence(engine_clock, monke
     await engine.handle_event(
         Update(dev_id="d1", path="/htr/2/status", body={"sync_status": "lost"})
     )
-    await asyncio.sleep(0)  # let the lost-flip window elapse (instant seam)
+    await until(lambda: engine.node("d1", "htr/2").available is False)
     assert engine.node("d1", "htr/2").available is False
     recorder.changes.clear()
 

@@ -216,15 +216,18 @@ async def test_set_boost_mode_rejects_invalid_inputs(sleeps, session, client, wr
             {"on": True, "mode": "manual", "selected_temp": "comfort"},
         ),
         # comfort_temp is a setpoint like any other: Celsius is quantized onto
-        # the 0.5 grid, Fahrenheit to whole degrees (the vendor app's F grid)
+        # the 0.5 grid, Fahrenheit to whole degrees (the vendor app's F grid).
+        # The scale formats the value; the current app does not post `units`.
         (
             {"on": True, "mode": "manual", "comfort_temp": 21.3, "units": "C"},
-            {"on": True, "mode": "manual", "comfort_temp": "21.0", "units": "C"},
+            {"on": True, "mode": "manual", "comfort_temp": "21.0"},
         ),
         (
             {"on": True, "comfort_temp": 70.7, "eco_offset": "4", "units": "F"},
-            {"on": True, "comfort_temp": "71.0", "eco_offset": "4", "units": "F"},
+            {"on": True, "comfort_temp": "71.0", "eco_offset": "4"},
         ),
+        # `units` is a formatting input, not a body key.
+        ({"on": True, "units": "C"}, {"on": True}),
     ],
 )
 async def test_set_htr_mod_status_body(
@@ -248,7 +251,9 @@ async def test_set_htr_mod_status_body(
         {"eco_offset": 4},
         {"comfort_temp": 21.0},  # units required with comfort_temp
         {"comfort_temp": "21.0", "units": "C"},
+        {"units": "C"},  # units is not a body key
         {"units": "X"},
+        {"on": True, "units": "X"},  # invalid scale even without a temperature
     ],
 )
 async def test_set_htr_mod_status_rejects_before_network(

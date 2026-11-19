@@ -1330,7 +1330,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3,<4" },
     { name = "homeassistant", specifier = ">=2026.5.0" },
-    { name = "smartbox", specifier = ">=3.1.0" },
+    { name = "smartbox", specifier = ">=3.2.0,<3.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -3128,14 +3128,14 @@ wheels = [
 
 [[package]]
 name = "smartbox"
-version = "3.1.0"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cd/c4/5c52834d862ddeda7bfb60701aafea0fa5f9a30842512218ad07da01b1d3/smartbox-3.1.0.tar.gz", hash = "sha256:d398a4f85dd2a3ca758642f6c801cd4a1a089691ae76b6a351b4def95fe42fff", size = 174442, upload-time = "2026-11-17T07:24:04.386Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/f3/2518ef559068fb95dcd017d4fcbc3d1df789acd66c4403248ed67c8fbe1b/smartbox-3.2.0.tar.gz", hash = "sha256:586f4b4b8e0b9aa2a7a46a65435e17793f48694f4434e6d55f6f591d48dc0551", size = 178852, upload-time = "2026-11-19T18:07:57.991Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/69/7e/1dde52d9dbf5c59d85151b511f5db8c321e4bf539015e3a9f940ebb8283b/smartbox-3.1.0-py3-none-any.whl", hash = "sha256:1ea9ffc7a7a86dc982649b68ad6b365db168541350a7a994880c203095da1ee1", size = 95756, upload-time = "2026-11-17T07:24:02.969Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/84/f304a55f9e80850419d08eaf3a68f6ad7abd6e8b92913bb655936341d873/smartbox-3.2.0-py3-none-any.whl", hash = "sha256:4b21ff498859b92ad623bceaa76924beb3677686ee6d1841206a174df17623c9", size = 97937, upload-time = "2026-11-19T18:07:56.35Z" },
 ]
 
 [[package]]
