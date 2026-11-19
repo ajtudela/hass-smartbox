@@ -111,6 +111,26 @@ _IMPORT_RETRY_BASE_SECONDS = 15 * 60.0
 _IMPORT_RETRY_MAX_SECONDS = 6 * 60 * 60.0
 
 
+def _sample_counter(row: Mapping[str, Any]) -> float | None:
+    """Return a row's cumulative counter, from either wire shape.
+
+    A heater row carries the scalar ``counter``; an accumulator row carries
+    ``counters``, and the vendor app reads its first entry as the total
+    consumption (``TOTAL_CONSUMPTION``) and the second as the E2/solar counter,
+    ignoring the rest. The scalar field is the fallback when the list is absent
+    or empty. Raw counters are Wh, the unit this sensor reports.
+    """
+    counters = row.get("counters")
+    if isinstance(counters, list) and counters:
+        value = parse_number_or_none(counters[0])
+        if value is not None:
+            return value
+    # The app falls back to the scalar field when the list is empty; an
+    # unparsable first entry falls back the same way here instead of dropping
+    # a row that still carries a usable counter.
+    return parse_number_or_none(row.get("counter"))
+
+
 def _usable_sample_rows(rows: object, entity_id: str | None) -> list[dict[str, float]]:
     """Return the rows a statistics import can use, as ``{t, counter}`` floats.
 
@@ -126,7 +146,7 @@ def _usable_sample_rows(rows: object, entity_id: str | None) -> list[dict[str, f
             dropped += 1
             continue
         t = parse_number_or_none(row.get("t"))
-        counter = parse_number_or_none(row.get("counter"))
+        counter = _sample_counter(row)
         if t is None or counter is None:
             dropped += 1
             continue
