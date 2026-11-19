@@ -65,6 +65,7 @@ from custom_components.smartbox.sensor import (
     PowerSensor,
     SmartboxNodeSensorEntity,
     TotalConsumptionSensor,
+    _usable_sample_rows,
 )
 from tests.mocks import (
     MOCK_DEVICE_RTC,
@@ -1749,6 +1750,36 @@ async def test_malformed_sample_rows_are_dropped_not_fatal(
     for entity_id in energy_ids:
         assert hass.states.get(entity_id).state != STATE_UNAVAILABLE
     assert any("malformed sample row" in record.message for record in caplog.records)
+
+
+def test_sample_rows_use_the_accumulator_counters_list():
+    """An accumulator row carries ``counters``; the app's first entry is the total."""
+    rows = [
+        {"t": 100, "counters": [2400, 120, 30, 5], "valley": False},
+        {"t": 200, "counters": ["2500", 130, 30, 5]},
+        {"t": 300, "counters": []},
+        {"t": 325, "counters": ["nope"], "counter": 2650},  # bad entry, scalar wins
+        {"t": 350, "counters": [], "counter": 2700},  # app falls back to counter
+        {"t": 400, "counter": 2600},
+    ]
+    assert _usable_sample_rows(rows, "sensor.x") == [
+        {"t": 100.0, "counter": 2400.0},
+        {"t": 200.0, "counter": 2500.0},
+        {"t": 325.0, "counter": 2650.0},
+        {"t": 350.0, "counter": 2700.0},
+        {"t": 400.0, "counter": 2600.0},
+    ]
+
+
+async def test_accumulator_counters_rows_reach_the_energy_sensor(hass, config_entry):
+    """The sensor path accepts an accumulator's ``counters`` list."""
+    sensor = _consumption_sensor(hass, config_entry)
+    rows = [{"t": 1739966400, "counters": [2400, 120, 30, 5], "valley": False}]
+    with patch.object(
+        sensor._runtime.client, "get_node_samples", new=AsyncMock(return_value=rows)
+    ):
+        samples = await sensor._get_samples(0, 999)
+    assert samples == [{"t": 1739966400.0, "counter": 2400.0}]
 
 
 async def test_a_failing_first_import_is_not_retried_on_every_tick(hass, config_entry):
