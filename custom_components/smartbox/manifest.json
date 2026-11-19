@@ -2,6 +2,7 @@
   "domain": "smartbox",
   "name": "Smartbox",
   "after_dependencies": ["frontend", "http", "recorder"],
+  "categories": ["climate.thermostats_heating"],
   "codeowners": ["@ajtudela", "@Delmael", "@jandado"],
   "config_flow": true,
   "dependencies": [],
