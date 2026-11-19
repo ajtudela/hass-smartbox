@@ -40,6 +40,8 @@ from custom_components.smartbox.mapping import (
     get_hvac_mode,
     get_next_prog_change,
     get_temperature_unit,
+    htr_mod_policy,
+    htr_mod_setpoint_limits,
     hvac_mode_write,
     preset_mode_write,
     rtc_time_to_datetime,
@@ -77,27 +79,118 @@ def test_temperature_write_missing_units_raises(node_type, status):
         temperature_write(node_type, status, 24.7)
 
 
-def test_temperature_write_htr_mod_bodies():
+def test_temperature_write_htr_mod_whole_degree_comfort():
+    """The htr_mod grid is whole degrees: 20.5 lands on 21 (app parity)."""
     assert temperature_write(
         SmartboxNodeType.HTR_MOD,
         {
-            "mode": "auto",
+            "mode": "manual",
             "selected_temp": "comfort",
-            "comfort_temp": "18.2",
-            "eco_offset": "4",
+            "comfort_temp": "22.0",
+            "eco_offset": "4.0",
             "units": "C",
         },
-        17.2,
+        20.5,
     ) == HtrModWrite(
         on=True,
-        mode="auto",
+        mode="manual",
         selected_temp="comfort",
-        comfort_temp=17.2,
-        eco_offset="4",
+        comfort_temp=21.0,
+        eco_offset="4.0",
         units="C",
     )
-    # eco targets the comfort temperature, so the offset is added here and the
-    # value stays a number: the protocol layer formats it onto the grid
+
+
+def test_temperature_write_htr_mod_recomposes_the_eco_offset():
+    """A target below 18 C stays on the comfort profile, eco offset widened."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "manual",
+            "selected_temp": "comfort",
+            "comfort_temp": "22.0",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        17.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=22.0,
+        eco_offset="5.0",
+        units="C",
+    )
+
+
+def test_temperature_write_htr_mod_walks_the_comfort_down():
+    """A 10 C gap exceeds the 8 C ceiling, so comfort drops to 20."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "manual",
+            "selected_temp": "comfort",
+            "comfort_temp": "22.0",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        12.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=20.0,
+        eco_offset="8.0",
+        units="C",
+    )
+
+
+def test_temperature_write_htr_mod_walks_the_comfort_up():
+    """Comfort 18 cannot sit 4 C above 17, so it rises to 21."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "manual",
+            "selected_temp": "comfort",
+            "comfort_temp": "18.0",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        17.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=21.0,
+        eco_offset="4.0",
+        units="C",
+    )
+
+
+def test_temperature_write_htr_mod_18c_is_an_eco_setpoint():
+    """The app's eco ceiling is 18 C, so 18 itself maps to eco."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "manual",
+            "selected_temp": "comfort",
+            "comfort_temp": "22.0",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        18.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=22.0,
+        eco_offset="4.0",
+        units="C",
+    )
+
+
+def test_temperature_write_htr_mod_other_product_keeps_the_legacy_body():
+    """Only the two Haverland product codes get the app's limits."""
     assert temperature_write(
         SmartboxNodeType.HTR_MOD,
         {
@@ -108,14 +201,107 @@ def test_temperature_write_htr_mod_bodies():
             "units": "C",
         },
         14.2,
+        model_code="1C",
     ) == HtrModWrite(
         on=True,
-        mode="auto",
+        mode="manual",
         selected_temp="eco",
         comfort_temp=18.2,
         eco_offset="4",
         units="C",
     )
+
+
+def test_temperature_write_htr_mod_fahrenheit_keeps_the_legacy_body():
+    """The app constants are Celsius; F nodes keep the pass-through body."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "auto",
+            "selected_temp": "eco",
+            "comfort_temp": "71.6",
+            "eco_offset": "4",
+            "units": "F",
+        },
+        60.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=64.0,
+        eco_offset="4",
+        units="F",
+    )
+
+
+def test_temperature_write_htr_mod_setpoint_forces_manual():
+    """The app's setpoint builder leaves the programme: mode is always manual."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "auto",
+            "selected_temp": "comfort",
+            "comfort_temp": "21.0",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        22.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="comfort",
+        comfort_temp=22.0,
+        eco_offset="4.0",
+        units="C",
+    )
+
+
+@pytest.mark.parametrize("model_code", ["0A", "ff", "FF", None])
+def test_htr_mod_policy_is_the_haverland_one(model_code):
+    """Both Haverland product codes, and an unread version, get the policy."""
+    policy = htr_mod_policy(model_code)
+    assert policy is not None
+    assert policy.step_c == 1.0
+    assert policy.comfort_c == (18.0, 28.0)
+    assert policy.eco_max_c == 18.0
+    assert policy.eco_min_c == 10.0  # comfort floor - largest offset
+    assert policy.offset_c == (4, 8)
+
+
+def test_htr_mod_policy_dispatches_on_the_product_code():
+    # The app routes both Haverland codes to the same controller class.
+    assert htr_mod_policy("0A") is htr_mod_policy("ff")
+    assert htr_mod_policy("1C") is None
+    assert htr_mod_policy("17") is None
+
+
+def test_htr_mod_setpoint_limits():
+    policy = htr_mod_policy(None)
+    assert policy is not None
+    # Comfort and eco share the union: the builder picks the profile from the
+    # target, so the 18 C boundary is crossable from either one.
+    assert htr_mod_setpoint_limits({"selected_temp": "comfort"}, policy) == (
+        10.0,
+        28.0,
+    )
+    assert htr_mod_setpoint_limits({"selected_temp": "eco"}, policy) == (10.0, 28.0)
+    assert htr_mod_setpoint_limits(
+        {"selected_temp": "ice", "ice_temp": "7"}, policy
+    ) == (
+        7.0,
+        7.0,
+    )
+    assert htr_mod_setpoint_limits({"selected_temp": "off"}, policy) is None
+    assert htr_mod_setpoint_limits({}, policy) is None
+
+
+def test_htr_mod_setpoint_limits_convert_for_fahrenheit_nodes():
+    """The bounds sit on the integer Fahrenheit grid the wire stores."""
+    policy = htr_mod_policy(None)
+    assert policy is not None
+    limits = htr_mod_setpoint_limits({"selected_temp": "comfort", "units": "F"}, policy)
+    assert limits is not None
+    assert limits == (50.0, 82.0)
 
 
 def test_temperature_write_htr_mod_ice_mode_raises():
@@ -127,8 +313,61 @@ def test_temperature_write_htr_mod_ice_mode_raises():
         )
 
 
+@pytest.mark.parametrize("temp", [29.0, 9.0])
+def test_temperature_write_htr_mod_rejects_targets_outside_the_policy(temp):
+    """The policy's range is the only range the app can place."""
+    with pytest.raises(ValueError, match="accepts 10-28"):
+        temperature_write(
+            SmartboxNodeType.HTR_MOD,
+            {
+                "mode": "manual",
+                "selected_temp": "comfort",
+                "comfort_temp": "22.0",
+                "eco_offset": "4.0",
+                "units": "C",
+            },
+            temp,
+        )
+
+
+def test_temperature_write_htr_mod_snaps_an_off_grid_stored_comfort():
+    """The app compares the raw comfort and fails; the walk uses whole degrees."""
+    assert temperature_write(
+        SmartboxNodeType.HTR_MOD,
+        {
+            "mode": "manual",
+            "selected_temp": "eco",
+            "comfort_temp": "22.5",
+            "eco_offset": "4.0",
+            "units": "C",
+        },
+        17.0,
+    ) == HtrModWrite(
+        on=True,
+        mode="manual",
+        selected_temp="eco",
+        comfort_temp=23.0,
+        eco_offset="6.0",
+        units="C",
+    )
+
+
+def test_temperature_write_htr_mod_comfort_needs_the_stored_offset():
+    with pytest.raises(KeyError, match="eco_offset"):
+        temperature_write(
+            SmartboxNodeType.HTR_MOD,
+            {
+                "mode": "manual",
+                "selected_temp": "comfort",
+                "comfort_temp": "22.0",
+                "units": "C",
+            },
+            21.0,
+        )
+
+
 @pytest.mark.parametrize(
-    ("status", "key"),
+    ("status", "key", "model_code"),
     [
         (
             {
@@ -138,6 +377,7 @@ def test_temperature_write_htr_mod_ice_mode_raises():
                 "units": "C",
             },
             "eco_offset",
+            "1C",
         ),
         (
             {
@@ -147,13 +387,14 @@ def test_temperature_write_htr_mod_ice_mode_raises():
                 "units": "C",
             },
             None,
+            None,
         ),
     ],
 )
-def test_temperature_write_htr_mod_missing_keys_raise(status, key):
+def test_temperature_write_htr_mod_missing_keys_raise(status, key, model_code):
     # None pins only the exception type - the message wording is not contract
     with pytest.raises(KeyError, match=key):
-        temperature_write(SmartboxNodeType.HTR_MOD, status, 17.2)
+        temperature_write(SmartboxNodeType.HTR_MOD, status, 17.2, model_code=model_code)
 
 
 def test_temperature_write_modified_auto_engagement():

@@ -26,6 +26,8 @@ from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_MODE,
     ATTR_PRESET_MODE,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_TEMP,
     DOMAIN as CLIMATE_DOMAIN,
     PRESET_ACTIVITY,
     PRESET_AWAY,
@@ -325,14 +327,14 @@ async def test_persistent_lost_marks_node_unavailable(
     assert hass.states.get(entity_id).state == expected
 
 
-async def test_write_to_unreachable_node_marks_unavailable(
+async def test_write_on_lost_node_stays_unavailable(
     hass, smartbox_stack, mock_smartbox
 ):
-    """A write whose confirmation never arrives -> Unavailable.
+    """A direct write on a node already marked lost stays Unavailable.
 
-    The server ACKs writes to unreachable nodes without applying them
-    (docs/api-contract.md §5.6, 2026-09-30): the confirm window expires with
-    no ok frame and the node is marked Unavailable.
+    The lost frame is the availability evidence; the write timeout verifies
+    with a GET, gets no data from this host, and leaves the node unavailable
+    until an ok frame.
     """
     runtime, fake = smartbox_stack
 
@@ -360,8 +362,7 @@ async def test_write_to_unreachable_node_marks_unavailable(
     # command never reaches the handler while the node is Unavailable.
     # Invoke the entity method directly to exercise the real write path.
     await climate_entity.async_set_hvac_mode(HVACMode.OFF)
-    # The confirm window expires with no ok frame (bounded poll on the
-    # pending-write bookkeeping) -> still (and affirmatively) Unavailable.
+    # The verification GET returns no evidence -> still Unavailable.
     await until(lambda: not armed_deadlines(runtime.engine, "write"))
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == STATE_UNAVAILABLE
@@ -875,6 +876,255 @@ async def _refresh(hass, entity_id):
     return hass.states.get(entity_id)
 
 
+async def _push_haverland_pid(hass, runtime, dev_id, node):
+    """Deliver the version frame that carries a Haverland product code.
+
+    The htr_mod setpoint policy is gated on ``pid[2:4]`` (0A = heater module),
+    so a test node needs the version slot a live box pushes.
+    """
+    await runtime.transport.deliver_update(
+        dev_id, f"/{node['type']}/{node['addr']}/version", {"pid": "020A0000"}
+    )
+    await hass.async_block_till_done()
+
+
+async def test_htr_mod_climate_grid_and_profile_limits(
+    hass, smartbox_stack, mock_smartbox
+):
+    """htr_mod advertises the app's whole-degree grid and per-profile range."""
+
+    def node_bound(celsius: float, unit: str) -> float:
+        """Return the bound the entity reports (whole degrees on F nodes)."""
+        value = TemperatureConverter.convert(celsius, UnitOfTemperature.CELSIUS, unit)
+        return round(value) if unit is UnitOfTemperature.FAHRENHEIT else value
+
+    runtime, fake = smartbox_stack
+    assert DOMAIN in hass.config.components
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    # (addr, selected profile in the fixture, Celsius range)
+    # Comfort and eco share the union; ice is the slot's own value.
+    expectations = (
+        (1, "comfort", (10.0, 28.0)),
+        (2, "eco", (10.0, 28.0)),
+        (3, "ice", (7.0, 7.0)),
+    )
+    for addr in (1, 2, 3):
+        await _push_haverland_pid(hass, runtime, "device_2", nodes[addr])
+    entities = {entity.entity_id: entity for entity in runtime.services.climate}
+    for addr, selected, (min_c, max_c) in expectations:
+        node = nodes[addr]
+        status = await fake.get_node_status("device_2", ref(node))
+        assert status["selected_temp"] == selected
+        entity = entities[get_climate_entity_id(node)]
+        unit = (
+            UnitOfTemperature.CELSIUS
+            if status["units"] == "C"
+            else UnitOfTemperature.FAHRENHEIT
+        )
+        if selected == "ice":
+            expected = (float(status["ice_temp"]),) * 2
+        else:
+            expected = tuple(node_bound(value, unit) for value in (min_c, max_c))
+        assert entity.target_temperature_step == 1.0
+        assert entity.min_temp == pytest.approx(expected[0])
+        assert entity.max_temp == pytest.approx(expected[1])
+        if selected == "eco":
+            # comfort 24.3 - offset 4: inside the union, reported as stored.
+            eco = float(status["comfort_temp"]) - float(status["eco_offset"])
+            assert entity.native_target_temperature == pytest.approx(eco)
+        else:
+            key = "comfort_temp" if selected == "comfort" else "ice_temp"
+            assert entity.native_target_temperature == pytest.approx(float(status[key]))
+
+
+async def test_htr_mod_target_clamps_into_the_union(
+    hass, smartbox_stack, mock_smartbox
+):
+    """Both ends clamp: a stale comfort above 28 or below 10 reports the bound."""
+    runtime, fake = smartbox_stack
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[1]  # selected comfort, comfort_temp "20.3"
+    await _push_haverland_pid(hass, runtime, "device_2", node)
+    entity = {entity.entity_id: entity for entity in runtime.services.climate}[
+        get_climate_entity_id(node)
+    ]
+    status = await fake.get_node_status("device_2", ref(node))
+    celsius = status["units"] == "C"
+    cases = (
+        (30.0 if celsius else 90.0, entity.max_temp),
+        (9.0 if celsius else 45.0, entity.min_temp),
+    )
+    for stored, bound in cases:
+        body = dict(status)
+        body["comfort_temp"] = f"{stored:.1f}"
+        await push_status(hass, runtime, "device_2", node, body)
+        assert entity.native_target_temperature == pytest.approx(bound)
+
+
+async def test_htr_mod_non_haverland_product_keeps_the_generic_grid(
+    hass, smartbox_stack, mock_smartbox
+):
+    """A product code the app routes elsewhere keeps the default setpoint grid."""
+    runtime, fake = smartbox_stack
+    assert DOMAIN in hass.config.components
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[1]  # selected comfort, comfort_temp "20.3"
+    await runtime.transport.deliver_update(
+        "device_2", f"/{node['type']}/{node['addr']}/version", {"pid": "081C0000"}
+    )
+    await hass.async_block_till_done()
+    status = await fake.get_node_status("device_2", ref(node))
+    entities = {entity.entity_id: entity for entity in runtime.services.climate}
+    entity = entities[get_climate_entity_id(node)]
+    unit = (
+        UnitOfTemperature.CELSIUS
+        if status["units"] == "C"
+        else UnitOfTemperature.FAHRENHEIT
+    )
+    assert entity.target_temperature_step == (
+        0.5 if unit is UnitOfTemperature.CELSIUS else 1.0
+    )
+    assert entity.min_temp == pytest.approx(
+        TemperatureConverter.convert(DEFAULT_MIN_TEMP, UnitOfTemperature.CELSIUS, unit)
+    )
+    assert entity.max_temp == pytest.approx(
+        TemperatureConverter.convert(DEFAULT_MAX_TEMP, UnitOfTemperature.CELSIUS, unit)
+    )
+    # No profile range and no clamp: the stored device value is reported.
+    assert entity.native_target_temperature == pytest.approx(
+        float(status["comfort_temp"])
+    )
+
+
+@pytest.mark.parametrize("target", [9, 29])
+async def test_htr_mod_out_of_range_target_is_rejected_by_ha(
+    hass, smartbox_stack, mock_smartbox, units, target
+):
+    """HA validates the service call against the union range before the write."""
+    if units != "C":
+        pytest.skip("the fixture range is expressed in Celsius")
+    runtime, _fake = smartbox_stack
+    assert DOMAIN in hass.config.components
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[1]  # comfort profile: the union is 10-28 C
+    await _push_haverland_pid(hass, runtime, "device_2", node)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_TEMPERATURE,
+            {ATTR_TEMPERATURE: target, ATTR_ENTITY_ID: get_climate_entity_id(node)},
+            blocking=True,
+        )
+    assert err.value.translation_key == "temp_out_of_range"
+
+
+async def _write_htr_mod_setpoint(hass, runtime, fake, node, value):
+    """Set a temperature on an htr_mod node and read back the stored status."""
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_TEMPERATURE,
+        {ATTR_TEMPERATURE: value, ATTR_ENTITY_ID: get_climate_entity_id(node)},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    await confirm_write(hass, runtime, fake, "device_2", node)
+    return await fake.get_node_status("device_2", ref(node))
+
+
+async def test_htr_mod_setpoint_crosses_comfort_to_eco(
+    hass, smartbox_stack, mock_smartbox, units
+):
+    """A target at or below 18 in comfort selects eco, moving only what it must."""
+    if units != "C":
+        pytest.skip("the fixture range is expressed in Celsius")
+    runtime, fake = smartbox_stack
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[1]  # comfort, comfort_temp 20.3, eco_offset 4
+    await _push_haverland_pid(hass, runtime, "device_2", node)
+    status = await _write_htr_mod_setpoint(hass, runtime, fake, node, 17.0)
+    assert status["selected_temp"] == "eco"
+    # 20.3 snaps to 20; a 3 C gap is below the floor, so comfort rises to 21.
+    assert status["comfort_temp"] == "21.0"
+    assert status["eco_offset"] == "4.0"
+    assert status["mode"] == "manual"
+
+
+async def test_htr_mod_setpoint_crosses_eco_to_comfort(
+    hass, smartbox_stack, mock_smartbox, units
+):
+    """A target above 18 in eco selects comfort and keeps the stored offset."""
+    if units != "C":
+        pytest.skip("the fixture range is expressed in Celsius")
+    runtime, fake = smartbox_stack
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[5]  # eco, comfort_temp 24.3, eco_offset 4
+    await _push_haverland_pid(hass, runtime, "device_2", node)
+    status = await _write_htr_mod_setpoint(hass, runtime, fake, node, 21.0)
+    assert status["selected_temp"] == "comfort"
+    assert status["comfort_temp"] == "21.0"
+    # The comfort branch keeps the stored offset exactly as the device reports it.
+    assert status["eco_offset"] == "4"
+    assert status["mode"] == "manual"
+
+
+async def test_htr_mod_eco_setpoint_keeps_the_stored_comfort(
+    hass, smartbox_stack, mock_smartbox, units
+):
+    """A reachable eco target changes only the offset, not the comfort value."""
+    if units != "C":
+        pytest.skip("the fixture range is expressed in Celsius")
+    runtime, fake = smartbox_stack
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+    node = nodes[1]  # comfort, comfort_temp 20.3, eco_offset 4
+    await _push_haverland_pid(hass, runtime, "device_2", node)
+    status = await _write_htr_mod_setpoint(hass, runtime, fake, node, 15.0)
+    assert status["selected_temp"] == "eco"
+    # Only the snap to a whole degree moves comfort; the gap fits at 5 C.
+    assert status["comfort_temp"] == "20.0"
+    assert status["eco_offset"] == "5.0"
+
+
+async def test_htr_mod_temperature_write_follows_the_app_grid(
+    hass, smartbox_stack, mock_smartbox, units
+):
+    """htr_mod setpoints land on whole degrees in the app's key set."""
+    if units != "C":
+        pytest.skip("the app's setpoint constants are Celsius")
+    runtime, fake = smartbox_stack
+    assert DOMAIN in hass.config.components
+    nodes = await mock_smartbox.session.get_nodes("device_2")
+
+    async def set_temp(node, value):
+        await _push_haverland_pid(hass, runtime, "device_2", node)
+        await hass.services.async_call(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_TEMPERATURE,
+            {ATTR_TEMPERATURE: value, ATTR_ENTITY_ID: get_climate_entity_id(node)},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        await confirm_write(hass, runtime, fake, "device_2", node)
+        return await fake.get_node_status("device_2", ref(node))
+
+    # Comfort profile: the target stays put, snapped to the whole-degree grid.
+    status = await set_temp(nodes[1], 21.0)
+    assert status["selected_temp"] == "comfort"
+    assert status["comfort_temp"] == "21.0"
+    assert status["mode"] == "manual"
+
+    # Eco profile: 17 C against a stored comfort of 24 places the offset.
+    status = await set_temp(nodes[5], 17.0)
+    assert status["selected_temp"] == "eco"
+    assert status["comfort_temp"] == "24.0"
+    assert status["eco_offset"] == "7.0"
+    assert status["mode"] == "manual"
+
+    # A setpoint on a programmed node leaves the programme, as the app does.
+    status = await set_temp(nodes[2], 17.0)  # auto mode in the fixture
+    assert status["mode"] == "manual"
+    assert status["selected_temp"] == "eco"
+
+
 async def _write_all_hvac(hass, runtime, fake, mock_smartbox, hvac_mode):
     """Match-all hvac write + the confirming frames for every heater."""
     await hass.services.async_call(
@@ -1143,6 +1393,9 @@ class _WriteHostDouble:
 
     async def post(self, path: str, body: dict) -> None:
         self.posts.append((path, dict(body)))
+
+    async def get_node_status(self, dev_id: str, node) -> dict:  # noqa: ARG002
+        return {}
 
     async def get_node_setup(self, dev_id: str, node) -> dict:  # noqa: ARG002
         # A real node setup is never empty; an empty read is refused by the

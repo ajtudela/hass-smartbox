@@ -64,6 +64,7 @@ from .exceptions import user_error, validation_error
 from .identity import boost_available, boost_config
 from .mapping import (
     AutoOverrideWrite,
+    HtrModPolicy,
     HtrModWrite,
     check_status_key,
     get_boost_end_datetime,
@@ -71,6 +72,8 @@ from .mapping import (
     get_next_prog_change,
     get_target_temperature,
     get_temperature_unit,
+    htr_mod_policy,
+    htr_mod_setpoint_limits,
     hvac_mode_write,
     preset_mode_write,
     temperature_write,
@@ -253,7 +256,13 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         """Return the target temperature."""
         if self._lost or self._status_blank:
             return None
-        return get_target_temperature(self._node.node_type, self._status)
+        target = get_target_temperature(self._node.node_type, self._status)
+        limits = self._htr_mod_status_limits()
+        if target is None or limits is None:
+            return target
+        # The advertised range is the comfort/eco union; clamp a stale device
+        # value into it so HA's slider and the state agree.
+        return min(max(target, limits[0]), limits[1])
 
     if not _HA_HAS_NATIVE_TEMPERATURE:
 
@@ -272,15 +281,37 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             """Return the target temperature (pre-2026.11 API)."""
             return self.native_target_temperature
 
+    def _model_code(self) -> str | None:
+        """Return the node's product code (live version slot, then discovery)."""
+        state = self._node_state()
+        return self._node.get_model_code(state.version if state is not None else None)
+
+    def _htr_mod_policy(self) -> HtrModPolicy | None:
+        """Return the node's htr_mod setpoint policy, when it has one."""
+        if self._node.node_type != SmartboxNodeType.HTR_MOD:
+            return None
+        return htr_mod_policy(self._model_code())
+
+    def _htr_mod_status_limits(self) -> tuple[float, float] | None:
+        """Return the editable htr_mod setpoint range in the node's unit."""
+        policy = self._htr_mod_policy()
+        if policy is None or self._lost or self._status_blank:
+            return None
+        return htr_mod_setpoint_limits(self._status, policy)
+
     @property
     def target_temperature_step(self) -> float:
-        """Setpoint grid step: 0.5 for Celsius, 1.0 for Fahrenheit.
+        """Setpoint grid step, in the entity's unit.
 
-        Matches the official app. Without it HA's UI emits off-grid setpoints
-        that the device silently quantizes, so the optimistic UI value differs
-        from what the device stored.
+        Matches the official app on Celsius nodes: 0.5 for the htr family and
+        the htr_mod policy's 1 C grid. Fahrenheit nodes get 1 F, the grid the
+        wire stores (values.format_setpoint); the app's htr_mod Fahrenheit
+        step uses the absolute-value conversion and is not a usable reference.
         """
-        return 0.5 if self.native_temperature_unit == UnitOfTemperature.CELSIUS else 1.0
+        if self.native_temperature_unit != UnitOfTemperature.CELSIUS:
+            return 1.0
+        policy = self._htr_mod_policy()
+        return policy.step_c if policy is not None else 0.5
 
     @property
     def min_temp(self) -> float:
@@ -289,8 +320,11 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         A plain property on purpose: ``ClimateEntity.min_temp`` is a
         cached_property, and this entity is added before the store has any
         state, so the inherited cache would freeze the Celsius default for
-        Fahrenheit devices.
+        Fahrenheit devices. htr_mod follows the app's per-profile range.
         """
+        htr_mod_limits = self._htr_mod_status_limits()
+        if htr_mod_limits is not None:
+            return htr_mod_limits[0]
         if self.preset_mode == PRESET_RUNBACK:
             min_runback, _max_runback = node_runback_limits(self._node_state())
             if min_runback is not None:
@@ -309,6 +343,9 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         scale; "0.0" means no user limit, so HA's default maximum applies.
         Refreshed on setup frames via the fan-out. Plain property: see min_temp.
         """
+        htr_mod_limits = self._htr_mod_status_limits()
+        if htr_mod_limits is not None:
+            return htr_mod_limits[1]
         state = self._node_state()
         limit = node_max_stemp_limit(state)
         if self.preset_mode == PRESET_RUNBACK:
@@ -351,6 +388,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             self._status,
             temp,
             state.setup if state is not None else {},
+            model_code=self._model_code(),
         )
         if isinstance(write, HtrModWrite):
             await engine.set_htr_mod_status(
