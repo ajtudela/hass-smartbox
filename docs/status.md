@@ -4,20 +4,20 @@
 
 *Updated 2026-11-20. Keep this a 90-second read and prune entries as they close.*
 
-## State of 3.2.0
+## State of 3.2.1
 
-- Library `3.2.0` and integration `3.2.0` are the current stable releases.
-- The library split, native temperature properties, logger metadata, heater to box device linking, bundled program card, Sunday-first schedule fix and the `selected_temp` climate attribute are shipped.
-- Integration 3.2.0 pins `smartbox>=3.2.0,<3.3`; the upper bound keeps a future minor from installing until the integration is updated for it. The library carries the write-verification reader (`WriteHost.get_node_status()`) and drops `units` from the htr_mod setpoint body.
-- 3.2.0 ships the boxless power-limit skip, `locked` normalized to `bool`, write verification instead of a write timeout flipping Unavailable, the htr_mod setpoint contract (1 °C grid, the 10–28 °C union while comfort or eco is active with the profile chosen by the target, ice fixed, `mode: manual`), and the accumulator `counters` sample shape for the total-consumption sensor.
-- A soak on the maintainer's instance exercised the four changes above with no errors or warnings.
+- Library `3.2.0` and integration `3.2.1` are the current stable releases.
+- Integration 3.2.1 pins `smartbox>=3.2.0,<3.3`; the upper bound keeps a future minor from installing until the integration is updated for it.
+- 3.2.1 fixes the boxless power-limit purge: the confirmation required `connected` in REST `/dev_data`, which that endpoint never serves, so the box power-limit number and the "no power limit" switch were rebuilt on every setup on a boxless home. It adds the per-heater Power Limit Factor select (Off / LST / Baby Care) and limits radiator priority to heaters paired with a box, pruning both surfaces where they no longer apply.
+- 3.2.0 remains as shipped: the boxless power-limit skip, `locked` normalized to `bool`, write verification instead of a write timeout flipping Unavailable, the htr_mod setpoint contract (1 °C grid, the 10–28 °C union while comfort or eco is active with the profile chosen by the target, ice fixed, `mode: manual`), the accumulator `counters` sample shape, and the library split.
+- A soak on the maintainer's instance with a boxless and a boxed home ran clean: no errors, no entity churn, the boxless controls stayed gone and the new select wrote `user_duty_limit`.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
 
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
 - After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; acm users to confirm `locked` reads `true`/`false`.
-- Unreleased after 3.2.0 (verified on the maintainer's instance, both homes): the boxless purge removes the box power-limit entities and the radiator priority select and they stay gone across restarts, while the boxed home keeps its controls; the new Power Limit Factor select appears on the heater and writes `user_duty_limit`. contract §5.7/§9, §7 item 17. Open: the boxless reporter confirming the entities stay gone on his own install.
+- After 3.2.1: the boxless reporter to confirm on his install that the power-limit entities and the priority select stay gone, and watch for reports on the new Power Limit Factor select (a stored value outside Off / LST / Baby Care reads as unknown, as the vendor app leaves its field blank). contract §5.7/§9, §7 item 17.
 - After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.
