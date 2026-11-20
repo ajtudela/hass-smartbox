@@ -2,7 +2,7 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-18. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-20. Keep this a 90-second read and prune entries as they close.*
 
 ## State of 3.2.0
 
@@ -16,7 +16,8 @@
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
-- After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; the boxless reporter to confirm the removed entities stay gone; acm users to confirm `locked` reads `true`/`false`.
+- After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; acm users to confirm `locked` reads `true`/`false`.
+- Unreleased after 3.2.0 (verified on the maintainer's instance, both homes): the boxless purge removes the box power-limit entities and the radiator priority select and they stay gone across restarts, while the boxed home keeps its controls; the new Power Limit Factor select appears on the heater and writes `user_duty_limit`. contract §5.7/§9, §7 item 17. Open: the boxless reporter confirming the entities stay gone on his own install.
 - After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.

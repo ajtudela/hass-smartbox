@@ -22,7 +22,10 @@ from custom_components.smartbox.identity import (
     async_discover_membership,
     boost_available,
     boost_config,
+    duty_limit_options,
+    duty_limit_value,
     node_power_limit_available,
+    priority_available,
 )
 
 HOME = {"id": "h1", "devs": [{"dev_id": "dev1", "name": "Box"}]}
@@ -53,7 +56,8 @@ def make_client(
         "nodes": [],
         "connected": True,
         "away_status": {},
-        "htr_system": {"setup": {}},
+        # Boxed with the limit cleared: setup.power_limit stays 0.
+        "htr_system": {"power_limit": {}, "setup": {"power_limit": 0}},
     }
     client.get_nodes.return_value = [NODE, PMO_NODE] if nodes is None else nodes
     client.get_node_status.return_value = STATUS
@@ -97,7 +101,25 @@ async def test_pmo_node_skips_the_status_read():
 
 
 async def test_discovery_marks_a_device_without_box_power_limit():
-    """A rejected probe plus a boxless snapshot means no box power limit."""
+    """A rejected probe plus a boxless snapshot means no box power limit.
+
+    The payload is the REST shape: no ``connected`` key, which that endpoint
+    never serves (docs/api-contract.md §3.1 E46).
+    """
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "away_status": {},
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+async def test_snapshot_with_connected_still_confirms_absence():
+    """The ws snapshot's extra ``connected`` key is tolerated, not required."""
     client = make_client()
     client.get_power_limit.side_effect = SmartboxError("not found")
     client.get_dev_data.return_value = {
@@ -109,6 +131,17 @@ async def test_discovery_marks_a_device_without_box_power_limit():
     identity = await async_discover_identity(client, None)
 
     assert identity.devices[0].box_power_limit_available is False
+
+
+async def test_payload_without_away_status_keeps_the_surface():
+    """A truncated payload must not confirm absence: both keys are needed."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.return_value = {"nodes": []}
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
 
 
 async def test_empty_htr_system_confirms_absence():
@@ -117,7 +150,6 @@ async def test_empty_htr_system_confirms_absence():
     client.get_power_limit.side_effect = SmartboxError("not found")
     client.get_dev_data.return_value = {
         "nodes": [],
-        "connected": True,
         "away_status": {},
         "htr_system": {},
     }
@@ -125,6 +157,55 @@ async def test_empty_htr_system_confirms_absence():
     identity = await async_discover_identity(client, None)
 
     assert identity.devices[0].box_power_limit_available is False
+
+
+@pytest.mark.parametrize(
+    "htr_system",
+    [
+        # The boxless HJM shape: a placeholder object with no setup copy.
+        {"power_limit": {}},
+        {"power_limit": {"power_limit": ""}, "setup": {}},
+    ],
+)
+async def test_htr_system_without_a_limit_confirms_absence(htr_system):
+    """A non-empty htr_system with no limit configured is still boxless."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("not found")
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "away_status": {},
+        "htr_system": htr_system,
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is False
+
+
+@pytest.mark.parametrize(
+    "htr_system",
+    [
+        # A box whose limit was cleared keeps setup.power_limit: 0.
+        {"power_limit": {}, "setup": {"power_limit": 0}},
+        {"setup": {"power_limit": 0}},
+        {"power_limit": {"power_limit": 0}},
+        {"power_limit": {"power_limit": "1500"}},
+    ],
+)
+async def test_configured_box_power_limit_keeps_the_surface(htr_system):
+    """Any readable limit copy marks a real box, including a cleared limit."""
+    client = make_client()
+    client.get_power_limit.side_effect = SmartboxError("forbidden")
+    client.get_dev_data.return_value = {
+        "nodes": [],
+        "connected": True,
+        "away_status": {},
+        "htr_system": htr_system,
+    }
+
+    identity = await async_discover_identity(client, None)
+
+    assert identity.devices[0].box_power_limit_available is True
 
 
 async def test_discovery_probes_the_box_while_reading_nodes():
@@ -164,11 +245,16 @@ async def test_discovery_keeps_box_power_limit_when_snapshot_has_htr_system():
         {},
         [],
         {"devData": {"nodes": [], "away_status": {}}},
-        {"nodes": [], "connected": True, "htr_system": "drifted"},
-        # all snapshot keys present, but htr_system is not a mapping
-        {"nodes": [], "connected": True, "away_status": {}, "htr_system": "drifted"},
-        {"nodes": []},  # one snapshot key is not a snapshot
-        {"nodes": [], "connected": True},  # a truncated snapshot keeps the surface
+        {"nodes": [], "htr_system": "drifted"},
+        # both snapshot keys present, but htr_system is not a mapping
+        {"nodes": [], "away_status": {}, "htr_system": "drifted"},
+        {"nodes": []},  # missing away_status: a truncated snapshot
+        {"away_status": {}},  # missing nodes: a truncated snapshot
+        {"nodes": None, "away_status": {}},  # ill-typed nodes
+        {"nodes": [], "away_status": None},  # ill-typed away_status
+        # A present but unreadable limit copy is a box with drifted data.
+        {"nodes": [], "away_status": {}, "htr_system": {"power_limit": "abc"}},
+        {"nodes": [], "away_status": {}, "htr_system": {"power_limit": -5}},
     ],
 )
 async def test_discovery_keeps_box_power_limit_when_confirmation_is_inconclusive(
@@ -202,7 +288,6 @@ async def test_empty_success_body_uses_snapshot_confirmation():
     client.get_power_limit.return_value = {}
     client.get_dev_data.return_value = {
         "nodes": [],
-        "connected": True,
         "away_status": {},
     }
 
@@ -218,7 +303,6 @@ async def test_value_less_success_body_uses_snapshot_confirmation(value):
     client.get_power_limit.return_value = {"power_limit": value}
     client.get_dev_data.return_value = {
         "nodes": [],
-        "connected": True,
         "away_status": {},
     }
 
@@ -234,7 +318,6 @@ async def test_non_mapping_success_body_uses_snapshot_confirmation(payload):
     client.get_power_limit.return_value = payload
     client.get_dev_data.return_value = {
         "nodes": [],
-        "connected": True,
         "away_status": {},
     }
 
@@ -440,6 +523,62 @@ async def test_protocol_errors_propagate_raw(seam, error):
     getattr(client, seam).side_effect = error
     with pytest.raises(type(error)):
         await async_discover_identity(client, None)
+
+
+async def test_priority_gate_requires_a_box():
+    """The app hides radiator priority on a WiFi heater; the gate agrees."""
+    client = make_client()
+    client.get_node_setup.side_effect = [{"priority": "low"}, {}]
+    identity = await async_discover_identity(client, None)
+    htr = next(
+        node for node in identity.nodes if node.node_type == SmartboxNodeType.HTR
+    )
+    assert priority_available(htr) is True
+
+    boxless = make_client()
+    boxless.get_power_limit.side_effect = SmartboxError("not found")
+    boxless.get_dev_data.return_value = {"nodes": [], "away_status": {}}
+    boxless.get_node_setup.side_effect = [{"priority": "low"}, {}]
+    identity = await async_discover_identity(boxless, None)
+    htr = next(
+        node for node in identity.nodes if node.node_type == SmartboxNodeType.HTR
+    )
+    assert identity.devices[0].box_power_limit_available is False
+    assert priority_available(htr) is False
+
+
+def test_duty_limit_options_keeps_only_usable_presets():
+    """Preset values must parse and stay distinct; a missing factory yields OFF."""
+    base = {"power": "2000.0", "extra_options": {"user_duty_limit": 0}}
+
+    unusable = {
+        "lst_available": True,
+        "lst_value": "abc",
+        "bbc_available": True,
+        "bbc_value": 0,
+    }
+    assert duty_limit_options({**base, "factory_options": unusable}) == (("Off", 0),)
+
+    duplicate = {
+        "lst_available": True,
+        "lst_value": 50,
+        "bbc_available": True,
+        "bbc_value": 50,
+    }
+    assert duty_limit_options({**base, "factory_options": duplicate}) == (
+        ("Off", 0),
+        ("LST", 50),
+    )
+
+    assert duty_limit_options(dict(base)) == (("Off", 0),)
+    assert duty_limit_options({**base, "power": 0}) == ()
+    assert duty_limit_options({"extra_options": {"user_duty_limit": 0}}) == ()
+    assert duty_limit_options({}) == ()
+
+    assert duty_limit_value({"extra_options": {"user_duty_limit": "25"}}) == 25
+    assert duty_limit_value({"extra_options": {"user_duty_limit": "abc"}}) is None
+    assert duty_limit_value({"extra_options": {}}) is None
+    assert duty_limit_value({"extra_options": 5}) is None
 
 
 async def test_node_power_limit_gate_reads_the_setup_key():

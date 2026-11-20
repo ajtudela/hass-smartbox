@@ -183,6 +183,9 @@
           "medium": "Mittel",
           "high": "Hoch"
         }
+      },
+      "duty_limit": {
+        "name": "Leistungsbegrenzungsfaktor"
       }
     }
   },

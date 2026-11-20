@@ -26,11 +26,16 @@ from dataclasses import dataclass, field, replace
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from smartbox.core.merging import boost_config, is_empty_slot, normalize_node_addr
+from smartbox.core.merging import (
+    boost_config,
+    is_empty_slot,
+    normalize_node_addr,
+    valid_power_limit,
+)
 from smartbox.core.state import node_device_id
 from smartbox.protocol.client import NodeRef, SmartboxClient
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
-from smartbox.protocol.values import BoostConfig, bounded_repr
+from smartbox.protocol.values import BoostConfig, bounded_repr, parse_number_or_none
 
 from .const import HEATER_NODE_TYPES, SmartboxNodeType
 
@@ -238,16 +243,38 @@ def _device_info_from_dev(
     )
 
 
-_SNAPSHOT_KEYS = ("nodes", "connected", "away_status")
+def _htr_system_has_power_limit(htr_system: Mapping[str, Any]) -> bool:
+    """Whether a snapshot's ``htr_system`` subtree configures a box power limit.
+
+    A boxless parent still serves ``{"power_limit": {}}`` here, so a non-empty
+    subtree is not evidence of a box. Both copies the server keeps in step
+    count: the object value and ``setup.power_limit``, the latter staying ``0``
+    for a box whose limit was cleared (docs/api-contract.md §5.3).
+    """
+    limit = htr_system.get("power_limit")
+    if isinstance(limit, Mapping):
+        limit = limit.get("power_limit")
+    if valid_power_limit(limit) is not None:
+        return True
+    if limit is not None and limit not in ("", {}):
+        # Present but unreadable: a drifted copy on a real box, not the boxless
+        # placeholder. Keep the surface rather than trusting garbage.
+        return True
+    setup = htr_system.get("setup")
+    fallback = setup.get("power_limit") if isinstance(setup, Mapping) else None
+    return valid_power_limit(fallback) is not None
 
 
 async def _confirm_boxless(client: SmartboxClient, dev_id: str) -> bool:
     """Confirm a rejected power-limit probe with a snapshot-shaped dev_data.
 
     A rejected probe alone is ambiguous (403, malformed 2xx). Absence is
-    trusted only when dev_data carries all of nodes/connected/away_status and
-    its htr_system is absent or empty; wrapped, truncated, malformed or
-    unreadable payloads keep the surface.
+    trusted only when dev_data carries a ``nodes`` list and an ``away_status``
+    object and its htr_system carries no power-limit configuration; wrapped,
+    truncated, malformed or unreadable payloads keep the surface. ``connected``
+    is not required: the REST payload never carries it (only the ws snapshot
+    and ``/devs/{id}/connected`` do), so requiring it made this confirmation
+    unreachable (docs/api-contract.md §3.1 E46).
     """
     try:
         dev_data = await client.get_dev_data(dev_id)
@@ -255,14 +282,16 @@ async def _confirm_boxless(client: SmartboxClient, dev_id: str) -> bool:
         return False
     if not isinstance(dev_data, Mapping):
         return False
-    if not all(key in dev_data for key in _SNAPSHOT_KEYS):
+    if not isinstance(dev_data.get("nodes"), list) or not isinstance(
+        dev_data.get("away_status"), Mapping
+    ):
         return False
     htr_system = dev_data.get("htr_system")
     if htr_system is None:
         return True
     if not isinstance(htr_system, Mapping):
         return False
-    return not bool(htr_system)
+    return not _htr_system_has_power_limit(htr_system)
 
 
 async def _box_power_limit_available(client: SmartboxClient, dev_id: str) -> bool:
@@ -589,12 +618,87 @@ def node_power_limit_available(node: SmartboxNodeInfo) -> bool:
     return "power_limit" in node.setup
 
 
+DUTY_LIMIT_OFF = "Off"
+
+# (label, availability key, value key) in the app's own order; the values are
+# per-node percentages from factory_options (docs/api-contract.md §5.7).
+_DUTY_LIMIT_PRESETS = (
+    ("LST", "lst_available", "lst_value"),
+    ("Baby Care", "bbc_available", "bbc_value"),
+)
+
+
+def _percent(value: object) -> int | None:
+    """Return a positive whole percentage, or None when absent or unusable."""
+    number = parse_number_or_none(value)
+    if number is None or number <= 0:
+        return None
+    return int(number)
+
+
+def duty_limit_value(setup: Mapping[str, Any]) -> int | None:
+    """Return the stored power-limit factor, or None when absent or unreadable.
+
+    A malformed value reads as unknown rather than inventing a setting
+    (docs/api-contract.md §5.7).
+    """
+    extra = setup.get("extra_options")
+    raw = extra.get("user_duty_limit") if isinstance(extra, Mapping) else None
+    number = parse_number_or_none(raw)
+    return None if number is None else int(number)
+
+
+def duty_limit_options(setup: Mapping[str, Any]) -> tuple[tuple[str, int], ...]:
+    """Return the (label, value) power-limit-factor choices for a node setup.
+
+    The vendor app offers only these: 0 (OFF) plus the node's own preset
+    percentages -- LST when ``factory_options.lst_available`` carries
+    ``lst_value``, Baby Care when ``bbc_available`` carries ``bbc_value`` --
+    and hides the control on a node whose rated power is 0; the labels are the
+    app's own (docs/api-contract.md §5.7). Only the modern
+    ``extra_options.user_duty_limit`` field is exposed, so a legacy node that
+    keeps the factor in ``factory_options.duty_limit`` builds nothing.
+    """
+    extra = setup.get("extra_options")
+    if not isinstance(extra, Mapping) or "user_duty_limit" not in extra:
+        return ()
+    power = parse_number_or_none(setup.get("power"))
+    if not power:
+        return ()
+    choices: list[tuple[str, int]] = [(DUTY_LIMIT_OFF, 0)]
+    seen = {0}
+    factory = setup.get("factory_options")
+    if isinstance(factory, Mapping):
+        for label, available_key, value_key in _DUTY_LIMIT_PRESETS:
+            if not factory.get(available_key):
+                continue
+            value = _percent(factory.get(value_key))
+            if value is None or value in seen:
+                continue
+            seen.add(value)
+            choices.append((label, value))
+    return tuple(choices)
+
+
+def duty_limit_available(node: SmartboxNodeInfo) -> bool:
+    """Is the power-limit factor select worth exposing on this node.
+
+    A node with only the OFF choice has nothing to select, so at least one
+    preset must exist.
+    """
+    return len(duty_limit_options(node.setup)) > 1
+
+
 def priority_available(node: SmartboxNodeInfo) -> bool:
     """Is the radiator priority configurable on this node.
 
-    fw-1.9-family setup field only.
+    fw-1.9-family setup field, and only on a device with a Smartbox: the box is
+    what arbitrates the load, and the vendor app hides the setting on a WiFi
+    heater, which is its own device with no box (docs/api-contract.md §9). The
+    device capability that records "a box answered" is the power-limit probe,
+    so a boxless home keeps the away switch and connectivity but no priority.
     """
-    return "priority" in node.setup
+    return "priority" in node.setup and node.device.box_power_limit_available
 
 
 def prog_temps_available(node: SmartboxNodeInfo) -> bool:
