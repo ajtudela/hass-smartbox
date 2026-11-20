@@ -183,6 +183,9 @@
           "medium": "Moyenne",
           "high": "Haute"
         }
+      },
+      "duty_limit": {
+        "name": "Facteur de limite de puissance"
       }
     }
   },

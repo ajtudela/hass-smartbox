@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A per-heater **Power Limit Factor** select (Off / LST / Baby Care): the node's own duty cap at `extra_options.user_duty_limit`, built from the unit's preset percentages the way the vendor app builds it and offered only where the setup carries the factor, the presets and a non-zero rated power. The heater applies the selection at its next start; a stored value outside the presets reads as unknown, as the app leaves its field blank (hass-smartbox docs/api-contract.md §5.7, §9).
+
+### Fixed
+
+- The boxless power-limit purge now fires on a real boxless home. The confirmation required a `connected` key that REST `/dev_data` never carries, so the box power-limit number and the "no power limit" switch survived and were rebuilt on every setup. Absence is now confirmed from a `nodes` list and an `away_status` object plus the absence of a power-limit configuration, while a malformed snapshot or a present-but-unreadable limit copy keeps the existing entities (hass-smartbox docs/api-contract.md §3.1 E46, §7 item 17).
+
+### Changed
+
+- Radiator priority is only offered on heaters paired with a Smartbox, where the box arbitrates the load; the app hides the same row on a WiFi heater. Boxless homes lose the priority select on upgrade and its registry entry is removed (hass-smartbox docs/api-contract.md §9).
+
 ## 3.2.0 (2026-11-18)
 
 ### Fixed

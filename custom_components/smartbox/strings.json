@@ -257,6 +257,9 @@
           "medium": "Medium",
           "high": "High"
         }
+      },
+      "duty_limit": {
+        "name": "Power Limit Factor"
       }
     }
   },

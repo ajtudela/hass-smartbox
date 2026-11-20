@@ -319,9 +319,10 @@ One box-level connectivity sensor (per-node connectivity is shown through the cl
 * Per node: node power limit (PMO nodes whose setup carries the key), boost temperature, boost duration, away offset, maximum temperature, and programme temperatures (frost / eco / comfort, where the device reports them)
 
 ### Selects
-* Per node: radiator priority (low / medium / high, fw-1.9 family only) — the device takes it into account itself when enforcing the box power limit
+* Per node: radiator priority (low / medium / high, fw-1.9 family on devices paired with a Smartbox) — the device takes it into account itself when enforcing the box power limit
+* Per heater: power limit factor (Off / LST / Baby Care) — a percentage cap on the heater's duty, built from the node's own preset percentages and offered only where the setup carries the factor and the presets and the heater reports a rated power; the heater applies the selection at its next start, and a stored value outside the presets reads as unknown
 
-Boxless heaters (heaters not paired with a Smartbox controller) keep the parent device, away mode, connectivity and their node entities, but do not get the box power-limit number or no-limit switch.
+Boxless heaters (heaters not paired with a Smartbox controller) keep the parent device, away mode, connectivity and their other node entities, but do not get the box power-limit number, the no-limit switch or the radiator priority select.
 
 ### Dedicated energy monitor
 The PMO devices are available including the power limit entity.

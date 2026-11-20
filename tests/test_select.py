@@ -11,6 +11,7 @@ from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
 import pytest
 
 from tests.mocks import (
+    get_duty_limit_entity_id,
     get_entity_id_from_unique_id,
     get_node_unique_id,
     get_object_id,
@@ -80,3 +81,156 @@ async def test_radiator_priority(hass, mock_smartbox, config_entry):
     # The acm node's setup has no priority: no select entity.
     acm_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     assert hass.states.get(get_priority_entity_id(acm_node)) is None
+
+
+def _patch_duty_limit(mock_smartbox, *, extra, factory, power="2000.0") -> None:
+    """Give the first heater the duty-limit fields under test."""
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["power"] = power
+    setup["extra_options"] = extra
+    setup["factory_options"] = {**setup["factory_options"], **factory}
+
+
+def _duty_presets(**overrides) -> dict:
+    presets = {
+        "lst_available": True,
+        "lst_value": 25,
+        "bbc_available": True,
+        "bbc_value": 50,
+    }
+    presets.update(overrides)
+    return presets
+
+
+async def test_power_limit_factor(hass, mock_smartbox, config_entry):
+    """The power-limit factor offers the app's presets and writes the value."""
+    _patch_duty_limit(
+        mock_smartbox,
+        extra={"user_duty_limit": 0},
+        factory=_duty_presets(),
+    )
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    entity_id = get_duty_limit_entity_id(mock_node)
+    state = hass.states.get(entity_id)
+    assert (
+        state.name
+        == state.attributes[ATTR_FRIENDLY_NAME]
+        == f"{mock_node['name']} Power Limit Factor"
+    )
+    assert state.state == "Off"
+    assert state.attributes["options"] == ["Off", "LST", "Baby Care"]
+    # The two selects coexist: the duty gate does not replace the priority one.
+    assert hass.states.get(get_priority_entity_id(mock_node)) is not None
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        "select_option",
+        {ATTR_ENTITY_ID: entity_id, ATTR_OPTION: "Baby Care"},
+        blocking=True,
+    )
+    setup = await fake.get_node_setup(mock_device["dev_id"], ref(mock_node))
+    assert setup["extra_options"]["user_duty_limit"] == 50
+
+    # A setup frame re-renders the selection.
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        mock_device["dev_id"],
+        mock_node,
+        {"extra_options": {"user_duty_limit": 25}},
+    )
+    assert hass.states.get(entity_id).state == "LST"
+
+    # A value outside the presets is unknown, as the app shows it blank.
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        mock_device["dev_id"],
+        mock_node,
+        {"extra_options": {"user_duty_limit": 60}},
+    )
+    assert hass.states.get(entity_id).state == "unknown"
+
+    # A digit-string echo still maps to its preset.
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        mock_device["dev_id"],
+        mock_node,
+        {"extra_options": {"user_duty_limit": "25"}},
+    )
+    assert hass.states.get(entity_id).state == "LST"
+
+    # An unreadable stored value is unknown too.
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        mock_device["dev_id"],
+        mock_node,
+        {"extra_options": {"user_duty_limit": "abc"}},
+    )
+    assert hass.states.get(entity_id).state == "unknown"
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        # No preset percentages: only OFF would be offered.
+        {"extra": {"user_duty_limit": 0}, "factory": {"lst_available": False}},
+        # The app hides the control on a node with no rated power.
+        {"extra": {"user_duty_limit": 0}, "factory": _duty_presets(), "power": "0"},
+        # Legacy nodes keep the factor in factory_options.duty_limit.
+        {"extra": {}, "factory": {"duty_limit": 30}},
+    ],
+)
+async def test_power_limit_factor_absent(hass, mock_smartbox, config_entry, patch):
+    """The select only appears where the app itself would offer it."""
+    _patch_duty_limit(mock_smartbox, **patch)
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    assert hass.states.get(get_duty_limit_entity_id(mock_node)) is None
+
+
+async def test_power_limit_factor_lst_only(hass, mock_smartbox, config_entry):
+    """A unit without Baby Care offers OFF and LST only."""
+    _patch_duty_limit(
+        mock_smartbox,
+        extra={"user_duty_limit": 25},
+        factory=_duty_presets(bbc_available=False),
+    )
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await seed_stack(hass, mock_smartbox)
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    state = hass.states.get(get_duty_limit_entity_id(mock_node))
+    assert state.attributes["options"] == ["Off", "LST"]
+    assert state.state == "LST"
+
+
+async def test_priority_absent_on_a_boxless_device(hass, mock_smartbox, config_entry):
+    """The app hides radiator priority on a WiFi heater; the gate does too."""
+    mock_smartbox._device_power = {**mock_smartbox._device_power, "device_1": None}
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    assert hass.states.get(get_priority_entity_id(mock_node)) is None

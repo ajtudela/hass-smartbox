@@ -161,28 +161,12 @@ def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
     )
 
 
-def _async_prune_boxless_power_limit_entities(
+def _async_prune_registry_entities(
     hass: HomeAssistant,
     entry: SmartboxConfigEntry,
-    devices: tuple[SmartboxDeviceInfo, ...],
+    stale: set[str],
 ) -> None:
-    """Remove box power-limit entities from devices without htr_system.
-
-    Older builds created these on every parent device. The platform builders
-    no longer add them for boxless devices, so existing registry entries
-    would otherwise linger as unavailable. The capability probe only removes
-    them when the box power-limit endpoint rejects the device or returns a
-    value-less 2xx, and a snapshot-shaped dev_data has no htr_system
-    (docs/api-contract.md §7 item 17); transport, auth and
-    inconclusive-payload cases keep the capability flag true and are not
-    pruned here.
-    """
-    stale = {
-        f"{device.dev_id}_{key}"
-        for device in devices
-        if not device.box_power_limit_available
-        for key in ("power_limit", "no_power_limit")
-    }
+    """Remove this entry's registry entries whose unique_id is stale."""
     if not stale:
         return
     entity_registry = er.async_get(hass)
@@ -191,6 +175,58 @@ def _async_prune_boxless_power_limit_entities(
     ):
         if registry_entry.platform == DOMAIN and registry_entry.unique_id in stale:
             entity_registry.async_remove(registry_entry.entity_id)
+
+
+def _async_prune_boxless_power_limit_entities(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    devices: tuple[SmartboxDeviceInfo, ...],
+) -> None:
+    """Remove box power-limit entities from devices without one.
+
+    Older builds created these on every parent device. The platform builders
+    no longer add them for boxless devices, so existing registry entries
+    would otherwise linger as unavailable. The capability probe only removes
+    them when the box power-limit endpoint rejects the device or returns a
+    value-less 2xx, and the snapshot-shaped dev_data carries nodes/away_status
+    with no power-limit configuration in htr_system (docs/api-contract.md §7
+    item 17); transport, auth and inconclusive-payload cases keep the
+    capability flag true and are not pruned here.
+    """
+    _async_prune_registry_entities(
+        hass,
+        entry,
+        {
+            f"{device.dev_id}_{key}"
+            for device in devices
+            if not device.box_power_limit_available
+            for key in ("power_limit", "no_power_limit")
+        },
+    )
+
+
+def _async_prune_boxless_priority_entities(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    identity: SmartboxIdentity,
+) -> None:
+    """Remove radiator-priority selects from devices without a box.
+
+    Priority is applied by a Smartbox when it arbitrates the load, and the
+    vendor app hides the setting on a WiFi heater (its own device, no box), so
+    the platform builders no longer create it there
+    (docs/api-contract.md §9). Older builds created it from the setup key
+    alone; those registry entries would linger as unavailable.
+    """
+    _async_prune_registry_entities(
+        hass,
+        entry,
+        {
+            f"{node.node_id}_priority"
+            for node in identity.nodes
+            if not node.device.box_power_limit_available
+        },
+    )
 
 
 def _async_rehome_device_entities(
@@ -591,6 +627,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
     )
     _async_rehome_device_entities(hass, entry, box_device_ids)
     _async_prune_boxless_power_limit_entities(hass, entry, runtime.identity.devices)
+    _async_prune_boxless_priority_entities(hass, entry, runtime.identity)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Every platform has registered its builders; membership additions can

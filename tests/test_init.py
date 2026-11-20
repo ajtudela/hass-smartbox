@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
+from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
@@ -551,7 +552,7 @@ async def test_node_device_model_shows_type_and_addr(hass, mock_smartbox, config
 async def test_boxless_device_skips_box_power_limit_entities(
     hass, mock_smartbox, config_entry
 ):
-    """No htr_system means no box power-limit number or switch."""
+    """No htr_system means no box power-limit entities and no radiator priority."""
     mock_smartbox._device_power = {
         **mock_smartbox._device_power,
         "device_1": None,
@@ -585,6 +586,26 @@ async def test_boxless_device_skips_box_power_limit_entities(
         config_entry=config_entry,
         device_id=box_device.id,
     )
+    registry.async_get_or_create(
+        SELECT_DOMAIN,
+        DOMAIN,
+        "device_1_1_priority",
+        suggested_object_id="device_1_1_priority",
+        config_entry=config_entry,
+        device_id=box_device.id,
+    )
+    boxed_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, "device_2")},
+    )
+    registry.async_get_or_create(
+        SELECT_DOMAIN,
+        DOMAIN,
+        "device_2_1_priority",
+        suggested_object_id="device_2_1_priority",
+        config_entry=config_entry,
+        device_id=boxed_device.id,
+    )
 
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -596,6 +617,14 @@ async def test_boxless_device_skips_box_power_limit_entities(
     assert (
         registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_1_no_power_limit")
         is None
+    )
+    assert (
+        registry.async_get_entity_id(SELECT_DOMAIN, DOMAIN, "device_1_1_priority")
+        is None
+    )
+    assert (
+        registry.async_get_entity_id(SELECT_DOMAIN, DOMAIN, "device_2_1_priority")
+        is not None
     )
     assert (
         registry.async_get_entity_id(SWITCH_DOMAIN, DOMAIN, "device_1_away_status")

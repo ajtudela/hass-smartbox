@@ -121,6 +121,10 @@ def get_priority_entity_name(mock_node: Mapping[str, Any]) -> str:
     return f"{mock_node['name']} Radiator Priority"
 
 
+def get_duty_limit_entity_name(mock_node: Mapping[str, Any]) -> str:
+    return f"{mock_node['name']} Power Limit Factor"
+
+
 def get_window_mode_switch_entity_name(mock_node: Mapping[str, Any]) -> str:
     return f"{mock_node['name']} Window Mode"
 
@@ -218,6 +222,11 @@ def get_prog_temp_entity_id(mock_node: Mapping[str, Any], profile: str) -> str:
 
 def get_priority_entity_id(mock_node: Mapping[str, Any]) -> str:
     object_id = get_object_id(get_priority_entity_name(mock_node))
+    return get_entity_id_from_object_id(object_id, SELECT_DOMAIN)
+
+
+def get_duty_limit_entity_id(mock_node: Mapping[str, Any]) -> str:
+    object_id = get_object_id(get_duty_limit_entity_name(mock_node))
     return get_entity_id_from_object_id(object_id, SELECT_DOMAIN)
 
 
@@ -366,14 +375,20 @@ class MockSmartbox:
         return {"power_limit": str(limit)}
 
     async def get_dev_data(self, dev_id: str) -> dict[str, Any]:
-        """Return a snapshot-shaped device payload for capability confirmation."""
+        """Return the REST device payload the capability probe confirms against.
+
+        The REST read never carries `connected` (that key arrives with the ws
+        snapshot), and a device without a box serves the empty power-limit
+        placeholder object (docs/api-contract.md §3.1 E46, §7 item 17).
+        """
         data: dict[str, Any] = {
             "nodes": deepcopy(self._node_info[dev_id]),
-            "connected": True,
             "away_status": dict(self._node_away[dev_id]),
         }
         limit = self._device_power.get(dev_id)
-        if limit is not None:
+        if limit is None:
+            data["htr_system"] = {"power_limit": {}}
+        else:
             data["htr_system"] = {
                 "power_limit": {"power_limit": str(limit)},
                 "setup": {"power_limit": int(limit)},
