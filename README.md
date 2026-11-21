@@ -33,6 +33,7 @@ The setup flow offers these providers. The link identifies the brand/account; mo
 | Electrorad | https://app.controls-electrorad.co.uk/ | ws_user app; migrated from socket.io (2026-11-06) |
 | Haverland | https://i2control.haverland.com/ | |
 | Tevolve | https://tevolve.termoweb.net/ | Selectable; live login unverified |
+| Ducasa (Ducaheat) | https://ducaheat.termoweb.net/ | Shares the Tevolve tenant (serial 15); live login unverified |
 | Technotherm | https://ttiapp.technotherm.com/ | Shares the Lucht LHZ tenant |
 | SmartControl | https://app.smart-control.eu/ | Shares the Lucht LHZ tenant |
 
@@ -52,7 +53,7 @@ Accounts whose backend only serves the retired `socket_io` transport need 2.6.x;
 1. Open your Home Assistant configuration directory (where `configuration.yaml` lives).
 1. Create `custom_components/` if it does not exist.
 1. Copy the **whole** `custom_components/smartbox/` directory from this repository (or the release archive) into it, preserving `brand/`, `translations/`, `frontend/`, and the JSON/YAML files. The `frontend/` directory carries the bundled program card; the integration serves it automatically, so there is no separate Lovelace resource or HACS plugin to install.
-1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.2.0,<3.3"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
+1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.2.1,<3.3"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
 1. Restart Home Assistant
 1. Hard-refresh the browser (`Ctrl+Shift+R` / `Cmd+Shift+R`) after the restart or an upgrade, so the new frontend module is loaded.
 
