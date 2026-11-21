@@ -111,6 +111,8 @@ def _build_node_switches(
     Module-level so the per-capability branches do not contribute to the
     platform setup's complexity.
     """
+    if not node.supported_wire_type:
+        return []
     switch_entities: list[Entity] = []
     if window_mode_available(node):
         _LOGGER.debug("Creating window_mode switch for node %r", node.name)

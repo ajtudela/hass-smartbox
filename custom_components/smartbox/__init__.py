@@ -64,7 +64,12 @@ from smartbox.protocol import (
 from smartbox.protocol.retry import backoff_delay
 
 from .adapter import EngineChangeFanOut
-from .const import DOMAIN, SMARTBOX_UNAVAILABLE_DELAY, SMARTBOX_WRITE_CONFIRM_TIMEOUT
+from .const import (
+    DOMAIN,
+    SMARTBOX_UNAVAILABLE_DELAY,
+    SMARTBOX_WRITE_CONFIRM_TIMEOUT,
+    SmartboxNodeType,
+)
 from .devices import async_ensure_box_devices
 from .entity_builder import EntityBuilder
 from .history import HistoryImport
@@ -201,6 +206,31 @@ def _async_prune_boxless_power_limit_entities(
             for device in devices
             if not device.box_power_limit_available
             for key in ("power_limit", "no_power_limit")
+        },
+    )
+
+
+def _async_prune_thermostat_energy_entities(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    identity: SmartboxIdentity,
+) -> None:
+    """Remove power and consumption sensors from thermostats.
+
+    Older builds created both on every node. The thermostat controller has no
+    power reading, and its per-node energy view sets showsKwh=false, showing
+    usage time instead of kWh (docs/api-contract.md §5.2). Neither entity is
+    created for THM now, so the old registry entries would otherwise linger as
+    unavailable.
+    """
+    _async_prune_registry_entities(
+        hass,
+        entry,
+        {
+            f"{node.node_id}_{key}"
+            for node in identity.nodes
+            if node.node_type == SmartboxNodeType.THM
+            for key in ("power", "total_consumption")
         },
     )
 
@@ -628,6 +658,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
     _async_rehome_device_entities(hass, entry, box_device_ids)
     _async_prune_boxless_power_limit_entities(hass, entry, runtime.identity.devices)
     _async_prune_boxless_priority_entities(hass, entry, runtime.identity)
+    _async_prune_thermostat_energy_entities(hass, entry, runtime.identity)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Every platform has registered its builders; membership additions can

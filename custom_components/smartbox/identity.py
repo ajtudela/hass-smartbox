@@ -37,7 +37,8 @@ from smartbox.protocol.client import NodeRef, SmartboxClient
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig, bounded_repr, parse_number_or_none
 
-from .const import HEATER_NODE_TYPES, SmartboxNodeType
+from .const import HEATER_NODE_TYPES, WIRE_NODE_TYPES, SmartboxNodeType
+from .product import product_code
 
 if TYPE_CHECKING:
     from smartbox.protocol.reseller import SmartboxReseller
@@ -159,6 +160,16 @@ class SmartboxNodeInfo:
         return self.node_type in HEATER_NODE_TYPES
 
     @property
+    def supported_wire_type(self) -> bool:
+        """Is this node one of the API's wire node types.
+
+        Product/UI categories from ``capabilities.json`` are not wire types;
+        an unknown wire type is skipped by the platforms with one warning at
+        discovery instead of creating meaningless power/energy entities.
+        """
+        return self.node_type in WIRE_NODE_TYPES
+
+    @property
     def boost_available(self) -> bool:
         """Is boost available (see :func:`boost_available`)."""
         return boost_available(self.setup)
@@ -172,10 +183,7 @@ class SmartboxNodeInfo:
         entity properties pass the live engine slot when they have it.
         """
         payload = version or self.version
-        pid = payload.get("pid")
-        if not isinstance(pid, str):
-            return None
-        return pid[2:4].upper() or None
+        return product_code(payload.get("pid"))
 
 
 @dataclass(frozen=True)
@@ -390,6 +398,21 @@ async def _read_node(
 ) -> SmartboxNodeInfo:
     """Read one node's setup/status/version (one round-trip window)."""
     ref = _node_ref_from_info(node_info)
+    if ref.node_type not in WIRE_NODE_TYPES:
+        # Do not probe an unsupported wire type: its status/setup/version
+        # paths may not exist, and one bad node must not fail the whole entry.
+        node = SmartboxNodeInfo(
+            device=device, node_info=node_info, status={}, setup={}, version={}
+        )
+        _LOGGER.warning(
+            "Skipping node %r on %r: wire node type %r is not one of %s "
+            "(product categories in client-data capabilities are not wire types)",
+            node.name,
+            device.dev_id,
+            node.node_type,
+            sorted(node_type.value for node_type in WIRE_NODE_TYPES),
+        )
+        return node
     if ref.node_type == SmartboxNodeType.PMO:
         # PMO nodes carry no status gate; the engine store owns their state.
         status: Mapping[str, Any] = {}

@@ -65,6 +65,7 @@ from .const import (
     CONF_HISTORY_CONSUMPTION,
     CONF_TIMEDELTA_POWER,
     DEFAULT_TIMEDELTA_POWER,
+    ENERGY_NODE_TYPES,
     FIELD_SCHEDULE,
     PROG_PROFILE_NAMES,
     HistoryConsumptionStatus,
@@ -174,31 +175,7 @@ async def async_setup_entry(
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the sensors this node's type and setup expose."""
-        groups: list[EntityGroup] = []
-        if node.heater_node:
-            groups.append(([TemperatureSensor(node, entry, runtime, fanout)], False))
-        groups.append(([PowerSensor(node, entry, runtime, fanout)], False))
-        # Duty Cycle: only 'htr' nodes report it.
-        if node.node_type == SmartboxNodeType.HTR:
-            groups.append(([DutyCycleSensor(node, entry, runtime, fanout)], False))
-        groups.append(
-            (
-                [TotalConsumptionSensor(node, entry, runtime, fanout)],
-                # The energy value is entity-local, so without this fetch it
-                # stays unknown until the first 15-minute poll.
-                True,
-            )
-        )
-        if node.heater_node and node.node_type == SmartboxNodeType.ACM:
-            groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
-        if node.boost_available:
-            groups.append(([BoostEndTimeSensor(node, entry, runtime, fanout)], False))
-        if node.heater_node:
-            # Publish the entities the (domain-global) service acts on.
-            schedule = ScheduleSensor(node, entry, runtime, fanout)
-            runtime.services.schedule.append(schedule)
-            groups.append(([schedule], False))
-        return groups
+        return _build_node_sensors(node, entry, runtime, fanout)
 
     runtime.entity_builder.register(
         async_add_entities, build_node=build_node, build_device=build_device
@@ -209,6 +186,43 @@ async def async_setup_entry(
         EntityBuilder.add_groups(build_node(node), async_add_entities)
 
     _LOGGER.debug("Finished setting up Smartbox sensor platform")
+
+
+def _build_node_sensors(
+    node: SmartboxNodeInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the sensors this node's type and setup expose."""
+    if not node.supported_wire_type:
+        return []
+    groups: list[EntityGroup] = []
+    if node.heater_node:
+        groups.append(([TemperatureSensor(node, entry, runtime, fanout)], False))
+    if node.node_type in ENERGY_NODE_TYPES:
+        groups.append(([PowerSensor(node, entry, runtime, fanout)], False))
+        groups.append(
+            (
+                [TotalConsumptionSensor(node, entry, runtime, fanout)],
+                # The energy value is entity-local, so without this fetch it
+                # stays unknown until the first 15-minute poll.
+                True,
+            )
+        )
+    # Duty Cycle: only 'htr' nodes report it.
+    if node.node_type == SmartboxNodeType.HTR:
+        groups.append(([DutyCycleSensor(node, entry, runtime, fanout)], False))
+    if node.heater_node and node.node_type == SmartboxNodeType.ACM:
+        groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
+    if node.boost_available:
+        groups.append(([BoostEndTimeSensor(node, entry, runtime, fanout)], False))
+    if node.heater_node:
+        # Publish the entities the (domain-global) service acts on.
+        schedule = ScheduleSensor(node, entry, runtime, fanout)
+        runtime.services.schedule.append(schedule)
+        groups.append(([schedule], False))
+    return groups
 
 
 class SmartboxNodeSensorEntity(SmartboxNodeAdapterEntity, SensorEntity):

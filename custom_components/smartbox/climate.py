@@ -117,17 +117,29 @@ async def async_setup_entry(
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the entities for one heater node."""
-        if not node.heater_node:
-            return []
-        entity = SmartboxHeater(node, entry, runtime, fanout)
-        runtime.services.climate.append(entity)
-        return [([entity], False)]
+        return _build_node_climate(node, entry, runtime, fanout)
 
     runtime.entity_builder.register(async_add_entities, build_node=build_node)
     for node in runtime.identity.nodes:
         EntityBuilder.add_groups(build_node(node), async_add_entities)
 
     _LOGGER.debug("Finished setting up Smartbox climate platform")
+
+
+def _build_node_climate(
+    node: SmartboxNodeInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the climate entity for a heater node."""
+    if not node.supported_wire_type:
+        return []
+    if not node.heater_node:
+        return []
+    entity = SmartboxHeater(node, entry, runtime, fanout)
+    runtime.services.climate.append(entity)
+    return [([entity], False)]
 
 
 class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):

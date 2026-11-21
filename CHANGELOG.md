@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Node devices show a product category derived from the vendor PID (triac/relay heater, heater module, heater, storage heater, water storage heater, thermostat, thermostatic valve, WiFi heater or power monitor), the wire type/address and the node firmware version. The label is device-level info, not an entity; a towel rail is an add-device category rather than a PID code, so it shows its controller category.
+
+### Changed
+
+- Node types are handled against the API's five wire values (`htr`, `htr_mod`, `thm`, `acm`, `pmo`). Product/UI categories from the per-tenant `capabilities.json` (towel rails, WiFi heater variants, floor thermostats, water/solar storage) are not wire types. An unknown wire type is skipped with one discovery warning instead of getting meaningless power/consumption entities.
+- Power and total-consumption sensors are created only for `htr`, `htr_mod`, `acm` and `pmo`. The app hides per-node kWh for thermostats (it shows usage time), so both old THM registry entries (`{node_id}_power`, `{node_id}_total_consumption`) are removed at setup.
+
 ## 3.2.1 (2026-11-20)
 
 ### Added

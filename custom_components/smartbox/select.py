@@ -56,12 +56,7 @@ async def async_setup_entry(
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the selects this node's setup exposes."""
-        groups: list[EntityGroup] = []
-        if priority_available(node):
-            groups.append(([RadiatorPriority(node, entry, runtime, fanout)], True))
-        if duty_limit_available(node):
-            groups.append(([DutyLimit(node, entry, runtime, fanout)], True))
-        return groups
+        return _build_node_selects(node, entry, runtime, fanout)
 
     runtime.entity_builder.register(async_add_entities, build_node=build_node)
     for node in runtime.identity.nodes:
@@ -73,6 +68,27 @@ class SmartboxNodeSelectEntity(SmartboxNodeAdapterEntity, SelectEntity):
     """Base for node-level select entities (identity on the node adapter base)."""
 
     _attr_entity_category = EntityCategory.CONFIG
+
+
+def _build_node_selects(
+    node: SmartboxNodeInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the selects this node's setup exposes.
+
+    Module-level so the per-capability branches do not contribute to the
+    platform setup's complexity.
+    """
+    if not node.supported_wire_type:
+        return []
+    groups: list[EntityGroup] = []
+    if priority_available(node):
+        groups.append(([RadiatorPriority(node, entry, runtime, fanout)], True))
+    if duty_limit_available(node):
+        groups.append(([DutyLimit(node, entry, runtime, fanout)], True))
+    return groups
 
 
 class RadiatorPriority(SmartboxNodeSelectEntity):

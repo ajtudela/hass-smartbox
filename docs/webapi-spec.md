@@ -79,6 +79,72 @@ switch (((data.version || {}).pid || "").toUpperCase().slice(2, 4)) {
 
 The slice is positional: characters 3–4 (indices 2–3) of the PID, so the four-character PID `081c` yields `1C`. Shorter PIDs yield the default branch. Provenance: decoded web-app helper; the snippet and the storage-heater case (`081c`) were reported against the upstream integration in PR #45 (2025-12-07). The version endpoint carrying `pid` is recorded in `api-contract.md` §3.1 E24.
 
+### 3.2 Per-tenant capabilities (`client-data/<serial>/capabilities.json`)
+
+Each brand's frontend serves a static capability file at
+`https://<frontend-host>/client-data/<serial>/capabilities.json`
+(fetched 2026-11-21; the same files are served under the Helki, Haverland,
+Tevolve/Ducaheat, SmartControl, EHC, Electrorad, Climastar, Valderoma,
+iHeat, HJM, Perry and Technotherm hosts). It is an **app surface**, not the
+wire contract: it tells the add-device flow which product categories the
+brand offers and which optional app features it enables.
+
+`supportedNodeTypes` uses the app's **product/UI enum**, not the API node
+type enum. The two are distinct:
+
+- **Wire node types** (API paths and `nodes[].type`): `htr`, `htr_mod`,
+  `thm`, `acm`, `pmo`. The API enum `EAPINodeTypeValue` is `htr, htr_mod, thm, acm, pmo`
+  `[app mobile 2.54.2 new_vendors.decoded.js@5758915]`; the product factory
+  throws on any other value `[app mobile 2.54.2 new_vendors.decoded.js@4845795]`.
+  The status paths cover htr/htr_mod/acm/thm; `pmo` has no status path.
+- **Product/UI categories** (this file): `heater`, `modified_heater`,
+  `wifi_heater`, `four_button_wifi_heater`, `two_button_wifi_heater`,
+  `towel_rail_heater`, `towel_rail_wifi_heater`, `storage_heater`,
+  `thermostat`, `thermostatic_valve`, `floor_thermostat`, `power_meter`.
+  The full enum also carries `solar_storage_heater`, `water_storage_heater`
+  and a `timer` subtype (`[app web elnur@5809746]`).
+
+Do not map a product category to a new wire type. A towel rail, for example,
+is a product category that is expected to report `htr` (or `htr_mod`) on the
+wire; a floor thermostat is a `thm` with floor-probe settings.
+
+Fetched matrix (serial, brand, categories):
+
+| Serial | Brand | Categories |
+|---|---|---|
+| 1 | Helki | thermostat, thermostatic_valve, heater, towel_rail_heater, wifi_heater, storage_heater, power_meter |
+| 2 | Lucht LHZ | heater, towel_rail_heater, floor_thermostat, storage_heater, four_button_wifi_heater, two_button_wifi_heater, towel_rail_wifi_heater, power_meter |
+| 3 | EHC | heater, towel_rail_heater, storage_heater, power_meter |
+| 5 | Climastar | heater, wifi_heater |
+| 6 | Perry | power_meter, thermostat |
+| 8 | Valderoma | heater, wifi_heater |
+| 9 | iHeat Control | heater, storage_heater, wifi_heater, power_meter |
+| 10 | HJM | heater, wifi_heater, power_meter |
+| 12 | Electrorad | heater, storage_heater, power_meter |
+| 14 | Haverland | heater, modified_heater, wifi_heater, storage_heater |
+| 15 | Tevolve / Ducaheat | thermostat, thermostatic_valve, heater, wifi_heater, storage_heater, power_meter |
+| 16 | Technotherm | heater, towel_rail_heater, floor_thermostat, storage_heater, four_button_wifi_heater, two_button_wifi_heater, towel_rail_wifi_heater, power_meter |
+| 17 | SmartControl | heater, towel_rail_heater, floor_thermostat, storage_heater, four_button_wifi_heater, two_button_wifi_heater, towel_rail_wifi_heater, power_meter |
+
+Elnur (serial 7) served the SPA shell rather than JSON for `capabilities.json`
+at the fetch time; its bundle still carries the product enum, so it is omitted
+from the JSON matrix above.
+
+Feature flags in the same file (notable per-tenant differences):
+
+- `boostAvailable`: true everywhere fetched except Haverland (14).
+- `htrPowerLimitAvailable`: true only for Haverland (14).
+- `sampleDownloadEnabled`: true for Lucht LHZ (2), Haverland (14), Technotherm (16) and SmartControl (17).
+- `energyInsightsEnabled`: true only for Helki (1).
+- `wifiSmartboxAvailable`: false for Lucht LHZ (2), EHC (3), HJM (10), Tevolve/Ducaheat (15) and Technotherm (16).
+- `powerScheduleAvailable` and `inviteEnabled`: true for every fetched tenant.
+- Also present: `supportedLanguages`, `supportedTimezones`, `provisioningMethods`, `hideApiHost`, `changeNodeDisplayAvailable`, `appTourEnabled`, `pushNotificationsEnabled`, `darkModeEnabled`, `geolocationAvailable`.
+
+These flags are UI gates. The integration continues to gate entities on
+wire state (status/setup fields), which is the authoritative source; the
+flags explain why the vendor app hides a feature on a given brand and are
+recorded so a missing entity is not mistaken for a wire gap.
+
 ## 4. Status write semantics (as exercised by the app)
 
 (The current apps' write surface — endpoints and bodies — is `api-ws-user.md` §2.3; this section keeps the decoded web app's view.)
