@@ -78,6 +78,24 @@
     "binary_sensor": {
       "connected": {
         "name": "Connectivity"
+      },
+      "window_open": {
+        "name": "Window"
+      },
+      "charging": {
+        "name": "Charging"
+      },
+      "water_ready": {
+        "name": "Water Ready"
+      },
+      "water_fully_ready": {
+        "name": "Water Fully Ready"
+      },
+      "low_battery": {
+        "name": "Low Battery"
+      },
+      "pir_presence": {
+        "name": "PIR Presence"
       }
     },
     "climate": {
@@ -98,6 +116,9 @@
     "sensor": {
       "charge_level": {
         "name": "Charge Level"
+      },
+      "target_charge": {
+        "name": "Target Charge"
       },
       "duty_cycle": {
         "name": "Duty Cycle"
@@ -244,6 +265,9 @@
   "exceptions": {
     "ws_user_unsupported": {
       "message": "The reseller's API host does not support the websocket transport this integration requires: {error}"
+    },
+    "preset_mode_unsupported": {
+      "message": "This thermostat does not support preset modes"
     },
     "service_no_target": {
       "message": "{service} needs at least one target (entity, device or area); none of the call's targets resolved to a Smartbox entity"

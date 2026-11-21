@@ -35,6 +35,7 @@ from custom_components.smartbox.mapping import (
     ModeWrite,
     SetpointWrite,
     _warn_unknown,
+    acm_active,
     get_boost_end_datetime,
     get_current_prog_profile,
     get_hvac_mode,
@@ -47,6 +48,19 @@ from custom_components.smartbox.mapping import (
     rtc_time_to_datetime,
     temperature_write,
 )
+
+# --- storage active semantics ---
+
+
+def test_acm_active_uses_the_water_ready_level_for_water_storage():
+    """Water storage at 50% is ready, not active (docs/api-contract.md §3.4)."""
+    assert acm_active({"charging": True, "charge_level": 40}, "2A") is True
+    assert acm_active({"charging": True, "charge_level": 50}, "2A") is False
+    assert acm_active({"charging": False, "charge_level": 40}, "2A") is False
+    assert acm_active({"charging": 1, "charge_level": 40}, "2A") is False
+    # Other storage controllers keep raw charging, including at 50%.
+    assert acm_active({"charging": True, "charge_level": 50}, "1C") is True
+
 
 # --- temperature_write ---
 

@@ -115,6 +115,10 @@ class BoostModeServiceTarget(Protocol):
     def entity_id(self) -> str | None:
         """The registry entity id the service call targets."""
 
+    @property
+    def supports_boost_mode(self) -> bool:
+        """Whether this entity's controller has the full-boost endpoint."""
+
     async def async_set_boost_mode(
         self,
         *,
@@ -243,29 +247,39 @@ async def _handle_set_boost_mode(hass: HomeAssistant, call: ServiceCall) -> None
         msg = "boost_mode_inactive_args"
         raise validation_error(msg, service=SERVICE_SET_BOOST_MODE)
     target_entity_ids = require_service_target(hass, call.data, SERVICE_SET_BOOST_MODE)
-    matched = False
-    for other in loaded_runtimes(hass):
-        for climate_entity in other.services.climate:
-            if climate_entity.entity_id not in target_entity_ids:
-                continue
-            matched = True
-            try:
-                await climate_entity.async_set_boost_mode(
-                    active=active,
-                    mode=mode,
-                    temperature=temperature,
-                    time_minutes=duration,
-                )
-            except (SmartboxError, ValueError) as ex:
-                msg = "boost_mode_write_failed"
-                raise user_error(
-                    msg,
-                    entity_id=climate_entity.entity_id or "",
-                    error=str(ex),
-                ) from ex
+    matched = [
+        climate_entity
+        for other in loaded_runtimes(hass)
+        for climate_entity in other.services.climate
+        if climate_entity.entity_id in target_entity_ids
+    ]
     if not matched:
         msg = "boost_mode_wrong_target"
         raise validation_error(msg, service=SERVICE_SET_BOOST_MODE)
+    # Skip entities the endpoint cannot serve (thermostats, non-FULL heaters)
+    # when a mixed target also contains a capable entity; otherwise call the
+    # ineligible ones so a single non-FULL target keeps its own translated
+    # refusal.
+    eligible = [
+        climate_entity
+        for climate_entity in matched
+        if climate_entity.supports_boost_mode
+    ]
+    for climate_entity in eligible or matched:
+        try:
+            await climate_entity.async_set_boost_mode(
+                active=active,
+                mode=mode,
+                temperature=temperature,
+                time_minutes=duration,
+            )
+        except (SmartboxError, ValueError) as ex:
+            msg = "boost_mode_write_failed"
+            raise user_error(
+                msg,
+                entity_id=climate_entity.entity_id or "",
+                error=str(ex),
+            ) from ex
 
 
 async def _handle_set_boost_params(hass: HomeAssistant, call: ServiceCall) -> None:

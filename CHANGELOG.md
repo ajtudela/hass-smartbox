@@ -4,7 +4,9 @@
 
 ### Added
 
+- Thermostat (`thm`) nodes are modelled as climate entities: `AUTO` and `OFF` (the app's ON resolves to `AUTO`), with `HEAT`/`COOL` as a manual override the app does not list, a 7–35 °C target range (the app's `minTempCelsius: 7` floor and the vendor's 35 °C maximum), the current temperature, and a low-battery binary. Setpoints use the app's plain `{stemp, units}` body: the controller deletes `modified_auto` before POSTing. A thermostat has no schedule entity or schedule-service target yet; its programme is a per-day `{m, t}` array with a `{prog, units}` write, not the heater int-slot shape. The shape is verified against the vendor 2.54.2 `ThermostatController` (`mode`/`stemp`/`mtemp`/`active`/`units`, `setup.type`, `load_type`/`control_mode`/`anti_grippage`/`away_offset`); the demo-only `batt_level` and `error_code` fields are not exposed, and `presence` (a live panel-touch artifact, not a thermostat field) is not used. The wire taxonomy is recorded in `docs/api-contract.md` §3 and the per-tenant capability surface in `docs/webapi-spec.md` §3.2.
 - Node devices show a product category derived from the vendor PID (triac/relay heater, heater module, heater, storage heater, water storage heater, thermostat, thermostatic valve, WiFi heater or power monitor), the wire type/address and the node firmware version. The label is device-level info, not an entity; a towel rail is an add-device category rather than a PID code, so it shows its controller category.
+- Storage-heater telemetry that had no entity: **Target Charge** (with charging slots and active days as attributes) and **Charging**. Water storage heaters (product code `2A`) expose **Water Ready** (50 %) and **Water Fully Ready** (100 %) instead of Charging, matching the app's water-storage card, and the Elnur stepped storage controller's `charge_level` is scaled from its 0–5 steps to 0–100. On heater nodes, **Window Open** and **PIR Presence** are created for the applicable node types; PIR reads `french_rule_pir_state` and is gated on `setup.extra_options.pir_enabled`, and **Low Battery** (`low_batt`) is offered on thermostats, where the app shows the battery icon. The `error_code` field is not used; `presence` is a generic panel-touch artifact, not a PIR flag.
 
 ### Changed
 
@@ -19,7 +21,7 @@
 
 ### Fixed
 
-- The boxless power-limit purge now fires on a real boxless home. The confirmation required a `connected` key that REST `/dev_data` never carries, so the box power-limit number and the "no power limit" switch survived and were rebuilt on every setup. Absence is now confirmed from a `nodes` list and an `away_status` object plus the absence of a power-limit configuration, while a malformed snapshot or a present-but-unreadable limit copy keeps the existing entities (hass-smartbox docs/api-contract.md §3.1 E46, §7 item 17).
+- The boxless power-limit purge now fires on a real boxless home. The confirmation required a `connected` key that REST `/dev_data` never carries, so the box power-limit number and the "no power limit" switch survived and were rebuilt on every setup. Absence is now confirmed from a `nodes` list and an `away_status` object plus the absence of a power-limit configuration, while a malformed snapshot or a present-but-unreadable limit copy keeps the existing entities (hass-smartbox docs/api-contract.md §3.2 E46, §7 item 17).
 
 ### Changed
 

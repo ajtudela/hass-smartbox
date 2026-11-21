@@ -1708,6 +1708,23 @@ def test_hvac_action(node_attributes, expected_action):
     assert heater.hvac_action == expected_action
 
 
+def test_water_storage_action_is_idle_at_the_water_ready_level():
+    """Water storage at 50% is water-ready, so it is not actively heating."""
+    heater = _entity_with_world(
+        {"mode": "auto", "charging": True, "charge_level": 50, "units": "C"},
+        node_type=SmartboxNodeType.ACM,
+    )
+    heater._model_code = lambda: "2A"
+    assert heater.hvac_action == HVACAction.IDLE
+
+    heater = _entity_with_world(
+        {"mode": "auto", "charging": True, "charge_level": 40, "units": "C"},
+        node_type=SmartboxNodeType.ACM,
+    )
+    heater._model_code = lambda: "2A"
+    assert heater.hvac_action == HVACAction.HEATING
+
+
 async def test_max_temp_clamped_by_device_limit(hass, smartbox_stack, mock_smartbox):
     """Climate max_temp clamps to max_stemp_limit where advertised."""
     runtime, fake = smartbox_stack

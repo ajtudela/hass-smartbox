@@ -129,7 +129,10 @@ def _build_node_switches(
     else:
         _LOGGER.info("True radiant not available for node %r", node.name)
 
-    if node.boost_available:
+    # A thm node can dispatch to an htr-derived controller whose factory
+    # payload carries boost_config (Tevolve floor thermostats), but the
+    # thermostat climate entity does not model boost.
+    if node.heater_node and node.boost_available:
         _LOGGER.debug("Creating boost switch for node %r", node.name)
         switch_entities.append(BoostSwitch(node, entry, runtime, fanout, "boost"))
     else:

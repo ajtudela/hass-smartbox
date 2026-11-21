@@ -67,6 +67,7 @@ from .const import (
     DEFAULT_TIMEDELTA_POWER,
     ENERGY_NODE_TYPES,
     FIELD_SCHEDULE,
+    PRODUCT_CODE_ELNUR_STEPPED_STORAGE,
     PROG_PROFILE_NAMES,
     HistoryConsumptionStatus,
     SmartboxNodeType,
@@ -194,11 +195,15 @@ def _build_node_sensors(
     runtime: SmartboxRuntime,
     fanout: EngineChangeFanOut,
 ) -> list[EntityGroup]:
-    """Build the sensors this node's type and setup expose."""
+    """Build the sensors this node's type and setup expose.
+
+    Module-level so the per-type branches do not contribute to the platform
+    setup's complexity.
+    """
     if not node.supported_wire_type:
         return []
     groups: list[EntityGroup] = []
-    if node.heater_node:
+    if node.heater_node or node.node_type == SmartboxNodeType.THM:
         groups.append(([TemperatureSensor(node, entry, runtime, fanout)], False))
     if node.node_type in ENERGY_NODE_TYPES:
         groups.append(([PowerSensor(node, entry, runtime, fanout)], False))
@@ -215,10 +220,13 @@ def _build_node_sensors(
         groups.append(([DutyCycleSensor(node, entry, runtime, fanout)], False))
     if node.heater_node and node.node_type == SmartboxNodeType.ACM:
         groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
-    if node.boost_available:
+        groups.append(([TargetChargeSensor(node, entry, runtime, fanout)], False))
+    if node.heater_node and node.boost_available:
         groups.append(([BoostEndTimeSensor(node, entry, runtime, fanout)], False))
     if node.heater_node:
-        # Publish the entities the (domain-global) service acts on.
+        # Publish the entities the (domain-global) service acts on. A thm
+        # programme is a per-day list of {m, t} temperature objects and its
+        # write is {prog, units}; the heater int-slot shape does not apply.
         schedule = ScheduleSensor(node, entry, runtime, fanout)
         runtime.services.schedule.append(schedule)
         groups.append(([schedule], False))
@@ -781,7 +789,113 @@ class ChargeLevelSensor(SmartboxNodeSensorEntity):
         )
         if model_code == "1C":
             return status.get("current_charge_per")
+        if model_code == PRODUCT_CODE_ELNUR_STEPPED_STORAGE:
+            # Elnur's storage controller reports charge_level in 0..5 steps
+            # and multiplies by 20 (docs/api-contract.md §3.4).
+            level = parse_number_or_none(status.get("charge_level"))
+            return int(level * 20) if level is not None else None
         return status.get("charge_level")
+
+
+class TargetChargeSensor(SmartboxNodeSensorEntity):
+    """Storage heater target charge sensor.
+
+    The target is a setpoint (the app writes 100/0 for ON/OFF on classic
+    accumulators), so it carries no battery device class. The charging
+    schedule (`setup.charging_conf`) has no entity of its own; it is exposed
+    as attributes here so the target has its context without adding three
+    low-value diagnostic entities.
+    """
+
+    native_unit_of_measurement = PERCENTAGE
+    state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the target charge sensor."""
+        super().__init__(node, entry, runtime, fanout, "target_charge")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the target charge percentage."""
+        if self._lost or not self._status:
+            return None
+        value = parse_number_or_none(self._status.get("target_charge_per"))
+        return int(value) if value is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the charging schedule slots and days."""
+        state = self._node_state()
+        conf = (state.setup if state is not None else {}).get("charging_conf")
+        if not isinstance(conf, dict):
+            return {}
+        attributes: dict[str, Any] = {}
+        for key, attr in (("slot_1", "charging_slot_1"), ("slot_2", "charging_slot_2")):
+            slot = _format_charging_slot(conf, key)
+            if slot is not None:
+                attributes[attr] = slot
+        days = _format_charging_days(conf)
+        if days is not None:
+            attributes["charging_days"] = days
+        return attributes
+
+
+_MINUTES_PER_DAY = 24 * 60
+
+
+def _minutes_to_time(minutes: int) -> str:
+    """Format a minute-of-day as HH:MM."""
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def _format_charging_slot(conf: dict[str, Any], key: str) -> str | None:
+    """Format one charging slot as ``HH:MM-HH:MM`` (or ``disabled``).
+
+    ``end`` is a minute of the day, with 0 (and 1440) meaning midnight. A
+    slot whose end precedes its start crosses midnight, as the app's
+    ``checkSlotInValley`` accepts. Equal start and end is the disabled
+    state, as the app's ``VALLEY_n_ENABLED`` and ``checkSlotInValley`` treat
+    it; only non-integer or out-of-range values are malformed.
+    """
+    slot = conf.get(key)
+    if not isinstance(slot, dict):
+        return None
+    start = slot.get("start")
+    end = slot.get("end")
+    if (
+        not isinstance(start, int)
+        or isinstance(start, bool)
+        or not isinstance(end, int)
+        or isinstance(end, bool)
+        or not 0 <= start < _MINUTES_PER_DAY
+        or not 0 <= end <= _MINUTES_PER_DAY
+    ):
+        return None
+    if start == end:
+        return "disabled"
+    return f"{_minutes_to_time(start)}-{_minutes_to_time(end % _MINUTES_PER_DAY)}"
+
+
+# The charging_conf.active_days array is Sunday-first: the app's DAY_0_SHORT
+# is "Su" and its non-English display order rotates the same indices to
+# Monday-first (docs/api-contract.md §3.4).
+_CHARGING_DAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+
+
+def _format_charging_days(conf: dict[str, Any]) -> list[str] | None:
+    """Return the active charging day names in the Sunday-first wire order."""
+    days = conf.get("active_days")
+    if not isinstance(days, list) or len(days) != len(_CHARGING_DAY_NAMES):
+        return None
+    return [
+        name for name, active in zip(_CHARGING_DAY_NAMES, days, strict=True) if active
+    ]
 
 
 class BoostEndTimeSensor(SmartboxNodeSensorEntity):

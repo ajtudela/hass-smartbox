@@ -136,6 +136,7 @@ Writes to a node arm a confirmation window: the write is applied optimistically 
 Each Smartbox box (the gateway the heaters talk through) is a Home Assistant device, and every heater is its own device linked to that box. Open the box device to see its heaters under **Connected devices**; each heater page shows **Connected via** the box. A node device also shows its product category from the vendor PID (triac or relay heater, heater module, heater, storage heater, water storage heater, thermostat, thermostatic valve, WiFi heater or power monitor), its wire type and address, and its firmware version. A towel rail is an add-device category rather than a PID code, so it shows its controller category.
 
 ### Heaters (climate)
+
 Heater node types (`htr`, `acm` and `htr_mod`) are modelled as Home Assistant Climate entities.
 
 * `htr` and `acm` (accumulator) nodes
@@ -160,6 +161,23 @@ On `htr_mod` nodes, the climate entity also exposes the device's live
 `selected_temp` profile (`comfort`, `eco`, `ice` or `off`) as a read-only
 state attribute when the status carries it. This is the active profile; the
 Schedule sensor's state remains the programme's expected profile.
+
+### Thermostats (climate)
+`thm` nodes are thermostats, not heaters: they are modelled as their own
+Climate entities. The vendor app offers `AUTO` and `OFF`; its ON action
+resolves to the default mode, `AUTO`. This integration also offers `HEAT`
+(or `COOL` when the device's load type is cold) as a manual override; the
+vendor app does not list manual for a thermostat, so that write is
+unverified. The target range is the vendor app's 7–35 °C (it builds its
+temperature service with `minTempCelsius: 7` and the `ThermostatController`'s
+global maximum is 35 °C), the step is 0.5 °C / 1 °F, and setting a
+temperature sends the app's plain `{stemp, units}` body to
+`/thm/<addr>/status` (the controller strips `modified_auto`). A thermostat
+has no heater presets. The climate attributes carry the load type and
+control mode; low battery is a diagnostic binary. The vendor app does not expose a
+battery percentage or a presence status for thermostats. A thermostat has no
+power or consumption sensors, and its temperature-schedule entity is not
+implemented yet; only the temperature sensor is created for it.
 
 The target temperature step is 0.5 °C / 1.0 °F on `htr` and `acm` nodes. On `htr_mod` nodes the vendor app's setpoint contract applies: a 1 °C step, the comfort and eco ranges of 18–28 °C and 10–18 °C, and the ice profile fixed to the device's own `ice_temp`. A target at or below 18 °C selects the `eco` profile and moves `comfort_temp`/`eco_offset` the way the app does - the stored comfort stays unless the 4–8 °C gap cannot reach the target - snapping an off-grid stored comfort to a whole degree; above 18 °C it selects `comfort` and keeps the stored offset. While comfort or eco is active the advertised range is their union (10–28 °C), so the slider and service calls can cross 18 °C without a preset change; `ice` keeps its fixed value. Every htr_mod setpoint write carries `mode: manual`, as the app's builder does, so setting a temperature leaves the programme it was running. These bounds come from the app's htr_mod controller, in whole degrees on Fahrenheit nodes too, and are applied to the Haverland product codes it dispatches on (`pid[2:4]` = `0A` or `FF`), plus nodes whose version has not been read yet. Other htr_mod hardware keeps the previous temperature arithmetic and the generic grid; the `mode: manual` key is sent on every htr_mod setpoint. On the fw-1.9 `htr` family, the maximum target temperature is clamped to the node's `max_stemp_limit` when the device advertises one.
 
@@ -300,16 +318,26 @@ Heaters the box reports as unreachable (node-level `sync_status: "lost"`) show a
 
 ### Sensors
 * Temperature (current)
-* Power (including PMO dedicated energy monitors)
+* Power (including PMO dedicated energy monitors; heater and PMO nodes only)
 * Duty cycle (`htr` nodes; disabled by default)
-* Total consumption (energy, with recorder statistics import - see [Consumption](#consumption))
-* Charge level (`acm` nodes)
+* Total consumption (energy, with recorder statistics import - see [Consumption](#consumption); heater and PMO nodes only)
+* Charge level (`acm` nodes; the Elnur stepped storage controller's 0–5 `charge_level` is scaled to 0–100)
+* Target charge (`acm` nodes; the charging slot times and active days are attributes)
 * Boost end time (timestamp)
 * Schedule (enum, per heater node): the state is the profile the programme asks for now; the `schedule` attribute holds the full week
 * RTC clock drift (box-level, refreshed every 5 minutes; disabled by default)
 
 ### Binary sensor
-One box-level connectivity sensor (per-node connectivity is shown through the climate entities' availability instead).
+One box-level connectivity sensor. Each heater node also gets **window open**
+(the live trigger; the Window Mode switch only enables detection) and
+**charging** on `acm` nodes. Water storage heaters (product code `2A`) get
+**water ready** (50 %) and **water fully ready** (100 %) instead of charging,
+matching the app's water-storage card. **PIR presence** is created when the node's
+setup enables it (`extra_options.pir_enabled`) and reads
+`french_rule_pir_state`; the generic `presence` panel-touch field is not used.
+**Low battery** (`low_batt`) is offered on thermostats, matching the app's
+thermostat battery icon.
+A newly created flag reports unknown until its field arrives.
 
 ### Switches
 * Box level: away mode; "no power limit" only on devices that support a box power limit

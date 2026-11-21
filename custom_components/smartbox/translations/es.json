@@ -78,6 +78,24 @@
     "binary_sensor": {
       "connected": {
         "name": "Conectividad"
+      },
+      "window_open": {
+        "name": "Ventana"
+      },
+      "charging": {
+        "name": "Cargando"
+      },
+      "water_ready": {
+        "name": "Agua lista"
+      },
+      "water_fully_ready": {
+        "name": "Agua completamente lista"
+      },
+      "low_battery": {
+        "name": "Batería baja"
+      },
+      "pir_presence": {
+        "name": "Presencia PIR"
       }
     },
     "climate": {
@@ -98,6 +116,9 @@
     "sensor": {
       "charge_level": {
         "name": "Nivel de carga"
+      },
+      "target_charge": {
+        "name": "Carga objetivo"
       },
       "total_consumption": {
         "name": "Consumo total"
@@ -244,6 +265,9 @@
   "exceptions": {
     "ws_user_unsupported": {
       "message": "El servidor API de este distribuidor no es compatible con el transporte websocket que esta integración requiere: {error}"
+    },
+    "preset_mode_unsupported": {
+      "message": "Este termostato no admite modos predefinidos"
     },
     "service_no_target": {
       "message": "{service} necesita al menos un destino (entidad, dispositivo o área); ninguno de los destinos de la llamada se resolvió a una entidad de Smartbox"

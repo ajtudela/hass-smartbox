@@ -78,6 +78,24 @@
     "binary_sensor": {
       "connected": {
         "name": "Connectivité"
+      },
+      "window_open": {
+        "name": "Fenêtre"
+      },
+      "charging": {
+        "name": "Charge"
+      },
+      "water_ready": {
+        "name": "Eau prête"
+      },
+      "water_fully_ready": {
+        "name": "Eau entièrement prête"
+      },
+      "low_battery": {
+        "name": "Batterie faible"
+      },
+      "pir_presence": {
+        "name": "Présence PIR"
       }
     },
     "climate": {
@@ -98,6 +116,9 @@
     "sensor": {
       "charge_level": {
         "name": "Niveau de charge"
+      },
+      "target_charge": {
+        "name": "Charge cible"
       },
       "total_consumption": {
         "name": "Consommation totale"
@@ -244,6 +265,9 @@
   "exceptions": {
     "ws_user_unsupported": {
       "message": "Le serveur API de ce revendeur ne prend pas en charge le transport websocket requis par cette intégration : {error}"
+    },
+    "preset_mode_unsupported": {
+      "message": "Ce thermostat ne prend pas en charge les modes prédéfinis"
     },
     "service_no_target": {
       "message": "{service} nécessite au moins une cible (entité, appareil ou zone) ; aucune des cibles de l'appel ne correspond à une entité Smartbox"
