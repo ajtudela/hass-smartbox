@@ -424,6 +424,7 @@ class MockSmartbox:
         node_info = self._node_info[dev_id][_addr(node)]
         return {
             "hw_version": node_info.get("fw_version"),
+            "fw_version": node_info.get("fw_version"),
             "pid": node_info.get("product_id"),
         }
 

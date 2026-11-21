@@ -51,6 +51,7 @@ from .const import (
 )
 from .devices import node_link
 from .exceptions import user_error
+from .product import product_label
 
 if TYPE_CHECKING:
     from smartbox.core.engine import SmartboxEngine
@@ -340,16 +341,27 @@ class SmartboxNodeAdapterEntity(SmartboxAdapterEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the node device info, linked to its box device."""
+        pid = self._node.pid
+        hw_version = self._node.hw_version
+        fw_version = self._node.version.get("fw_version")
         info = DeviceInfo(
             identifiers={(DOMAIN, self._node.node_id)},
             name=self._node.name,
             manufacturer=self._reseller.name,
-            # The wire node list calls this field `addr`; the vendor exposes
-            # a numeric product id but no human model label, so show the type
-            # and slot together.
-            model=f"{self._node.node_type} (addr {self._node.addr})",
-            model_id=str(self._node.pid),
-            hw_version=str(self._node.hw_version),
+            # The vendor's EProductCodeValue enum gives the control category
+            # from pid[2:4] (triac/relay heater, heater module, storage heater,
+            # water storage heater, thermostat, valve, WiFi heater, power
+            # monitor). The wire address stays in the model text for
+            # diagnostics. A towel rail is an add-device/UI category, not a
+            # PID code, so it shows its control category rather than being
+            # guessed.
+            model=(
+                f"{product_label(self._node.node_type, pid)} "
+                f"({self._node.node_type}, addr {self._node.addr})"
+            ),
+            model_id=str(pid) if pid else None,
+            hw_version=str(hw_version) if hw_version else None,
+            sw_version=str(fw_version) if fw_version else None,
             configuration_url=self._configuration_url,
         )
         info.update(node_link(self.hass, self._entry_id, self._node.dev_id))

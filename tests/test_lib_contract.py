@@ -38,6 +38,21 @@ def test_smartbox_node_type_members() -> None:
     }
 
 
+def test_wire_node_taxonomy_is_the_api_enum() -> None:
+    """Product/UI categories are not wire node types.
+
+    ``client-data/<serial>/capabilities.json`` advertises product categories
+    (towel rails, WiFi heater variants, floor thermostats, water/solar storage);
+    the API's ``nodes[].type`` and path segments use only the five wire values.
+    """
+    from custom_components.smartbox.const import ENERGY_NODE_TYPES, WIRE_NODE_TYPES  # noqa: PLC0415 - locality
+
+    assert frozenset(SmartboxNodeType) == WIRE_NODE_TYPES
+    assert SmartboxNodeType.THM not in ENERGY_NODE_TYPES
+    assert "towel_rail_heater" not in WIRE_NODE_TYPES
+    assert "floor_thermostat" not in WIRE_NODE_TYPES
+
+
 def test_shipped_availability_windows_are_pinned() -> None:
     """The windows the vendor's behaviour was measured against (contract §6.3).
 

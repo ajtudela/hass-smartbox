@@ -25,6 +25,8 @@ Every claim in this file carries AT LEAST ONE tag; compound claims may carry sev
 | `[app mobile 2.41.0 vendors.js@<offset>]` | Byte-offset excerpt from the 2.41.0 mobile build's API-manager bundle (`assets/www/js/chunk-vendors.3ed6a158.js`), used for the htr_mod write bodies. Static decode evidence, not wire-verified. |
 | `[app mobile 2.54.2 <file>@<offset>]` | Byte-offset excerpt from the 2.54.2 Android bridge: either the shell (`app.5ae75d82.js` in the Haverland APK, `app.5759565e.js` in the SmartControl APK) or the deobfuscated shared manager bundle (`new_vendors.decoded.js`, decoded from the SmartControl APK; the same modules live in the Haverland APK's `chunk-vendors.f809b153.js`). Static decode evidence, not wire-verified. |
 | `[app web tevolve@<offset>]` | Byte-offset excerpt from the decoded Tevolve SPA bundle (`https://tevolve.termoweb.net/js/app.0335ab61.js`, read 2026-10-20). Static decode evidence, not wire-verified. |
+| `[app web ducaheat@<offset>]` | Byte-offset excerpt from the decoded Ducaheat SPA bundle (`https://ducaheat.termoweb.net/js/app.bd52ba45.js`, read 2026-11-21; its `chunk-vendors.baebe993.js` carries the same environment defaults). Static decode evidence, not wire-verified. |
+| `[app web elnur@<offset>]` | Byte-offset excerpt from the decoded Elnur SPA bundle (`https://remotecontrol.elnur.es/js/chunk-vendors.cd43f63e.js`, read 2026-11-21). Static decode evidence, not wire-verified. |
 
 A claim with NO tag is a defect. Anything not in the map/code/diary is either absent or explicitly `**[unverified]**`.
 
@@ -120,7 +122,7 @@ The mobile apps are branded builds of ONE shared frontend: every build carries t
 | Shell | `app.5ae75d82.js` | `app.5759565e.js` |
 | `VUE_APP_SERIAL_ID` | `14` (api-haverland) `[app mobile 2.54.2 app.5ae75d82.js@486515]` | `17` (api-smartcontrol) `[app mobile 2.54.2 app.5759565e.js@477496]` |
 
-Both manager bundles name all 35 controller classes (Haverland, Lhz, LhzFourButton, Helki, Elnur, Climastar, Tevolve, Ferroli, Trv, ...) and the same 51-entry `EProductCodeValue` enum over 12 manufacturers `[app mobile 2.54.2 new_vendors.decoded.js@5759479]`. The brand web SPA carries the same controllers — its `htrModList()` filters instances of `HaverlandHtrModController` `[app helki.js@408781]`. Hardware identity is resolved per node at runtime: the factory switches on `version.pid.substring(2,4).toUpperCase()` `[app mobile 2.54.2 new_vendors.decoded.js@4845231]`.
+Both manager bundles name all 35 controller classes (Haverland, Lhz, LhzFourButton, Helki, Elnur, Climastar, Tevolve, Ferroli, Trv, ...) and the same 51-entry `EProductCodeValue` enum over 12 manufacturers `[app mobile 2.54.2 new_vendors.decoded.js@5759823]`. The brand web SPA carries the same controllers — its `htrModList()` filters instances of `HaverlandHtrModController` `[app helki.js@408781]`. Hardware identity is resolved per node at runtime: the factory switches on `version.pid.substring(2,4).toUpperCase()` `[app mobile 2.54.2 new_vendors.decoded.js@4845231]`.
 
 **Controller hierarchy.** One base class carries the defaults; brand controllers override constants.
 
@@ -180,6 +182,67 @@ Consequences for consumers: hardware-specific edit ranges are client-side consta
 ## 3. REST endpoints
 
 `<type>` ∈ node types, `<addr>` int. Node types (C5 resolution): the library enum is `htr, thm, htr_mod, acm, pmo` `[code models.py:9-16]`; `pmo` and `htr_mod` exist in vendor fixtures and app managers `[doc webapi-spec.md §3]`. [superseded: "node type apparently can be htr, thm or acm (only htr tested)" -> code enum + webapi-spec §3 add `htr_mod`/`pmo`; only htr nodes are live-tested `[live 2026-09-26/27]`; thm/acm/htr_mod/pmo node shapes are `**[unverified]**` on live hardware.]
+
+- The API enum `EAPINodeTypeValue` is `htr, htr_mod, thm, acm, pmo` `[app mobile 2.54.2 new_vendors.decoded.js@5758915]`; the product factory throws on any other value `[app mobile 2.54.2 new_vendors.decoded.js@4845795]`. The status paths cover htr/htr_mod/acm/thm; `pmo` has no status path. The bundle also carries a separate product/UI enum (`heater`, `modified_heater`, `wifi_heater`, `towel_rail_heater`, `towel_rail_wifi_heater`, `storage_heater`, `thermostat`, `thermostatic_valve`, `floor_thermostat`, `solar_storage_heater`, `water_storage_heater`, `power_meter`, plus a `timer` subtype) `[app web elnur@5809746]`. Those are the categories `client-data/<serial>/capabilities.json` advertises (`docs/webapi-spec.md` §3.2), not wire node types; a towel rail or floor thermostat reports an `htr`/`htr_mod`/`thm` node on the wire.
+
+### 3.2 Product-code enum (`EProductCodeValue`)
+
+`version.pid[2:4]` is the product code. The enum has 51 entries (including `UNKNOWN`) `[app mobile 2.54.2 new_vendors.decoded.js@5759823]`; the label column mirrors `product.py`. `00` falls back to the wire node type.
+
+| Code | Enum key | Label |
+|---|---|---|
+| `00` | `UNKNOWN` | — |
+| `01` | `HELKI_TRIAC_HEATER` | Triac heater |
+| `02` | `HELKI_RELAY_HEATER` | Relay heater |
+| `07` | `HELKI_TRIAC_HEATER_WITH_ROTATED_SCREEN` | Triac heater |
+| `32` | `HELKI_WIFI_HEATER` | WiFi heater |
+| `35` | `HELKI_RELAY_WIFI_HEATER_WITH_7S_DISPLAY` | WiFi heater |
+| `1C` | `HELKI_STORAGE_HEATER` | Storage heater |
+| `04` | `HELKI_THERMOSTAT` | Thermostat |
+| `0F` | `HELKI_THERMOSTATIC_VALVE` | Thermostatic valve |
+| `03` | `HELKI_POWER_MONITOR` | Power monitor |
+| `22` | `HELKI_BIDIRECTIONAL_POWER_MONITOR` | Power monitor |
+| `11` | `ELNUR_TRIAC_HEATER_WITH_FIXED_POWER` | Triac heater |
+| `0B` | `ELNUR_FS_TRIAC_HEATER_WITH_FIXED_POWER` | Triac heater |
+| `13` | `ELNUR_RELAY_HEATER_WITH_FIXED_POWER` | Relay heater |
+| `1B` | `ELNUR_TRIAC_HEATER_WITH_921MHZ` | Triac heater |
+| `0C` | `ELNUR_TRIAC_HEATER` | Triac heater |
+| `14` | `ELNUR_STORAGE_HEATER_WITH_4_TRIACS_AND_3_PROBES` | Storage heater |
+| `20` | `ELNUR_EXTRA_ENERGY_STORAGE_HEATER` | Storage heater |
+| `25` | `ELNUR_EXTRA_ENERGY_STORAGE_HEATER_WITH_FAN` | Storage heater |
+| `2A` | `ELNUR_WATER_STORAGE_HEATER` | Water storage heater |
+| `0A` | `HAVERLAND_HEATER_MODULE` | Heater module |
+| `17` | `HAVERLAND_RELAY_HEATER_WITH_4_BUTTONS` | Relay heater |
+| `1D` | `HAVERLAND_WIFI_DIRECT_HEATER` | WiFi heater |
+| `47` | `HAVERLAND_WIFI_DIRECT_HEATER_B` | WiFi heater |
+| `FF` | `HAVERLAND_LEGACY_HEATER` | Heater |
+| `08` | `CLIMASTAR_TRIAC_HEATER` | Triac heater |
+| `10` | `CLIMASTAR_RELAY_HEATER_WITH_ROTATED_SCREEN` | Relay heater |
+| `16` | `CLIMASTAR_RELAY_HEATER_WIFH_FIXED_MTEMP` | Relay heater |
+| `12` | `CLIMASTAR_LOW_COST_HEATER` | Heater |
+| `3D` | `CLIMASTAR_WIFI_TRIAC_HEATER` | WiFi heater |
+| `33` | `LHZ_RELAY_WIFI_HEATER` | WiFi heater |
+| `0D` | `LHZ_RELAY_HEATER_WITH_ROTATED_SCREEN` | Relay heater |
+| `18` | `LHZ_RELAY_HEATER_WITH_921MHZ` | Relay heater |
+| `36` | `LHZ_RELAY_HEATER` | Relay heater |
+| `2E` | `LHZ_STORAGE_HEATER_RELAY_WITH_921MHZ` | Storage heater |
+| `09` | `PERRY_THERMOSTAT` | Thermostat |
+| `1A` | `TEVOLVE_TRIAC_HEATER` | Triac heater |
+| `21` | `TEVOLVE_TRIAC_HEATER_WITH_ROTATED_SCREEN` | Triac heater |
+| `1E` | `TEVOLVE_RELAY_HEATER` | Relay heater |
+| `23` | `TEVOLVE_RELAY_HEATER_WITH_ROTATED_SCREEN` | Relay heater |
+| `24` | `TEVOLVE_LOCAL_PIR_HEATER` | Heater |
+| `27` | `TEVOLVE_PIR_HEATER` | Heater |
+| `28` | `TEVOLVE_THERMOSTAT` | Thermostat |
+| `31` | `TEVOLVE_WIFI_RELAY_HEATER_WITH_ROTATED_SCREEN` | WiFi heater |
+| `34` | `TEVOLVE_WIFI_TRIAC_HEATER` | WiFi heater |
+| `39` | `TEVOLVE_WIFI_HEATER` | WiFi heater |
+| `4C` | `TEVOLVE_WIFI_TRIAC_HEATER_FOR_ATC` | WiFi heater |
+| `1F` | `EVCONFORT_TRIAC_HEATER_WITH_REDUCED_SCREEN` | Triac heater |
+| `38` | `EVCONFORT_WIFI_HEATER` | WiFi heater |
+| `43` | `EVCONFORT_FIVE_BUTTONS_WIFI_HEATER` | WiFi heater |
+| `4D` | `FERROLI_WIFI_TRIAC_HEATER_FOR_ATC` | WiFi heater |
+
 
 ### 3.1 Endpoint catalog
 
@@ -301,15 +364,7 @@ Two transports are maintained in parallel by the vendor `[live 2026-10-01/02]`. 
 
 ### 5.2 Value handling
 
-- Off-grid setpoints are silently quantized DOWN to the 0.5 °C grid by the SERVER: `21.3→21.0`, `22.8→22.5`, `22.4→22.0` (floor, not round-to-nearest) `[live 2026-09-28]`. On an F node the server's grid is whole degrees and the BODY must keep the app's one decimal: a raw `{"stemp": "69.5", "units": "F"}` was stored/echoed as `"70.0"` (half up), while a whole-degree body WITHOUT the decimal (`"70"`) is rejected with a 400 `[live 2026-10-18, F-mode htr node]`. The three client postures differ: the VENDOR APP validates-and-REJECTS off-grid input client-side (°C: `temp % 0.5 !== 0` → error; °F: integer-only) and posts only `.toFixed(1)`-formatted values, never quantizing itself `[app mobile app.js@506258, @497729]`; the old lib does no client-side quantization and posts raw values (the server does the flooring) `[code session.py:977-991]`; this integration pre-quantizes client-side — Celsius floors onto the 0.5 grid, Fahrenheit rounds half-up to whole degrees (the app's integral F grid) (§9) `[values.py:108-125]`. Clients may quantize OR validate-reject — the vendor app rejects; acceptance of pre-quantized bodies is pending live confirmation (§9).
-- Units on write (app-pinned): the wire `stemp` is ALWAYS in the node's own `setup.units` — the app converts the caller's value INTO the node's units before the POST (`getTargetTemp`), so an °F node receives e.g. `"69.0"` with `units: "F"` and grids are never mixed `[app mobile app.js@485218, @470073, @2485204]`.
-- NOT every setup temperature field follows the node's unit: the `max_stemp_limit` CEILING is stored in Celsius regardless of the node's unit — the app converts it on read (`convertTempFromCelsiusToNodeUnits`) and on write (`convertTempFromNodeUnitsToCelsius`, decoded 2026-10-18), and its own settings screen showed 75.0 °F for the F node's stored `24.0` — while the `away_offset` follows the node's unit (3.0 °C-era -> 5.0 on the F node) `[live 2026-10-18]` `[app mobile 2.40.4 new_vendors.decoded.js]`. Consumers that read or write the ceiling must convert; reading it raw on an F node shows 24 instead of 75.
-- The `"0.0"` sentinel: fw-1.9 setups carry `max_stemp_limit: "0.0"` from the factory `[live 2026-09-27]`; consumers treat `"0.0"` as "maximum-temperature limit disabled" and write it to disable (the integration's switch does exactly this). The write target is accepted and persisted: POSTing `"0.0"` produced a setup frame and a readback with `max_stemp_limit: "0.0"`, and restoring `"24.0"` did the same `[live 2026-10-20, htr fw 1.9]`. Enforcement is confirmed on the same node: with the ceiling at `"24.0"`, a `stemp: "24.5"` write was clamped to `"24.0"`; with the ceiling at `"0.0"`, the same `"24.5"` write was accepted and echoed `[live 2026-10-20]`. The sentinel therefore disables the server-side ceiling; write target, persistence and enforcement are all resolved.
-- `modified_auto` is engaged ONLY by explicitly sending `mode: "modified_auto"`; it does not self-revert within the observed 60 s window — reverting needs `{"mode": "auto"}`; a plain `{stemp, units}` write in auto leaves `mode: "auto"` on the wire yet still DRIVES the heater `[live 2026-09-28]`.
-- Off-mode setpoints (case C): a setpoint write to an `off` heater is accepted (no error), a status frame is pushed, but the value does NOT stick — a delayed re-read minutes later still shows the old `stemp`; treat target-temperature writes while `off` as not-effectual `[live 2026-10-04]`.
-- No-op (value-equal) writes produce NO websocket frames at all, even on live nodes; the transient lost→ok pattern only fires for value-changing writes `[live 2026-09-30]`.
-- An immediate (0 s) follow-up write inside the post-write settle window DOES apply — no settle-window write drop for mode→stemp sequences on this family `[live 2026-09-28]`.
-- Away applies the offset SERVER-side: with `away: true`, writing `setup.away_offset: "2.0"` moved the pushed `stemp` from `"19.0"` to `"17.0"` in the same second, and turning away off restored `"19.0"` in the away-off push; the heater kept running (`active` stayed true) — away shifts the target, it does not pause a unit `[live 2026-11-20]`. Enabling away with the offset at `0.0` changed no setpoint. On that unit `setup.away_mode` stayed `0` through the whole away period, so the setup's `away_mode` key is not the switch. `away_offset` is a persisted setting, not part of the toggling: it holds whatever value it was last written with.
+- Thermostat samples carry `totalConsumption`/`e2Consumption` and are included in the home-level energy aggregation `[app mobile 2.54.2 new_vendors.decoded.js@4819156]`, but the app's per-node energy view sets `showsKwh=false` for THM and shows `usageTime`/hours instead of kWh `[app mobile 2.54.2 new_app.decoded.js@1191418]` `[app mobile 2.54.2 new_app.decoded.js@1193348]`. The integration therefore creates no per-THM power or total-consumption entity; old `{node_id}_power`/`{node_id}_total_consumption` registry entries are pruned at setup. Power is also absent from the controller (no `getPower`/`status.power`).
 
 ### 5.3 Confirmation frames
 

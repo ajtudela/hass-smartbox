@@ -100,6 +100,28 @@ async def test_pmo_node_skips_the_status_read():
     assert pmo.status == {}
 
 
+async def test_unknown_wire_type_skips_reads_and_warns(caplog):
+    """A product category is not a wire type: do not probe its paths."""
+    unknown = {
+        "node_type": "towel_rail_heater",
+        "type": "towel_rail_heater",
+        "addr": 11,
+        "name": "Towel rail",
+    }
+    client = make_client(nodes=[unknown])
+    identity = await async_discover_identity(client, None)
+
+    node = identity.nodes[0]
+    assert node.supported_wire_type is False
+    assert node.status == {}
+    assert node.setup == {}
+    assert node.version == {}
+    assert client.get_node_status.await_count == 0
+    assert client.get_node_setup.await_count == 0
+    assert client.get_node_version.await_count == 0
+    assert "wire node type" in caplog.text
+
+
 async def test_discovery_marks_a_device_without_box_power_limit():
     """A rejected probe plus a boxless snapshot means no box power limit.
 

@@ -48,6 +48,7 @@ from custom_components.smartbox.const import (
     DOMAIN,
     FIELD_SCHEDULE,
     SERVICE_SET_SCHEDULE,
+    SmartboxNodeType,
 )
 from custom_components.smartbox.history import HistoryImport
 from custom_components.smartbox.services import ServiceTargets, remove_service_if_last
@@ -536,16 +537,40 @@ async def test_box_device_created_and_per_node_entries_rehomed(
 
 
 @pytest.mark.asyncio
-async def test_node_device_model_shows_type_and_addr(hass, mock_smartbox, config_entry):
-    """The node device model carries the wire type and slot address."""
+async def test_node_device_model_shows_product_and_addr(
+    hass, mock_smartbox, config_entry
+):
+    """The node device model carries the product label and slot address."""
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
     node_device = get_device_by_identifier(dr.async_get(hass), (DOMAIN, "device_2_1"))
 
     assert node_device is not None
-    assert node_device.model == "htr_mod (addr 1)"
+    assert node_device.model == "Heater (htr_mod, addr 1)"
     assert node_device.model_id == "product_id_2_1"
+    assert node_device.sw_version == "fw_version_2_1"
+
+
+@pytest.mark.asyncio
+async def test_thermostat_energy_entities_are_pruned(hass, config_entry):
+    """Old THM power and consumption registry entries are removed."""
+    registry = er.async_get(hass)
+    for unique_id in ("node_11_power", "node_11_total_consumption"):
+        registry.async_get_or_create(
+            "sensor", DOMAIN, unique_id, config_entry=config_entry
+        )
+    identity = SimpleNamespace(
+        nodes=[SimpleNamespace(node_id="node_11", node_type=SmartboxNodeType.THM)]
+    )
+
+    smartbox_init._async_prune_thermostat_energy_entities(hass, config_entry, identity)
+
+    assert registry.async_get_entity_id("sensor", DOMAIN, "node_11_power") is None
+    assert (
+        registry.async_get_entity_id("sensor", DOMAIN, "node_11_total_consumption")
+        is None
+    )
 
 
 @pytest.mark.asyncio
