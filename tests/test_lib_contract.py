@@ -3,8 +3,8 @@
 The protocol layer owns the reseller table, the ``SmartboxNodeType``
 enum (``const.py``) and the shared backoff helper. The pinned VALUES
 below originated in the ``smartbox`` library's v2.7.0 table and were
-extended with the 3.0.2 per-reseller API host and the 3.1.0 Perry row;
-they must not drift.
+extended with the 3.0.2 per-reseller API host, the 3.1.0 Perry row and the
+3.2.x Ducasa alias; they must not drift.
 """
 
 import pytest
@@ -126,6 +126,26 @@ def test_tevolve_reseller_row() -> None:
         basic_auth="NWM0OWRjZTk3NzUxMDM1MTUwNmM0MmRiOnRldm9sdmU=",
         serial_id=15,
     )
+
+
+def test_ducaheat_alias_resolves_to_tevolve_tenant() -> None:
+    """Ducaheat portal constants decoded from its web bundle (2026-11-21).
+
+    ``https://ducaheat.termoweb.net/`` serves the Tevolve build with the
+    Ducasa theme: serial 15, the Tevolve client credential,
+    ``users-api.helki.com`` and ``ws_user``. The row exists so Ducasa users
+    find the brand; it resolves to the ``api-tevolve`` tenant, and a live
+    login has not been exercised.
+    """
+    reseller = AvailableResellers.resellers["api-ducaheat"]
+    assert reseller == SmartboxReseller(
+        name="Ducasa (Ducaheat)",
+        web_url="https://ducaheat.termoweb.net/",
+        api_url="api-tevolve",
+        basic_auth="NWM0OWRjZTk3NzUxMDM1MTUwNmM0MmRiOnRldm9sdmU=",
+        serial_id=15,
+    )
+    assert AvailableResellers(api_url="api-ducaheat").reseller.api_url == "api-tevolve"
 
 
 def test_dormant_tenant_ids_are_not_selectable() -> None:
