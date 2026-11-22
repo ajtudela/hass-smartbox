@@ -79,9 +79,6 @@
       "connected": {
         "name": "Conectividad"
       },
-      "window_open": {
-        "name": "Ventana"
-      },
       "charging": {
         "name": "Cargando"
       },
@@ -96,6 +93,9 @@
       },
       "pir_presence": {
         "name": "Presencia PIR"
+      },
+      "window_detection": {
+        "name": "Detección de ventana"
       }
     },
     "climate": {
@@ -207,6 +207,9 @@
       },
       "duty_limit": {
         "name": "Factor de límite de potencia"
+      },
+      "control_mode": {
+        "name": "Modo de control"
       }
     }
   },

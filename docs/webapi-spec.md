@@ -168,6 +168,37 @@ is **7–35 °C**. The demo payload is a synthetic fixture; its `batt_level` and
 panel-touch artifact (`api-contract.md` §6.1), not a thermostat field. A live
 `thm` read remains `**[unverified]**`.
 
+### 3.4 Control mode (`setup.control_mode`)
+
+The wire value is the position in the controller's wire-order array,
+`getIndexSortedUIHeatingControlModes()`; `getUIHeatingControlModes()` is the
+separate display/accepted list. The app converts a selected UI value to the
+wire index with `findIndex` in the wire array. The wire arrays, the live 0402
+cycle, the product-code family routing and the thermostat withholding are
+recorded in `api-contract.md` §1.9.
+
+The app-side UI lists are actuation-dependent: triac `pid, hyst_02, hyst_03,
+hyst_05, hyst_07`; relay `pid_15, pid_30, hyst_02, hyst_03, hyst_05,
+hyst_07`; a relay with `extra_options.sensor_mode == 2`
+(`ESensorModeValue.FLOOR_PROBE`) offers only the four hysteresis entries
+`[app mobile 2.54.2 new_vendors.decoded.js@3632627]`
+`[app mobile 2.54.2 new_vendors.decoded.js@5767681]`. The storage family
+inherits the relay list; `off` is not offered. Labels are the app's i18n,
+with the Fahrenheit map in `new_app.decoded.js`
+`[app mobile 2.54.2 new_app.decoded.js@1038429]`.
+
+The app hides the setting on Elnur water storage (code `2A`, omitted from
+`getSettings()`) `[app mobile 2.54.2 new_vendors.decoded.js@5775448]` and on
+Elnur storage (code `14`, inherited by `20`/`25`) when
+`setup.factory_options.ui_mode` is `CLASSIC_COMBINED` (1) or
+`CLASSIC_ACCUMULATOR` (2) `[app mobile 2.54.2 new_vendors.decoded.js@3682752]`.
+The integration mirrors both gates. It withholds the `04`/`09`/`0F`
+thermostat family for the `pid_60` mismatch and other THM codes by
+integration choice, except explicit htr-family products such as code `28`
+(the Tevolve floor thermostat). An index outside the product's UI map is not
+offered; the select keeps the product's choices and renders the stored value
+as unknown.
+
 ## 4. Status write semantics (as exercised by the app)
 
 (The current apps' write surface — endpoints and bodies — is `api-ws-user.md` §2.3; this section keeps the decoded web app's view.)

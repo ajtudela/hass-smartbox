@@ -47,7 +47,7 @@ Use ruff to make sure the code follows the style.
 
 ## Local development
 
-For how the code is structured — the layer rules, the repository map and the test tiers — see [architecture.md](docs/architecture.md). The project uses `uv` with a virtualenv at `.venv` (Python 3.14):
+For how the code is structured — the layer rules, the repository map and the test tiers — see [ARCHITECTURE.md](docs/ARCHITECTURE.md). The project uses `uv` with a virtualenv at `.venv` (Python 3.14):
 
 ```
 uv sync --all-extras --dev

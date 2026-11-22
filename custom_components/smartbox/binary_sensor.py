@@ -93,7 +93,7 @@ def _build_node_binary_sensors(
         # thermostat controller does not. Create the entity regardless of the
         # discovery snapshot so an offline node does not lose it until reload;
         # it reports None until the field arrives.
-        entities.append(WindowOpen(node, entry, runtime, fanout))
+        entities.append(WindowDetection(node, entry, runtime, fanout))
         # PIR is a controller feature, gated on extra_options.pir_enabled in
         # the app (TevolvePIRHeaterController.getStatusIndicators).
         if _pir_enabled(node.setup):
@@ -182,13 +182,19 @@ class SmartboxNodeBinarySensor(SmartboxNodeAdapterEntity, BinarySensorEntity):
         return value is True if self._strict_true else bool(value)
 
 
-class WindowOpen(SmartboxNodeBinarySensor):
-    """Live open-window detection event (the switch only enables detection)."""
+class WindowDetection(SmartboxNodeBinarySensor):
+    """The heater's inferred open-window event (the switch enables detection).
 
-    _key = "window_open"
+    This is not a physical window contact: the heater derives it from its own
+    temperature/heat behaviour. It is diagnostic so it does not sit among real
+    window sensors in dashboards or voice exposure.
+    """
+
+    _key = "window_detection"
     payload_key = "window_open"
     _strict_true = True
     device_class = BinarySensorDeviceClass.WINDOW
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
 
 class Charging(SmartboxNodeBinarySensor):

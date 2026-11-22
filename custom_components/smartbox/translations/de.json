@@ -79,9 +79,6 @@
       "connected": {
         "name": "Konnektivität"
       },
-      "window_open": {
-        "name": "Fenster"
-      },
       "charging": {
         "name": "Laden"
       },
@@ -96,6 +93,9 @@
       },
       "pir_presence": {
         "name": "PIR-Präsenz"
+      },
+      "window_detection": {
+        "name": "Fenstererkennung"
       }
     },
     "climate": {
@@ -207,6 +207,9 @@
       },
       "duty_limit": {
         "name": "Leistungsbegrenzungsfaktor"
+      },
+      "control_mode": {
+        "name": "Regelmodus"
       }
     }
   },

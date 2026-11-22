@@ -8,6 +8,7 @@ test_climate); device-level frames drive connectivity.
 from __future__ import annotations
 
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
+from homeassistant.const import EntityCategory
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 
@@ -138,12 +139,19 @@ async def test_pir_presence_uses_the_controller_status_key(
     )
     assert hass.states.get(presence_id).state == "on"
 
-    # window_open was absent from the discovery snapshot, but the entity was
-    # created and starts unknown rather than missing until a reload.
+    # The window_open field was absent from the discovery snapshot, but the
+    # window-detection entity was created and starts unknown rather than
+    # missing until a reload.
     window_id = get_entity_id_from_unique_id(
-        hass, BINARY_SENSOR_DOMAIN, f"device_1_{PIR_ADDR}_window_open"
+        hass, BINARY_SENSOR_DOMAIN, f"device_1_{PIR_ADDR}_window_detection"
     )
-    assert hass.states.get(window_id).state == "unknown"
+    window_state = hass.states.get(window_id)
+    assert window_state.state == "unknown"
+    assert window_state.name.endswith("Window Detection")
+    assert (
+        er.async_get(hass).async_get(window_id).entity_category
+        is EntityCategory.DIAGNOSTIC
+    )
 
     node_info = {"type": "htr", "addr": PIR_ADDR}
     body = await fake.get_node_status("device_1", ref(node_info))
