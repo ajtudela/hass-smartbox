@@ -556,6 +556,8 @@ async def _run_write_op(api: WriteApi, args: argparse.Namespace) -> None:
         await api.set_max_stemp_limit(dev_id, node, args.limit, args.units)
     elif op == "set_priority":
         await api.set_priority(dev_id, node, args.priority)
+    elif op == "set_control_mode":
+        await api.set_control_mode(dev_id, node, args.index)
     elif op == "set_away":
         await api.set_away(dev_id, args.away)
     elif op == "set_power_limit":
@@ -583,6 +585,7 @@ _WRITE_READBACK = {
     "set_away_offset": "setup",
     "set_max_stemp_limit": "setup",
     "set_priority": "setup",
+    "set_control_mode": "setup",
     "set_prog": "prog",
     "set_away": "away",
     "set_power_limit": "power_limit",
@@ -751,6 +754,8 @@ def _build_write_op_parser(op_sub: Any, name: str) -> None:
         p.add_argument("--units", default=None, choices=["C", "F"])
     elif name == "set_priority":
         p.add_argument("priority", choices=["low", "medium", "high"])
+    elif name == "set_control_mode":
+        p.add_argument("index", type=int)
     elif name == "set_away":
         p.add_argument("away", type=_parse_bool)
     elif name in ("set_power_limit", "set_node_power_limit"):

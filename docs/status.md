@@ -2,7 +2,7 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-20. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-21. Keep this a 90-second read and prune entries as they close.*
 
 ## State of 3.2.1
 
@@ -12,13 +12,16 @@
 - 3.2.0 remains as shipped: the boxless power-limit skip, `locked` normalized to `bool`, write verification instead of a write timeout flipping Unavailable, the htr_mod setpoint contract (1 °C grid, the 10–28 °C union while comfort or eco is active with the profile chosen by the target, ice fixed, `mode: manual`), the accumulator `counters` sample shape, and the library split.
 - A soak on the maintainer's instance with a boxless and a boxed home ran clean: no errors, no entity churn, the boxless controls stayed gone and the new select wrote `user_duty_limit`.
 - Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
+- In flight: the library's `same_wire_value` now compares numeric strings numerically, so a heater's whole-number echo (`"20"` for a posted `"20.0"`) no longer logs `accepted but not applied` or falls through to the confirmation window and a verification GET for a write the heater applied. Library `3.2.1` is published with the write-echo fix, the Ducasa/Ducaheat alias row, and `set_control_mode`; the integration pin `smartbox>=3.2.1,<3.3` is in place (#76). The next integration release is `3.2.2` with the Control Mode select. #66 stays open until the reporter confirms the warning is gone on the seven units (`docs/api-contract.md` §5.2). Merged as #78: `thm` thermostat support, the wire-vs-product taxonomy, and the storage telemetry entities (target charge, charging, water ready/fully ready, window open, PIR presence, thermostat low battery). On `feat/control-mode` (uncommitted): the vendor-app Control Mode catalogue (htr + storage families; `0402` live-confirmed; thermostat family withheld).
 
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
+- Soak 2026-11-22 (control-mode build): no errors or warnings. Obývačka window detection live-confirmed — `window_open` true at 01:07:00Z stopped heating while the room cooled from 17.2 to 16.4 °C, and closing it at 01:08:10Z resumed heating (`docs/api-contract.md` §8 E18c).
 - After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; acm users to confirm `locked` reads `true`/`false`.
-- After 3.2.1: the boxless reporter to confirm on his install that the power-limit entities and the priority select stay gone, and watch for reports on the new Power Limit Factor select (a stored value outside Off / LST / Baby Care reads as unknown, as the vendor app leaves its field blank). contract §5.7/§9, §7 item 17.
+- After 3.2.1: the boxless reporter to confirm on his install that the power-limit entities and the priority select stay gone, and watch for reports on the new Power Limit Factor select (a stored value outside Off / LST / Baby Care reads as unknown, as the vendor app leaves its field blank) (`docs/api-contract.md` §5.7/§9, §7 item 17).
 - After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
+- After 3.2.2 ships (or on a manual 3.2.1 install): a Ducasa/Ducaheat user to confirm the new provider row completes setup (the row is static-bundle evidence only today; the portal decode is in `docs/api-contract.md` §1.1).
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.
 - Write confirmation: a timed-out write now ends in one verification GET after the 6 s window plus a 1 s settle; a frame that overtakes the read wins. Revisit if ignored writes appear as `accepted but not applied` without a corresponding device change.
@@ -46,3 +49,4 @@ Record results in `docs/api-contract.md` §7 as they are worked.
 
 - Minimum Home Assistant: 2026.5.0 is the supported floor; `tox -e min` (CI job `minimum-home-assistant`) pins the harness that exercises it.
 - Marketplace/HACS metadata: the 2026.11 release replaces HACS with Marketplace. The repository metadata and HACS Action are unchanged at the 2026.5 baseline; revisit when 2026.11 becomes the minimum.
+- Discoverability: the integration title stays "Smartbox", so Home Assistant's add-integration search does not match brand names. Ducasa/Ducaheat/Tevolve/Haverland discovery relies on the README and the GitHub description/topics; revisit if Marketplace search indexes more.

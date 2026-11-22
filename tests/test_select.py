@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from homeassistant.components.select import ATTR_OPTION, DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
+from homeassistant.helpers import entity_registry as er
 import pytest
 
+from custom_components.smartbox.const import DOMAIN
 from tests.mocks import (
     get_duty_limit_entity_id,
     get_entity_id_from_unique_id,
@@ -81,6 +83,107 @@ async def test_radiator_priority(hass, mock_smartbox, config_entry):
     # The acm node's setup has no priority: no select entity.
     acm_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     assert hass.states.get(get_priority_entity_id(acm_node)) is None
+
+
+async def test_control_mode_select(hass, mock_smartbox, config_entry):
+    """The control-mode select exists where setup carries it and tracks frames."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "0402"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["control_mode"] = 5
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    unique_id = get_node_unique_id(mock_device, mock_node, "control_mode")
+    entity_id = get_entity_id_from_unique_id(hass, SELECT_DOMAIN, unique_id)
+    state = hass.states.get(entity_id)
+    assert state.state == "PID (15 min. period)"
+    assert state.name == f"{mock_node['name']} Control Mode"
+    assert state.attributes["options"] == [
+        "PID (15 min. period)",
+        "PID (30 min. period)",
+        "Hysteresis (0.2 °C)",
+        "Hysteresis (0.3 °C)",
+        "Hysteresis (0.5 °C)",
+        "Hysteresis (0.7 °C)",
+    ]
+
+    await push_setup_update(
+        hass, runtime, fake, mock_device["dev_id"], mock_node, {"control_mode": 6}
+    )
+    assert hass.states.get(entity_id).state == "PID (30 min. period)"
+
+    # A stored index outside the relay UI keeps the entity and reads unknown.
+    await push_setup_update(
+        hass, runtime, fake, mock_device["dev_id"], mock_node, {"control_mode": 4}
+    )
+    state = hass.states.get(entity_id)
+    assert state.state == "unknown"
+    assert state.attributes["options"][0] == "PID (15 min. period)"
+
+    await hass.services.async_call(
+        SELECT_DOMAIN,
+        "select_option",
+        {ATTR_ENTITY_ID: entity_id, ATTR_OPTION: "Hysteresis (0.7 °C)"},
+        blocking=True,
+    )
+    setup = await fake.get_node_setup(mock_device["dev_id"], ref(mock_node))
+    assert setup["control_mode"] == 3
+
+    # A setup frame with Fahrenheit units relabels the options.
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        mock_device["dev_id"],
+        mock_node,
+        {"control_mode": 0, "units": "F"},
+    )
+    assert hass.states.get(entity_id).state == "Hysteresis (0.4 °F)"
+
+    # The acm node has no control_mode key: no select entity.
+    acm_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id(
+            SELECT_DOMAIN,
+            DOMAIN,
+            get_node_unique_id(mock_device, acm_node, "control_mode"),
+        )
+        is None
+    )
+
+
+async def test_control_mode_hidden_for_classic_ui_storage(
+    hass, mock_smartbox, config_entry
+):
+    """The app's classic-UI hide applies at entity creation."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "0414"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["control_mode"] = 5
+    setup["factory_options"] = {
+        **setup.get("factory_options", {}),
+        "ui_mode": 1,
+    }
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await seed_stack(hass, mock_smartbox)
+
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id(
+            SELECT_DOMAIN,
+            DOMAIN,
+            get_node_unique_id(mock_device, mock_node, "control_mode"),
+        )
+        is None
+    )
 
 
 def _patch_duty_limit(mock_smartbox, *, extra, factory, power="2000.0") -> None:

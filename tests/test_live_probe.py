@@ -227,6 +227,18 @@ class TestArgSurface:
             ]
         )
         assert prog.day == [("0", [1, 2, 3]), ("1", [4])]
+        control_mode = parser.parse_args(
+            [
+                "write",
+                "--dev",
+                "1",
+                "--node",
+                "htr:2",
+                "set_control_mode",
+                "5",
+            ]
+        )
+        assert control_mode.index == 5
 
     def test_node_ref_type_rejects_bare_addr(self) -> None:
         with pytest.raises(argparse.ArgumentTypeError):
@@ -275,6 +287,23 @@ class TestBodyBuilding:
         )
         await _run_write_op(api, args)
         assert host.posts == [("devs/1/htr/2/status", {"locked": True})]
+
+    async def test_set_control_mode_body_via_write_api(self) -> None:
+        host = RecordingWriteHost()
+        host.setup = {"units": "C"}
+        args = build_parser().parse_args(
+            [
+                "write",
+                "--dev",
+                "1",
+                "--node",
+                "htr:2",
+                "set_control_mode",
+                "5",
+            ]
+        )
+        await _run_write_op(WriteApi(host), args)
+        assert host.posts == [("devs/1/htr/2/setup", {"units": "C", "control_mode": 5})]
 
     async def test_device_level_op_ignores_the_node_and_names_it(
         self, capsys: pytest.CaptureFixture[str]

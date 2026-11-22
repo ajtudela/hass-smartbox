@@ -12,7 +12,7 @@ from custom_components.smartbox.binary_sensor import (
     Charging,
     LowBattery,
     PirPresence,
-    WindowOpen,
+    WindowDetection,
     _build_node_binary_sensors,
 )
 from custom_components.smartbox.const import (
@@ -133,7 +133,7 @@ def test_target_charge_renders_overnight_slots() -> None:
 
 def test_live_flags() -> None:
     assert _entity(Charging).is_on is True
-    assert _entity(WindowOpen).is_on is False
+    assert _entity(WindowDetection).is_on is False
     assert _entity(PirPresence).is_on is True
     assert _entity(LowBattery, node_type="thm").is_on is False
 
@@ -144,7 +144,7 @@ def test_live_flag_is_none_before_status() -> None:
 
 
 def test_live_flags_use_the_apps_strict_true_comparison() -> None:
-    assert _entity(WindowOpen, status={"window_open": "false"}).is_on is False
+    assert _entity(WindowDetection, status={"window_open": "false"}).is_on is False
     assert _entity(Charging, status={"charging": 0}).is_on is False
     assert _entity(PirPresence, status={"french_rule_pir_state": "true"}).is_on is False
 
@@ -244,7 +244,7 @@ def test_storage_heater_binary_sensor_gating() -> None:
         node, MagicMock(), _runtime_for(node), _NoopFanout()
     )
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
-    assert classes == {"WindowOpen", "PirPresence", "Charging"}
+    assert classes == {"WindowDetection", "PirPresence", "Charging"}
 
 
 def test_water_storage_gets_level_binaries_instead_of_charging() -> None:
@@ -259,7 +259,7 @@ def test_water_storage_gets_level_binaries_instead_of_charging() -> None:
     entities = {
         type(entity).__name__: entity for entities, _ in groups for entity in entities
     }
-    assert set(entities) == {"WindowOpen", "WaterReady", "WaterFullyReady"}
+    assert set(entities) == {"WindowDetection", "WaterReady", "WaterFullyReady"}
     assert entities["WaterReady"].is_on is True
     assert entities["WaterFullyReady"].is_on is False
 

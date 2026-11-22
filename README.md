@@ -7,7 +7,7 @@
 [![Current version](https://img.shields.io/github/v/release/ajtudela/hass-smartbox)](https://github.com/ajtudela/hass-smartbox/releases/latest)
 
 
-Home Assistant integration for Haverland (and other brands) heating smartboxes.
+Home Assistant integration for Haverland, Ducasa (Ducaheat) and other brands' heating smartboxes.
 
 ## Requirements
 
@@ -105,7 +105,7 @@ Since `3.1.0` the integration runs on the separate `smartbox` library:
 
 `manifest.json` requires the `smartbox` package from PyPI, so HACS/HA installs it. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
-See [architecture.md](docs/architecture.md) for the layer rules, the repository map, and the read and write flows.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layer rules, the repository map, and the read and write flows.
 
 ### Session persistence
 
@@ -328,9 +328,10 @@ Heaters the box reports as unreachable (node-level `sync_status: "lost"`) show a
 * RTC clock drift (box-level, refreshed every 5 minutes; disabled by default)
 
 ### Binary sensor
-One box-level connectivity sensor. Each heater node also gets **window open**
-(the live trigger; the Window Mode switch only enables detection) and
-**charging** on `acm` nodes. Water storage heaters (product code `2A`) get
+One box-level connectivity sensor. Each heater node also gets **window
+detection** as a diagnostic binary (the heater's inferred `window_open`
+status; the Window Mode switch only enables detection) and **charging** on
+`acm` nodes. Water storage heaters (product code `2A`) get
 **water ready** (50 %) and **water fully ready** (100 %) instead of charging,
 matching the app's water-storage card. **PIR presence** is created when the node's
 setup enables it (`extra_options.pir_enabled`) and reads
@@ -350,6 +351,7 @@ A newly created flag reports unknown until its field arrives.
 ### Selects
 * Per node: radiator priority (low / medium / high, fw-1.9 family on devices paired with a Smartbox) — the device takes it into account itself when enforcing the box power limit
 * Per heater: power limit factor (Off / LST / Baby Care) — a percentage cap on the heater's duty, built from the node's own preset percentages and offered only where the setup carries the factor and the presets and the heater reports a rated power; the heater applies the selection at its next start, and a stored value outside the presets reads as unknown
+* Per heater: control mode from the decoded vendor-app catalogue — the htr family (triac/relay UI lists, including the relay `sensor_mode == 2` hysteresis-only list) and storage `1C`/`2E` (OFF-first wire map). The `0402` relay map is live-confirmed; the `04`/`09`/`0F` thermostat family is withheld because the vendor app's UI list and wire array disagree on `pid_60`. A code-28 THM floor thermostat keeps the select because its controller uses the htr arrays; other THM codes are withheld by integration choice. The Elnur water-storage (`2A`) and classic-UI `14`/`20`/`25` products get no select, matching the app. A stored index outside the product's UI list reads as unknown while the select keeps the app's choices.
 
 Boxless heaters (heaters not paired with a Smartbox controller) keep the parent device, away mode, connectivity and their other node entities, but do not get the box power-limit number, the no-limit switch or the radiator priority select.
 
@@ -467,7 +469,7 @@ Commands:
 - `... probe` — ws_user capability probe verdict.
 - `... reads [--dev DEV_ID] [--node TYPE:ADDR]` — grouped devices, then per node the raw status/setup/version JSON (and `--samples-from/--samples-to` for the samples window).
 - `... ws [--duration 60] [--heartbeat 60]` — subscribe the ws_user transport; event counts, bounded update previews, transport facts.
-- `... write --dev DEV_ID --node TYPE:ADDR --i-know-this-writes-to-my-heater <op> ...` — the CLI's WriteApi ops (`set_mode`, `set_setpoint`, `engage_modified_auto`, `set_lock`, `set_boost`, `set_boost_mode`, `set_prog_temps`, `set_window_mode`, `set_true_radiant`, `set_away_offset`, `set_max_stemp_limit`, `set_priority`, `set_away`, `set_power_limit`, `set_node_power_limit`, `set_prog`); prints the exact body before sending, then GETs the affected resource (the server's read-through may lag several seconds and show the old value).
+- `... write --dev DEV_ID --node TYPE:ADDR --i-know-this-writes-to-my-heater <op> ...` — the CLI's WriteApi ops (`set_mode`, `set_setpoint`, `engage_modified_auto`, `set_lock`, `set_boost`, `set_boost_mode`, `set_prog_temps`, `set_window_mode`, `set_true_radiant`, `set_away_offset`, `set_max_stemp_limit`, `set_priority`, `set_control_mode`, `set_away`, `set_power_limit`, `set_node_power_limit`, `set_prog`); prints the exact body before sending, then GETs the affected resource (the server's read-through may lag several seconds and show the old value).
 - `... all` — probe + reads (the daily sanity menu).
 > [!NOTE]
 > The initial version of this integration was made by [graham33](https://github.com/graham33) but it was not maintained.

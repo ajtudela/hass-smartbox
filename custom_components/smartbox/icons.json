@@ -25,9 +25,6 @@
       }
     },
     "binary_sensor": {
-      "window_open": {
-        "default": "mdi:window-open"
-      },
       "charging": {
         "default": "mdi:battery-charging"
       },
@@ -42,6 +39,14 @@
       },
       "pir_presence": {
         "default": "mdi:motion-sensor"
+      },
+      "window_detection": {
+        "default": "mdi:window-open"
+      }
+    },
+    "select": {
+      "control_mode": {
+        "default": "mdi:tune-variant"
       }
     }
   }

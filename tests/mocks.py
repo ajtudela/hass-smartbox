@@ -287,7 +287,7 @@ class MockSmartbox:
         self._devices = [
             self._device_info[dev_id] for dev_id in mock_config[DOMAIN][CONF_DEVICE_IDS]
         ]
-        self._node_info = mock_node_info
+        self._node_info = deepcopy(mock_node_info)
         self._node_setup = mock_node_setup
         self._node_prog = mock_node_prog
         self._node_away = mock_node_away

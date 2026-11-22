@@ -17,6 +17,11 @@ from homeassistant.const import EntityCategory
 from smartbox.protocol import VALID_PRIORITIES
 
 from .adapter import EngineChangeFanOut, SmartboxNodeAdapterEntity
+from .control_mode import (
+    control_mode_available,
+    control_mode_choices,
+    control_mode_label,
+)
 from .entity_builder import EntityBuilder
 from .identity import (
     SmartboxNodeInfo,
@@ -88,6 +93,13 @@ def _build_node_selects(
         groups.append(([RadiatorPriority(node, entry, runtime, fanout)], True))
     if duty_limit_available(node):
         groups.append(([DutyLimit(node, entry, runtime, fanout)], True))
+    if control_mode_available(
+        node.pid,
+        node.node_type,
+        node.setup,
+        node.setup.get("units"),
+    ):
+        groups.append(([ControlMode(node, entry, runtime, fanout)], True))
     return groups
 
 
@@ -177,4 +189,66 @@ class DutyLimit(SmartboxNodeSelectEntity):
         values = dict(self._choices())
         await self._runtime.engine.set_extra_options(
             self._dev_id, self._ref, {"user_duty_limit": values[option]}
+        )
+
+
+class ControlMode(SmartboxNodeSelectEntity):
+    """Heater control algorithm (``setup.control_mode``).
+
+    The wire value is an index into the product controller's own mode list.
+    Only the products confirmed against the vendor app are offered; on the
+    LHZ/EHC relay heater (PID ``0402``) the app's six visible modes map to
+    wire indexes 5, 6, 0, 1, 2, 3 in the order shown
+    (docs/api-contract.md §1.9). A stored index outside the offered set reads
+    as unknown while the select keeps offering the app's choices.
+    """
+
+    _attr_icon = "mdi:tune-variant"
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(node, entry, runtime, fanout, "control_mode")
+
+    def _setup(self) -> Mapping[str, Any]:
+        """Return the node's live setup ({} until the first frame)."""
+        state = self._node_state()
+        return state.setup if state is not None else {}
+
+    def _choices(self) -> tuple[tuple[str, int], ...]:
+        """Return the (label, wire index) choices for the current setup."""
+        setup = self._setup()
+        return (
+            control_mode_choices(
+                self._node.pid,
+                self._node.node_type,
+                setup,
+                setup.get("units") or self._status.get("units"),
+            )
+            or ()
+        )
+
+    @property
+    def options(self) -> list[str]:
+        """Return the labels the vendor app offers on this product."""
+        return [label for label, _ in self._choices()]
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the stored control mode as its app label."""
+        value = self._setup().get("control_mode")
+        return control_mode_label(
+            self._choices(), value if isinstance(value, int) else None
+        )
+
+    async def async_select_option(self, option: str) -> None:
+        """Write the selected control-mode index into the setup."""
+        values = dict(self._choices())
+        await self._runtime.engine.set_control_mode(
+            self._dev_id, self._ref, values[option]
         )

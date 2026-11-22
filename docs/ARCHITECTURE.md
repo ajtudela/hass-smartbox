@@ -114,6 +114,8 @@ custom_components/smartbox/   the integration
 ├── exceptions.py             translated user-facing error constructors
 ├── compat.py                 probatio/voluptuous selection for the HA range
 ├── identity.py               discovery results; capability gates
+├── product.py                product labels from the version PID
+├── control_mode.py           vendor-app control-mode catalogue and gates
 ├── mapping.py                schedule/RTC/boost decoding
 ├── config_flow.py            setup, reauth and reconfigure
 ├── climate.py, sensor.py, number.py, switch.py,
