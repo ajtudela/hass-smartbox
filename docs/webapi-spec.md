@@ -8,7 +8,7 @@
 
 **Provenance:** statically extracted from the official Android app `com.technotherm.lhzapp` v1.420.1 (APK sha256 `43df21cf…d4df1`), `assets/www/app.js` — the Cordova packaging of the same "Helki" Vue SPA that powers `app.smart-control.eu` (plus native BLE/ESP-Touch provisioning bridges). Cross-checked against live wire probes (see `api-contract.md`) ("Observed behaviour") and against the 2.7 `smartbox` library's `session.py` surface; the 3.0 `smartbox` library supersedes that implementation.
 
-**Status markers:** ✔ = matches the 2.7 reference library's behaviour at the time of extraction; ⚠ = discrepancy or unverified-on-our-hardware item (each has an entry in §Discrepancies). These markers are historical: the 3.0 integration's implemented surface is `api-contract.md` §3.1/§9, and a ✔ here does not mean the 3.0 client calls that endpoint. Everything here is cloud-API over HTTPS — most current builds dial `https://users-api.helki.com`, Elnur dials `https://api-elnur.helki.com`, and the legacy EHC app stays on `api-ehc.helki.com` (`api-contract.md` §1.1 has the host history and the 2026-11-15 audit); the local-LAN API of the box is documented at the end (§Local API, informational).
+**Status markers:** ✔ = matches the 2.7 reference library's behaviour at the time of extraction; ⚠ = discrepancy or unverified-on-our-hardware item (each has an entry in §Discrepancies). These markers are historical: the 3.0 integration's implemented surface is `api-contract.md` §3.2/§9, and a ✔ here does not mean the 3.0 client calls that endpoint. Everything here is cloud-API over HTTPS — most current builds dial `https://users-api.helki.com`, Elnur dials `https://api-elnur.helki.com`, and the legacy EHC app stays on `api-ehc.helki.com` (`api-contract.md` §1.1 has the host history and the 2026-11-15 audit); the local-LAN API of the box is documented at the end (§Local API, informational).
 
 ---
 
@@ -77,7 +77,7 @@ switch (((data.version || {}).pid || "").toUpperCase().slice(2, 4)) {
 }
 ```
 
-The slice is positional: characters 3–4 (indices 2–3) of the PID, so the four-character PID `081c` yields `1C`. Shorter PIDs yield the default branch. Provenance: decoded web-app helper; the snippet and the storage-heater case (`081c`) were reported against the upstream integration in PR #45 (2025-12-07). The version endpoint carrying `pid` is recorded in `api-contract.md` §3.1 E24.
+The slice is positional: characters 3–4 (indices 2–3) of the PID, so the four-character PID `081c` yields `1C`. Shorter PIDs yield the default branch. Provenance: decoded web-app helper; the snippet and the storage-heater case (`081c`) were reported against the upstream integration in PR #45 (2025-12-07). The version endpoint carrying `pid` is recorded in `api-contract.md` §3.2 E24.
 
 ### 3.2 Per-tenant capabilities (`client-data/<serial>/capabilities.json`)
 
@@ -107,6 +107,16 @@ type enum. The two are distinct:
 Do not map a product category to a new wire type. A towel rail, for example,
 is a product category that is expected to report `htr` (or `htr_mod`) on the
 wire; a floor thermostat is a `thm` with floor-probe settings.
+
+The node device page gets a product label from `version.pid[2:4]` using the
+vendor's `EProductCodeValue` categories: triac heater, relay heater, heater
+module, storage heater, water storage heater, thermostat, thermostatic valve,
+WiFi heater or power monitor `[app web elnur@6159159]`. A towel rail is an
+add-device/UI category (the per-tenant `supportedNodeTypes`/`supportedDevices`
+model picker), not a PID code: a towel rail reports its controller category,
+so it cannot be distinguished from an ordinary heater by PID alone. The
+device model text keeps the wire address for diagnostics, and the firmware
+version is shown as the device software version.
 
 Fetched matrix (serial, brand, categories):
 
@@ -144,6 +154,19 @@ These flags are UI gates. The integration continues to gate entities on
 wire state (status/setup fields), which is the authoritative source; the
 flags explain why the vendor app hides a feature on a given brand and are
 recorded so a missing entity is not mistaken for a wire gap.
+
+### 3.3 Thermostat (`thm`) shape
+
+The controller-backed status/setup shape, mode list, setpoint body and
+schedule shape are recorded in `api-contract.md` §3.5. This file keeps only
+the web-app static: the temperature-control service is constructed with
+`minTempCelsius: 7` and clamps every node minimum with
+`Math.max(minCTemp, 7)` `[app web ducaheat@659179]` `[app web ducaheat@4934361]`;
+with the `ThermostatController`'s 35 °C global maximum, the thermostat range
+is **7–35 °C**. The demo payload is a synthetic fixture; its `batt_level` and
+`error_code` fields are not app-backed, and `presence` is a generic
+panel-touch artifact (`api-contract.md` §6.1), not a thermostat field. A live
+`thm` read remains `**[unverified]**`.
 
 ## 4. Status write semantics (as exercised by the app)
 

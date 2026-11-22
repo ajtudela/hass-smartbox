@@ -126,7 +126,7 @@ async def test_discovery_marks_a_device_without_box_power_limit():
     """A rejected probe plus a boxless snapshot means no box power limit.
 
     The payload is the REST shape: no ``connected`` key, which that endpoint
-    never serves (docs/api-contract.md §3.1 E46).
+    never serves (docs/api-contract.md §3.2 E46).
     """
     client = make_client()
     client.get_power_limit.side_effect = SmartboxError("not found")

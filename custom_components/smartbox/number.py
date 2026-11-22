@@ -166,7 +166,10 @@ def _build_node_numbers(
     if not node.supported_wire_type:
         return []
     groups: list[EntityGroup] = []
-    if node.boost_available:
+    # A thm node can dispatch to an htr-derived controller whose factory
+    # payload carries boost_config (Tevolve floor thermostats), but the
+    # thermostat climate entity does not model boost.
+    if node.heater_node and node.boost_available:
         boost_entities: list[ConfigBoostDuration | ConfigBoostTemperature] = [
             ConfigBoostTemperature(
                 node, entry, runtime, fanout, "config_boost_temperature"

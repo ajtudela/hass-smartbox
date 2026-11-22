@@ -9,7 +9,7 @@ only for registry identity and device-info fields.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 # HA's component root re-exports these public names without __all__;
 # mypy strict's no_implicit_reexport cannot see that re-export.
@@ -66,6 +66,7 @@ from .mapping import (
     AutoOverrideWrite,
     HtrModPolicy,
     HtrModWrite,
+    acm_active,
     check_status_key,
     get_boost_end_datetime,
     get_hvac_mode,
@@ -81,6 +82,7 @@ from .mapping import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from homeassistant.core import HomeAssistant
@@ -116,7 +118,7 @@ async def async_setup_entry(
     fanout = runtime.fanout
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
-        """Build the entities for one heater node."""
+        """Build the entities for one heater or thermostat node."""
         return _build_node_climate(node, entry, runtime, fanout)
 
     runtime.entity_builder.register(async_add_entities, build_node=build_node)
@@ -132,12 +134,15 @@ def _build_node_climate(
     runtime: SmartboxRuntime,
     fanout: EngineChangeFanOut,
 ) -> list[EntityGroup]:
-    """Build the climate entity for a heater node."""
+    """Build the climate entity for a heater or thermostat node."""
     if not node.supported_wire_type:
         return []
-    if not node.heater_node:
+    if node.node_type == SmartboxNodeType.THM:
+        entity: SmartboxHeater = SmartboxThermostat(node, entry, runtime, fanout)
+    elif node.heater_node:
+        entity = SmartboxHeater(node, entry, runtime, fanout)
+    else:
         return []
-    entity = SmartboxHeater(node, entry, runtime, fanout)
     runtime.services.climate.append(entity)
     return [([entity], False)]
 
@@ -208,6 +213,19 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         """The node's vendor-app boost configuration (0 when absent)."""
         state = self._node_state()
         return boost_config(state.setup if state is not None else {})
+
+    @property
+    def supports_boost_mode(self) -> bool:
+        """Whether ``smartbox.set_boost_mode`` applies to this entity.
+
+        Only the full-boost controller supports the ``/boost_mode`` endpoint;
+        a thermostat never does, even when its setup carries a boost config
+        from an htr-derived controller.
+        """
+        return (
+            self._node.node_type != SmartboxNodeType.THM
+            and self._boost_config_value == BoostConfig.FULL
+        )
 
     @property
     def _boost_mode_value(self) -> str | None:
@@ -429,8 +447,10 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         status = self._status
         if self._lost or self._status_blank:
             return None
-        active_key = "charging" if node_type == SmartboxNodeType.ACM else "active"
-        if status.get(active_key):
+        if node_type == SmartboxNodeType.ACM:
+            if acm_active(status, self._model_code()):
+                return HVACAction.HEATING
+        elif status.get("active"):
             return HVACAction.HEATING
         mode = status.get("mode")
         if mode is None and not self._boost:
@@ -700,3 +720,119 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             temperature=temperature,
             time_minutes=time_minutes,
         )
+
+
+class SmartboxThermostat(SmartboxHeater):
+    """Thermostat (`thm`) climate entity.
+
+    A thermostat is not a heater: it has a heat/cold load type, no boost and
+    no charge. The shape comes from the vendor 2.54.2 ``ThermostatController``
+    (docs/api-contract.md §3.5): status ``mode``/``stemp``/``mtemp``/
+    ``active``/``units``, plus the generic ``low_batt`` shell flag; setup
+    ``type`` (``heat``/``cold``), ``control_mode``, ``anti_grippage`` and
+    ``away_offset``. The app's 7 C floor (its temperature service is built
+    with ``minTempCelsius: 7``) and the controller's 35 C maximum set the
+    range. The app offers AUTO/OFF (its ON resolves to AUTO); MANUAL is not
+    in its mode list, so HEAT/COOL here are an unverified manual override.
+    Setpoint writes are the plain ``{stemp, units}`` body: the controller
+    deletes ``mode: modified_auto`` before POSTing.
+    """
+
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.TURN_ON
+    )
+
+    @property
+    def _setup(self) -> Mapping[str, Any]:
+        """Return the live setup, with the discovery copy as the fallback."""
+        state = self._node_state()
+        if state is not None and state.setup:
+            return state.setup
+        return self._node.setup
+
+    @property
+    def _load_type(self) -> str:
+        """Return the thermostat's load type (``heat``/``cold``)."""
+        value = self._setup.get("type")
+        return "cold" if isinstance(value, str) and value.lower() == "cold" else "heat"
+
+    @property
+    def hvac_modes(self) -> list[HVACMode]:
+        """Return the operation modes this load type supports."""
+        active = HVACMode.COOL if self._load_type == "cold" else HVACMode.HEAT
+        return [active, HVACMode.AUTO, HVACMode.OFF]
+
+    @property
+    def hvac_mode(self) -> HVACMode | None:
+        """Return the current mode, with a cold load reported as COOL."""
+        mode = super().hvac_mode
+        if mode == HVACMode.HEAT and self._load_type == "cold":
+            return HVACMode.COOL
+        return mode
+
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set operation mode; COOL is the cold-load form of the wire's manual."""
+        target = HVACMode.HEAT if hvac_mode == HVACMode.COOL else hvac_mode
+        await super().async_set_hvac_mode(target)
+
+    async def async_turn_on(self) -> None:
+        """Turn on the way the app's ON does: the default (AUTO) mode."""
+        await self.async_set_hvac_mode(HVACMode.AUTO)
+
+    async def async_set_temperature(self, **kwargs: Any) -> None:  # noqa: ANN401
+        """Set a target temperature with the thermostat's plain setpoint body.
+
+        ``ThermostatController.setStatus`` deletes ``mode: modified_auto``
+        before POSTing, so the wire body is ``{stemp, units}``. The inherited
+        heater path would engage a modified_auto override when
+        ``setup.modified_auto_span`` is present.
+        """
+        temp = kwargs.get(ATTR_TEMPERATURE)
+        if temp is None:
+            return
+        # setup=None keeps the helper off the modified_auto branch.
+        write = temperature_write(self._node.node_type, self._status, temp)
+        await self._runtime.engine.set_setpoint(
+            self._dev_id, self._ref, temp, cast("str", write.units)
+        )
+
+    @property
+    def hvac_action(self) -> HVACAction | None:
+        """Return the current action (heating/cooling/idle/off)."""
+        if self._lost or self._status_blank:
+            return None
+        if self._status.get("mode") == "off":
+            return HVACAction.OFF
+        if self._status.get("active") is True:
+            if self._load_type == "cold":
+                return HVACAction.COOLING
+            return HVACAction.HEATING
+        return HVACAction.IDLE
+
+    @property
+    def preset_modes(self) -> list[str]:
+        """Thermostats have no heater presets."""
+        return []
+
+    @property
+    def preset_mode(self) -> str | None:
+        """Thermostats have no heater presets."""
+        return None
+
+    async def async_set_preset_mode(self, _preset_mode: str) -> None:
+        """Reject preset writes the entity does not advertise."""
+        msg = "preset_mode_unsupported"
+        raise user_error(msg)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the thermostat facts that have no entity of their own."""
+        if self._lost or self._status_blank:
+            return {}
+        attributes: dict[str, Any] = {"load_type": self._load_type}
+        setup = self._setup
+        if "control_mode" in setup:
+            attributes["control_mode"] = setup["control_mode"]
+        return attributes

@@ -178,7 +178,7 @@ class SmartboxNodeInfo:
         """Get the model code from a node version payload.
 
         Characters 3-4, uppercased, matching the official app
-        (``pid.toUpperCase().slice(2, 4)``; docs/webapi-spec.md §3.1):
+        (``pid.toUpperCase().slice(2, 4)``; docs/webapi-spec.md §3.2):
         PID '081c' gives '1C'. ``version`` defaults to the discovery copy;
         entity properties pass the live engine slot when they have it.
         """
@@ -282,7 +282,7 @@ async def _confirm_boxless(client: SmartboxClient, dev_id: str) -> bool:
     truncated, malformed or unreadable payloads keep the surface. ``connected``
     is not required: the REST payload never carries it (only the ws snapshot
     and ``/devs/{id}/connected`` do), so requiring it made this confirmation
-    unreachable (docs/api-contract.md §3.1 E46).
+    unreachable (docs/api-contract.md §3.2 E46).
     """
     try:
         dev_data = await client.get_dev_data(dev_id)

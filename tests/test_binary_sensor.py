@@ -18,7 +18,7 @@ from tests.mocks import (
     get_device_by_identifier,
     get_entity_id_from_unique_id,
 )
-from tests.stack import seed_stack
+from tests.stack import push_status, ref, seed_stack
 
 
 @pytest.fixture
@@ -88,6 +88,70 @@ async def test_connected_false_does_not_take_the_box_controls_offline(
         device_dict["dev_id"]
     )
     assert hass.states.get(away).state == ("on" if away_status["away"] else "off")
+
+
+PIR_ADDR = 2
+
+
+def _add_pir_heater(mock_smartbox) -> None:
+    """Add an htr node with the PIR controller enabled."""
+    mock_smartbox.add_node(
+        "device_1",
+        {
+            "type": "htr",
+            "addr": PIR_ADDR,
+            "name": "PIR heater",
+            "installed": True,
+            "product_id": "product_id_pir",
+            "fw_version": "1.0",
+            "serial_id": "serial_id_pir",
+        },
+        setup={
+            "away_offset": "0.0",
+            "extra_options": {"pir_enabled": True},
+        },
+        status={
+            "sync_status": "ok",
+            "mode": "manual",
+            "active": False,
+            "units": "C",
+            "stemp": "10.0",
+            "mtemp": "19.0",
+            "power": 0,
+            "french_rule_pir_state": True,
+        },
+        prog={},
+    )
+
+
+async def test_pir_presence_uses_the_controller_status_key(
+    hass, mock_smartbox, config_entry
+):
+    """PIR reads french_rule_pir_state; window exists before its field does."""
+    _add_pir_heater(mock_smartbox)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+
+    presence_id = get_entity_id_from_unique_id(
+        hass, BINARY_SENSOR_DOMAIN, f"device_1_{PIR_ADDR}_pir_presence"
+    )
+    assert hass.states.get(presence_id).state == "on"
+
+    # window_open was absent from the discovery snapshot, but the entity was
+    # created and starts unknown rather than missing until a reload.
+    window_id = get_entity_id_from_unique_id(
+        hass, BINARY_SENSOR_DOMAIN, f"device_1_{PIR_ADDR}_window_open"
+    )
+    assert hass.states.get(window_id).state == "unknown"
+
+    node_info = {"type": "htr", "addr": PIR_ADDR}
+    body = await fake.get_node_status("device_1", ref(node_info))
+    body.update({"window_open": True, "french_rule_pir_state": False})
+    await push_status(hass, runtime, "device_1", node_info, body)
+
+    assert hass.states.get(presence_id).state == "off"
+    assert hass.states.get(window_id).state == "on"
 
 
 async def test_connected_sensor_is_on_box_device(hass, mock_smartbox, config_entry):

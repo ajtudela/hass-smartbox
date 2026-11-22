@@ -17,6 +17,13 @@ class SmartboxNodeType(StrEnum):
     PMO = "pmo"
 
 
+# Product codes (``version.pid[2:4]``) whose controller has different
+# telemetry semantics (docs/api-contract.md §3.4).
+PRODUCT_CODE_ELNUR_STEPPED_STORAGE = "14"
+PRODUCT_CODE_WATER_STORAGE = "2A"
+WATER_READY_LEVEL = 50
+WATER_FULLY_READY_LEVEL = 100
+
 ATTR_DURATION = "duration"
 SERVICE_SET_BOOST_PARAMS = "set_boost_params"
 SERVICE_SET_BOOST_MODE = "set_boost_mode"

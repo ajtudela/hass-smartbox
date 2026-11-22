@@ -162,7 +162,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -242,7 +242,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -337,7 +337,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox_unavailable)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -365,7 +365,7 @@ async def test_basic_charge_level(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 36
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -463,6 +463,20 @@ def test_charge_level_sensor_model_1c():
         status={"current_charge_per": 75, "charge_level": 3}
     )
     assert sensor.native_value == 3
+
+
+def test_charge_level_sensor_elnur_code_14_scales_stepped_level():
+    """Elnur storage code 14 reports charge_level in 0..5 steps."""
+    sensor = object.__new__(ChargeLevelSensor)
+    sensor._node = MagicMock()
+    sensor._node.get_model_code.return_value = "14"
+    sensor._node_state = lambda: NodeState(
+        status={"current_charge_per": 75, "charge_level": 3}
+    )
+    assert sensor.native_value == 60
+
+    sensor._node_state = lambda: NodeState(status={"charge_level": None})
+    assert sensor.native_value is None
 
 
 def test_charge_level_sensor_prefers_live_version_slot():

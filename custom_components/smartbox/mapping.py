@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 import logging
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # HA's component root re-exports these public names without __all__;
 # mypy strict's no_implicit_reexport cannot see that re-export.
@@ -37,15 +37,20 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
-from smartbox.protocol.values import bounded_repr
+from smartbox.protocol.values import bounded_repr, parse_number_or_none
 
 from .const import (
     GITHUB_ISSUES_URL,
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
+    PRODUCT_CODE_WATER_STORAGE,
+    WATER_READY_LEVEL,
     SmartboxNodeType,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -448,6 +453,20 @@ def temperature_write(
     ):
         return AutoOverrideWrite(units=status["units"])
     return SetpointWrite(units=status["units"])
+
+
+def acm_active(status: Mapping[str, Any], model_code: str | None) -> bool:
+    """Whether a storage heater is actively heating.
+
+    Water storage (product code ``2A``) replaces the CHARGING indicator with
+    ACTIVE = ``charging && charge_level != 50``; 50 is the water-ready level
+    and 100 is fully ready (docs/api-contract.md §3.4).
+    """
+    if status.get("charging") is not True:
+        return False
+    if model_code == PRODUCT_CODE_WATER_STORAGE:
+        return parse_number_or_none(status.get("charge_level")) != WATER_READY_LEVEL
+    return True
 
 
 def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:

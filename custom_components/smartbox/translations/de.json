@@ -78,6 +78,24 @@
     "binary_sensor": {
       "connected": {
         "name": "Konnektivität"
+      },
+      "window_open": {
+        "name": "Fenster"
+      },
+      "charging": {
+        "name": "Laden"
+      },
+      "water_ready": {
+        "name": "Wasser bereit"
+      },
+      "water_fully_ready": {
+        "name": "Wasser vollständig bereit"
+      },
+      "low_battery": {
+        "name": "Batterie schwach"
+      },
+      "pir_presence": {
+        "name": "PIR-Präsenz"
       }
     },
     "climate": {
@@ -98,6 +116,9 @@
     "sensor": {
       "charge_level": {
         "name": "Ladezustand"
+      },
+      "target_charge": {
+        "name": "Ziel-Ladestand"
       },
       "duty_cycle": {
         "name": "Einschaltdauer"
@@ -244,6 +265,9 @@
   "exceptions": {
     "ws_user_unsupported": {
       "message": "Der API-Host dieses Anbieters unterstützt den erforderlichen Websocket-Transport nicht: {error}"
+    },
+    "preset_mode_unsupported": {
+      "message": "Dieser Thermostat unterstützt keine Voreinstellungen"
     },
     "service_no_target": {
       "message": "{service} benötigt mindestens ein Ziel (Entität, Gerät oder Bereich); keines der Ziele der Anfrage ließ sich einer Smartbox-Entität zuordnen"

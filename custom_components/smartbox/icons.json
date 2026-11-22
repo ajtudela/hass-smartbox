@@ -19,6 +19,29 @@
       },
       "rtc_drift": {
         "default": "mdi:clock-alert-outline"
+      },
+      "target_charge": {
+        "default": "mdi:battery-arrow-up"
+      }
+    },
+    "binary_sensor": {
+      "window_open": {
+        "default": "mdi:window-open"
+      },
+      "charging": {
+        "default": "mdi:battery-charging"
+      },
+      "water_ready": {
+        "default": "mdi:water-check"
+      },
+      "water_fully_ready": {
+        "default": "mdi:water-check-outline"
+      },
+      "low_battery": {
+        "default": "mdi:battery-alert"
+      },
+      "pir_presence": {
+        "default": "mdi:motion-sensor"
       }
     }
   }

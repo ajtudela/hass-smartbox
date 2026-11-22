@@ -379,7 +379,7 @@ class MockSmartbox:
 
         The REST read never carries `connected` (that key arrives with the ws
         snapshot), and a device without a box serves the empty power-limit
-        placeholder object (docs/api-contract.md §3.1 E46, §7 item 17).
+        placeholder object (docs/api-contract.md §3.2 E46, §7 item 17).
         """
         data: dict[str, Any] = {
             "nodes": deepcopy(self._node_info[dev_id]),
