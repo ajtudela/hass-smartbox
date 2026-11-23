@@ -1,6 +1,6 @@
 # hass-smartbox
 ![hassfest](https://github.com/ajtudela/hass-smartbox/workflows/Validate%20with%20hassfest/badge.svg)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![codecov](https://codecov.io/gh/ajtudela/hass-smartbox/branch/main/graph/badge.svg)](https://codecov.io/gh/ajtudela/hass-smartbox)
 [![Total downloads](https://img.shields.io/github/downloads/ajtudela/hass-smartbox/total)](https://github.com/ajtudela/hass-smartbox/releases)
 [![Downloads of latest version (latest by SemVer)](https://img.shields.io/github/downloads/ajtudela/hass-smartbox/latest/total?sort=semver)](https://github.com/ajtudela/hass-smartbox/releases/latest)
@@ -41,12 +41,15 @@ Accounts whose backend only serves the retired `socket_io` transport need 2.6.x;
 
 ## Installation
 
-### Using HACS (Recommended)
+### Using the Marketplace or HACS (Recommended)
 
-1. Add this repository to your HACS [custom repositories] as an **Integration**.
-1. Search for and install "Smartbox" in HACS.
-1. Restart Home Assistant.
+**Home Assistant 2026.11 or later:** open **Settings → Marketplace**, search for **Smartbox**, and install it.
 
+**HACS:** search for and install **Smartbox**.
+
+Restart Home Assistant.
+
+If **Smartbox** does not appear yet, the catalog may still be updating. HACS users can add this repository to their [custom repositories] as an **Integration**, then search again.
 
 ### Manually Copy Files
 
@@ -480,7 +483,7 @@ Commands:
 [buymeacoffee-ajtudela]: https://www.buymeacoffee.com/ajtudela
 
 [buymeacoffee-shield]: https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png
-[custom repository]: https://hacs.xyz/docs/faq/custom_repositories
+[custom repositories]: https://hacs.xyz/docs/faq/custom_repositories
 [Github issue]: https://github.com/ajtudela/hass-smartbox/issues
 [Reseller Github issue]: https://github.com/ajtudela/hass-smartbox/issues/new?labels=reseller&title=New%20reseller
 [Home Assistant integration docs]: https://developers.home-assistant.io/docs/creating_integration_file_structure/#where-home-assistant-looks-for-integrations
