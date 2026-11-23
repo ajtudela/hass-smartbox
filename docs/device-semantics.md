@@ -202,9 +202,17 @@ with the profile, and keep the entity-surface matrix in the adapter.
   the decoded family/actuation maps, UI/wire arrays, labels and availability.
   The integration's `control_mode.py` re-exports it; the entity keeps the HA
   select shape.
-- Slices 3-4 (lock/boost/storage, thermostat/setting gates) remain. The
-  adapter keeps boost activation, preferences and the FULL attribute
-  visibility throughout.
+- **Slice 3 moved in two parts so far.** `smartbox.device.modes` now owns the
+  lock kind (including `super_lock_available` and the fw-1.7 Haverland gate),
+  EASY/RUNBACK support and the boost activation policy. Storage mode
+  resolution still lives in `storage.py` because it carries a Home Assistant
+  `HVACMode`; replacing that with a neutral intent enum is the remaining part.
+- **Slice 4 moved in part.** The heater/thermostat surface predicates now live
+  in `smartbox.device.profile`; the remaining thermostat/setting gates are in
+  `identity.py` and still depend on discovery data.
+- Slices 3b/4b (storage intent enum, thermostat/setting gates) and slice 5
+  (CLI profile, diagnostics, pin) remain. The adapter keeps boost activation,
+  preferences and the FULL attribute visibility throughout.
 - The migration branch imports `smartbox.device`, which is not in the
   published 3.2.1 wheel. Develop against the sibling editable checkout and do
   not merge or release until a library minor with these modules is published

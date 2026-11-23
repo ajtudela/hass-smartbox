@@ -15,8 +15,11 @@
   Integration suite: 2076 passed; library: 696 passed.
 - Slice 1 landed: `smartbox.device.profile` owns limits/profiles/bounds and
   `resolve_profile`; slice 2 moved the control-mode catalogue to
-  `smartbox.device.control_modes`. The integration re-exports both. Slices 3-4
-  remain; `docs/vendor-deviations.md` lists the behaviour the extraction must
+  `smartbox.device.control_modes`; slice 3 moved lock/boost policy to
+  `smartbox.device.modes`; surface predicates joined the profile. The
+  integration re-exports all of them. Remaining: storage mode resolution
+  (neutral intent enum), thermostat/setting gates, CLI/diagnostics profile and
+  the pin. `docs/vendor-deviations.md` lists the behaviour the extraction must
   keep. The branch needs the sibling editable library and must not be merged
   before a library minor is published and the pin raised.
 
