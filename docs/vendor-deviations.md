@@ -1,0 +1,20 @@
+# Intentional deviations from the vendor app
+
+These are the places where the integration deliberately differs from the
+mobile/web apps, or models a wire behavior the app does not expose. The
+device-semantics extraction must preserve them; a slice that changes one of
+these is a product decision, not a refactor.
+
+| Area | Vendor app | Integration | Why | Guard |
+|---|---|---|---|---|
+| RUNBACK on FULL WiFi/ATC | Mode remains available; activation carries temperature/duration through `/boost_mode` | Standalone runback switch withheld at `boost_config = 3`; the climate Runback preset exists when status lists `runback` and carries its own parameters | The switch's status-only write would not carry the values the endpoint expects. The parameterised path is the preset. Confirm on live full-boost hardware before exposing the switch. | `test_controller.test_supports_runback_*`, `test_boost_activation_matrix.test_runback_*`, surface matrix FULL cases |
+| Thermostat floor | Mobile controller global floor is 0 °C; the vendor web app passes `minTempCelsius: 7` to the same controller | Climate target range 7-35 °C | The web app is the user-visible thermostat surface, and its runtime override is the effective floor. | parity `THERMOSTAT` row, `test_climate` bounds |
+| Storage child lock | Settings screens hide the lock on storage families; the wire carries integer lock states | `lock_mode` select is exposed on integer-lock storage | The wire supports the feature; the app's UI gate is a client decision. Payload shape still follows the app (0/1/2). | parity storage rows, surface matrix storage cases |
+| Full-boost availability | `status.boost_modes_available` decides whether BOOST exists | BOOST existence follows setup; activation refuses when the observed list has no usable style | Entity creation must not depend on a transient status field (lost-at-discovery regression). The advertised list still decides which attribute sliders exist. | `test_boost_activation_matrix.test_full_boost_without_a_mode_is_refused`, surface matrix FULL cases |
+| FULL attribute values | Every activation takes the values in the app's editor; the app does not persist them | Boost/runback temperature and duration are HA preferences in `.storage`; legacy controllers keep the device `extra_options` fields | HA needs a stable one-click surface and restart persistence; the app always shows an editor. The request shape follows the app. | `test_boost_prefs`, `test_entity_surface_matrix` attribute snapshots |
+| Water-storage programme | ON/OFF_AUTO programme only | Programme-temperature numbers and the generic schedule are withheld; parity records `BASE` as an internal placeholder | The heater profile catalogue cannot represent ON/OFF_AUTO; exposing the heater catalogue would be misleading. | parity `WATER` row comment, surface matrix water cases |
+| SETBACK | Supported as a mode on some Tevolve controllers | Not modelled | Open item; mode/list evidence is recorded but no entity or service is exposed yet. | `docs/status.md` open items |
+| Thermostat control mode | The thermostat settings list includes CONTROL_MODE | Withheld | The decoded `pid_60` target mismatch is not resolved; guessing the mode index would write the wrong setting. | `test_control_mode` |
+| PIR ICE slot | ICE is part of the programme but read-only | No frost number entity; ICE is written back unchanged; eco/comfort use the app's 3.5 °C gap | The app does not let the user edit it, and the wire body still needs the value. | parity row 27, `test_controller`, `tevolve-0127` matrix case |
+| Haverland at `boost_config = 3` | Fixed-time boost through `/boost_mode`; configs 0-2 through the legacy status path | Same | The fixed-time style is a controller constant, not a status capability. | `test_controller.test_haverland_fixed_time_boost_never_uses_parameters`, activation matrix |
+| Duty-preset order | `acceptedValues` sorted ascending | Sorted ascending | The displayed order is part of the app's UI contract. | `test_identity` duty tests, parity `duty_options`, attribute snapshot |

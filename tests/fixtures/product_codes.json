@@ -1,0 +1,2712 @@
+{
+  "codes": {
+    "00": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "01": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "02": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "03": {
+      "boost_bounds": null,
+      "boost_cap": null,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": null,
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": null,
+      "max_limit": false,
+      "max_limit_bounds": null,
+      "min_c": null,
+      "node_type": "pmo",
+      "profiles": null,
+      "prog_bounds": null,
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "power",
+      "water": false
+    },
+    "04": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "thm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "thermostat",
+      "water": false
+    },
+    "07": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "08": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "09": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "thm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "thermostat",
+      "water": false
+    },
+    "0A": {
+      "boost_bounds": [
+        5.0,
+        28.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        5.0,
+        28.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": false,
+      "lock": "bool",
+      "max_c": 28.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        28.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr_mod",
+      "profiles": [
+        "off",
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": null,
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "0B": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "0C": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "0D": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "0F": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "thm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "thermostat",
+      "water": false
+    },
+    "10": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "11": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "12": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "13": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "14": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [],
+      "climate_bounds": [
+        3.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 3.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          4.0,
+          30.0
+        ],
+        "eco_temp": [
+          3.5,
+          29.5
+        ],
+        "ice_temp": [
+          3.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": true,
+      "surface": "heater",
+      "water": false
+    },
+    "16": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "17": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          9.0,
+          30.0
+        ],
+        "eco_temp": [
+          7.0,
+          28.0
+        ],
+        "ice_temp": [
+          5.0,
+          7.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "18": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1A": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2,
+        3
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1B": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1C": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          6.0,
+          30.0
+        ],
+        "eco_temp": [
+          5.5,
+          29.5
+        ],
+        "ice_temp": [
+          5.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1D": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        2,
+        3
+      ],
+      "boost_params": [],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          9.0,
+          30.0
+        ],
+        "eco_temp": [
+          7.0,
+          28.0
+        ],
+        "ice_temp": [
+          5.0,
+          7.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1E": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          35.0
+        ],
+        "eco_temp": [
+          0.5,
+          34.5
+        ],
+        "ice_temp": [
+          0.0,
+          34.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "1F": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "20": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [],
+      "climate_bounds": [
+        3.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 3.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          4.0,
+          30.0
+        ],
+        "eco_temp": [
+          3.5,
+          29.5
+        ],
+        "ice_temp": [
+          3.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": true,
+      "surface": "heater",
+      "water": false
+    },
+    "21": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2,
+        3
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "22": {
+      "boost_bounds": null,
+      "boost_cap": null,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": null,
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": null,
+      "max_limit": false,
+      "max_limit_bounds": null,
+      "min_c": null,
+      "node_type": "pmo",
+      "profiles": null,
+      "prog_bounds": null,
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "power",
+      "water": false
+    },
+    "23": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2,
+        3
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "24": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "25": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [],
+      "climate_bounds": [
+        3.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 3.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          4.0,
+          30.0
+        ],
+        "eco_temp": [
+          3.5,
+          29.5
+        ],
+        "ice_temp": [
+          3.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": true,
+      "surface": "heater",
+      "water": false
+    },
+    "27": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": false,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          11.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          31.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "28": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2,
+        3
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "thm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "2A": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [],
+      "climate_bounds": [
+        3.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 3.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          4.0,
+          30.0
+        ],
+        "eco_temp": [
+          3.5,
+          29.5
+        ],
+        "ice_temp": [
+          3.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": true,
+      "surface": "heater",
+      "water": true
+    },
+    "2E": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "acm",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          6.0,
+          30.0
+        ],
+        "eco_temp": [
+          5.5,
+          29.5
+        ],
+        "ice_temp": [
+          5.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "31": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        1,
+        2
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "32": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        2
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [
+        [
+          "Off",
+          0
+        ],
+        [
+          "LST",
+          25
+        ],
+        [
+          "Baby Care",
+          50
+        ]
+      ],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "33": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        2
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [
+        [
+          "Off",
+          0
+        ],
+        [
+          "LST",
+          25
+        ],
+        [
+          "Baby Care",
+          50
+        ],
+        [
+          "70 %",
+          70
+        ],
+        [
+          "80 %",
+          80
+        ],
+        [
+          "90 %",
+          90
+        ]
+      ],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "34": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        1,
+        2
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "35": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        2
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [
+        [
+          "Off",
+          0
+        ],
+        [
+          "LST",
+          25
+        ],
+        [
+          "Baby Care",
+          50
+        ],
+        [
+          "70 %",
+          70
+        ],
+        [
+          "80 %",
+          80
+        ],
+        [
+          "90 %",
+          90
+        ]
+      ],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "36": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [
+        [
+          "Off",
+          0
+        ],
+        [
+          "LST",
+          25
+        ],
+        [
+          "Baby Care",
+          50
+        ],
+        [
+          "70 %",
+          70
+        ],
+        [
+          "80 %",
+          80
+        ],
+        [
+          "90 %",
+          90
+        ]
+      ],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "38": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        2
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [
+        [
+          "Off",
+          0
+        ],
+        [
+          "LST",
+          25
+        ],
+        [
+          "Baby Care",
+          50
+        ],
+        [
+          "70 %",
+          70
+        ],
+        [
+          "80 %",
+          80
+        ],
+        [
+          "90 %",
+          90
+        ]
+      ],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "39": {
+      "boost_bounds": [
+        5.0,
+        35.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        7.0,
+        35.0
+      ],
+      "duty_options": [],
+      "easy": true,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 35.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        35.0
+      ],
+      "min_c": 7.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          8.0,
+          35.0
+        ],
+        "eco_temp": [
+          7.5,
+          34.5
+        ],
+        "ice_temp": [
+          7.0,
+          34.0
+        ]
+      },
+      "runback_configs": [
+        1,
+        2
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "3D": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 300,
+      "boost_configs": [
+        2
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "43": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        1.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "bool",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 0.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          1.0,
+          30.0
+        ],
+        "eco_temp": [
+          0.5,
+          29.5
+        ],
+        "ice_temp": [
+          0.0,
+          29.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "47": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [
+        0,
+        2,
+        3
+      ],
+      "boost_params": [],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort",
+        "off"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          9.0,
+          30.0
+        ],
+        "eco_temp": [
+          7.0,
+          28.0
+        ],
+        "ice_temp": [
+          5.0,
+          7.0
+        ]
+      },
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "4C": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 120,
+      "boost_configs": [
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          6.0,
+          30.0
+        ],
+        "eco_temp": [
+          5.5,
+          29.5
+        ],
+        "ice_temp": [
+          5.0,
+          10.0
+        ]
+      },
+      "runback_configs": [
+        1,
+        2
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "4D": {
+      "boost_bounds": [
+        5.0,
+        30.0
+      ],
+      "boost_cap": 120,
+      "boost_configs": [
+        1,
+        2,
+        3
+      ],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        5.0,
+        30.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": true,
+      "lock": "int",
+      "max_c": 30.0,
+      "max_limit": true,
+      "max_limit_bounds": [
+        16.0,
+        30.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr",
+      "profiles": [
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": {
+        "comf_temp": [
+          6.0,
+          30.0
+        ],
+        "eco_temp": [
+          5.5,
+          29.5
+        ],
+        "ice_temp": [
+          5.0,
+          10.0
+        ]
+      },
+      "runback_configs": [
+        1,
+        2
+      ],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    },
+    "FF": {
+      "boost_bounds": [
+        5.0,
+        28.0
+      ],
+      "boost_cap": 1440,
+      "boost_configs": [],
+      "boost_params": [
+        2
+      ],
+      "climate_bounds": [
+        5.0,
+        28.0
+      ],
+      "duty_options": [],
+      "easy": false,
+      "ice_editable": false,
+      "lock": "bool",
+      "max_c": 28.0,
+      "max_limit": false,
+      "max_limit_bounds": [
+        16.0,
+        28.0
+      ],
+      "min_c": 5.0,
+      "node_type": "htr_mod",
+      "profiles": [
+        "off",
+        "frost",
+        "eco",
+        "comfort"
+      ],
+      "prog_bounds": null,
+      "runback_configs": [],
+      "storage_ui": false,
+      "surface": "heater",
+      "water": false
+    }
+  },
+  "schema": 1,
+  "source": "vendor mobile 2.54.2 EProductCodeValue + controller classes"
+}

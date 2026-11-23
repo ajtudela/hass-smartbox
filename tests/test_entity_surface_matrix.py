@@ -10,6 +10,8 @@ remaining per-property behaviour lives in the platform suites.
 
 from __future__ import annotations
 
+from dataclasses import replace
+import datetime as dt
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -125,6 +127,27 @@ class _NullPrefs:
         return NodeBoostPrefs()
 
 
+def _runtime_for_device(device: SmartboxDeviceInfo) -> SimpleNamespace:
+    """Build a runtime whose engine sees the box's away/power/connected state."""
+    engine = SmartboxEngine()
+    world_device = DeviceState(
+        dev_id=device.dev_id,
+        connected=True,
+        away={"away": False, "enabled": True, "forced": False},
+        power_limit=6000,
+        node_states={},
+    )
+    object.__setattr__(
+        engine, "_world", WorldState(devices={device.dev_id: world_device})
+    )
+    return SimpleNamespace(
+        engine=engine,
+        services=ServiceTargets(),
+        client=MagicMock(),
+        boost_prefs=_NullPrefs(),
+    )
+
+
 def _surface(node: SmartboxNodeInfo) -> dict[str, list[str]]:
     runtime = _runtime(node)
     entry = MagicMock()
@@ -144,7 +167,7 @@ def _surface(node: SmartboxNodeInfo) -> dict[str, list[str]]:
 
 
 def _device_surface(device: SmartboxDeviceInfo) -> dict[str, list[str]]:
-    runtime = _runtime()
+    runtime = _runtime_for_device(device)
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
@@ -162,9 +185,11 @@ def _device_surface(device: SmartboxDeviceInfo) -> dict[str, list[str]]:
 
 
 def _as_value(value: object) -> object:
-    """Render enums and mode lists as stable JSON-ish values."""
+    """Render enums, datetimes and mode lists as stable JSON-ish values."""
     if hasattr(value, "value"):
         value = value.value
+    if isinstance(value, (dt.datetime, dt.date)):
+        return "<timestamp>"
     if isinstance(value, (list, tuple)):
         return [str(item) for item in value]
     return value
@@ -203,6 +228,9 @@ def _climate_spec(entity) -> tuple[dict[str, object], object]:
         value = getattr(entity, attr, None)
         if value is not None:
             spec[attr] = _as_value(value)
+    preset = getattr(entity, "preset_mode", None)
+    if preset is not None:
+        spec["preset"] = _as_value(preset)
     return spec, getattr(entity, "hvac_mode", None)
 
 
@@ -276,6 +304,55 @@ def _attributes(node: SmartboxNodeInfo) -> dict[str, dict[str, object]]:
                 key = entity.unique_id.removeprefix(f"{node.node_id}_")
                 snapshot[f"{domain}.{key}"] = _entity_spec(domain, entity)
     return snapshot
+
+
+def _device_attributes(
+    device: SmartboxDeviceInfo,
+) -> dict[str, dict[str, object]]:
+    """Return every box-level entity's attributes for one device."""
+    runtime = _runtime_for_device(device)
+    entry = MagicMock()
+    entry.entry_id = "entry"
+    entry.options = {}
+    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    snapshot: dict[str, dict[str, object]] = {}
+    for domain, builder in PLATFORMS_DEVICE:
+        for entities, _ in builder(device, entry, runtime, fanout):
+            for entity in entities:
+                key = entity.unique_id.removeprefix(f"{device.dev_id}_")
+                snapshot[f"{domain}.{key}"] = _entity_spec(domain, entity)
+    return snapshot
+
+
+def _states(node: SmartboxNodeInfo) -> dict[str, object]:
+    """Return every non-None state, with the climate preset split out."""
+    runtime = _runtime(node)
+    entry = MagicMock()
+    entry.entry_id = "entry"
+    entry.options = {}
+    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    states: dict[str, object] = {}
+    for domain, builder in PLATFORMS:
+        for entities, _ in builder(node, entry, runtime, fanout):
+            for entity in entities:
+                name = f"{domain}.{entity.unique_id.removeprefix(f'{node.node_id}_')}"
+                if domain == "climate":
+                    hvac_mode = getattr(entity, "hvac_mode", None)
+                    if hvac_mode is not None:
+                        states[name] = _as_value(hvac_mode)
+                    preset = getattr(entity, "preset_mode", None)
+                    if preset is not None:
+                        states[f"{name}.preset"] = _as_value(preset)
+                    continue
+                if domain == "select":
+                    value = getattr(entity, "current_option", None)
+                elif domain in ("switch", "binary_sensor"):
+                    value = entity.is_on
+                else:
+                    value = getattr(entity, "native_value", None)
+                if value is not None:
+                    states[name] = _as_value(value)
+    return states
 
 
 CASES = [
@@ -1167,6 +1244,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "home"],
             "min_temp": 1.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1250,6 +1328,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 1.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1334,12 +1413,104 @@ SNAPSHOTS = {
         "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
         "binary_sensor.window_detection": {"device_class": "window"},
     },
+    "helki-0132-bool-lock": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.config_boost_temperature": {
+            "min": 5.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 21.0,
+        },
+        "number.config_boost_duration": {
+            "min": 60,
+            "max": 1440.0,
+            "step": 60,
+            "unit": "min",
+            "device_class": "duration",
+            "state": 60.0,
+        },
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.window_mode": {"entity_category": "config", "state": False},
+        "switch.true_radiant": {"entity_category": "config", "state": False},
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.lock": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.duty_limit": {"options": ["Off", "LST", "Baby Care"], "state": "Off"},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
     "tevolve-011A": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 7.0,
             "max_temp": 35.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1413,6 +1584,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 7.0,
             "max_temp": 35.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1486,6 +1658,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 5.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1558,6 +1731,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 5.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1622,6 +1796,7 @@ SNAPSHOTS = {
             "preset_modes": ["away", "home"],
             "min_temp": 5.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1669,6 +1844,62 @@ SNAPSHOTS = {
         "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
         "binary_sensor.window_detection": {"device_class": "window"},
     },
+    "haverland-011D-config0": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 5.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 5.0,
+            "max": 7.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.0,
+            "max": 28.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 9.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.boost": {"entity_category": "config", "state": False},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
     "htr-mod-010A": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
@@ -1683,6 +1914,7 @@ SNAPSHOTS = {
             ],
             "min_temp": 5.0,
             "max_temp": 28.0,
+            "preset": "schedule",
             "state": "auto",
         },
         "sensor.temperature": {
@@ -1705,12 +1937,87 @@ SNAPSHOTS = {
         "switch.lock": {"entity_category": "config", "state": False},
         "binary_sensor.window_detection": {"device_class": "window"},
     },
+    "storage-081C": {
+        "climate.thermostat": {
+            "hvac_modes": ["auto", "heat", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 5.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.charge_level": {
+            "device_class": "battery",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.target_charge": {"unit": "%", "state_class": "measurement"},
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.config_boost_temperature": {
+            "min": 5.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 21.0,
+        },
+        "number.config_boost_duration": {
+            "min": 60,
+            "max": 1440.0,
+            "step": 60,
+            "unit": "min",
+            "device_class": "duration",
+            "state": 60.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 5.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 5.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 6.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.boost": {"entity_category": "config", "state": False},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+        "binary_sensor.charging": {"device_class": "battery_charging"},
+    },
     "storage-0814": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "off"],
             "preset_modes": ["away", "home"],
             "min_temp": 3.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1764,12 +2071,80 @@ SNAPSHOTS = {
         "binary_sensor.window_detection": {"device_class": "window"},
         "binary_sensor.charging": {"device_class": "battery_charging"},
     },
+    "storage-0814-classic-flags": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 3.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.charge_level": {
+            "device_class": "battery",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.target_charge": {"unit": "%", "state_class": "measurement"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 3.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 3.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 4.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "select.storage_ui_mode": {
+            "options": ["Classic combined", "Classic accumulator"],
+            "state": "Classic combined",
+        },
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+        "binary_sensor.charging": {"device_class": "battery_charging"},
+    },
     "water-082A": {
         "climate.thermostat": {
             "hvac_modes": ["auto", "heat", "off"],
             "preset_modes": ["away", "home"],
             "min_temp": 3.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1798,6 +2173,42 @@ SNAPSHOTS = {
         "binary_sensor.water_ready": {},
         "binary_sensor.water_fully_ready": {},
     },
+    "water-082A-settings": {
+        "climate.thermostat": {
+            "hvac_modes": ["auto", "heat", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 3.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.charge_level": {
+            "device_class": "battery",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.target_charge": {"unit": "%", "state_class": "measurement"},
+        "select.priority": {"options": ["low", "medium", "high"]},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+        "binary_sensor.water_ready": {},
+        "binary_sensor.water_fully_ready": {},
+    },
     "thermostat-0104": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
@@ -1813,18 +2224,61 @@ SNAPSHOTS = {
         "switch.anti_grippage": {"entity_category": "config", "state": True},
         "binary_sensor.low_battery": {"device_class": "battery"},
     },
-    "thm-28-nopobes": {
+    "thm-28": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
-            "preset_modes": ["away", "home"],
+            "preset_modes": ["away", "boost", "home"],
             "min_temp": 7.0,
             "max_temp": 35.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
             "unit": "°C",
             "state_class": "measurement",
         },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.config_boost_temperature": {
+            "min": 5.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 21.0,
+        },
+        "number.config_boost_duration": {
+            "min": 60,
+            "max": 1440.0,
+            "step": 60,
+            "unit": "min",
+            "device_class": "duration",
+            "state": 60.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 7.0,
+            "max": 34.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.5,
+            "max": 34.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 8.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.easy_mode": {"entity_category": "config", "state": False},
+        "switch.runback_mode": {"entity_category": "config", "state": False},
         "switch.lock": {"entity_category": "config", "state": False},
         "binary_sensor.window_detection": {"device_class": "window"},
         "binary_sensor.low_battery": {"device_class": "battery"},
@@ -1848,12 +2302,276 @@ SNAPSHOTS = {
         },
         "switch.no_node_power_limit": {"entity_category": "config", "state": False},
     },
+    "base-0402-nocaps": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.lock": {"entity_category": "config", "state": False},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "base-0402-boxless": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.lock": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.control_mode": {
+            "options": [
+                "PID (15 min. period)",
+                "PID (30 min. period)",
+                "Hysteresis (0.2 °C)",
+                "Hysteresis (0.3 °C)",
+                "Hysteresis (0.5 °C)",
+                "Hysteresis (0.7 °C)",
+            ],
+            "state": "Hysteresis (0.2 °C)",
+        },
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "helki-0132-config0": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.window_mode": {"entity_category": "config", "state": False},
+        "switch.true_radiant": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.duty_limit": {"options": ["Off", "LST", "Baby Care"], "state": "Off"},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "tevolve-0134-config0": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 7.0,
+            "max": 34.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.5,
+            "max": 34.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 8.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.easy_mode": {"entity_category": "config", "state": False},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
     "tevolve-0134-full-temp-and-runback": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
             "preset_modes": ["away", "boost", "runback", "home"],
             "min_temp": 7.0,
             "max_temp": 35.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -1936,12 +2654,489 @@ SNAPSHOTS = {
         "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
         "binary_sensor.window_detection": {"device_class": "window"},
     },
+    "tevolve-0134-full-fixed-only": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 7.0,
+            "max": 34.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.5,
+            "max": 34.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 8.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.easy_mode": {"entity_category": "config", "state": False},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "tevolve-0134-full-no-modes": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 7.0,
+            "max": 34.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.5,
+            "max": 34.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 8.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.easy_mode": {"entity_category": "config", "state": False},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "thm-28-nopobes": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "switch.lock": {"entity_category": "config", "state": False},
+        "binary_sensor.window_detection": {"device_class": "window"},
+        "binary_sensor.low_battery": {"device_class": "battery"},
+    },
+    "haverland-011D-fw16": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 5.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.prog_frost_temperature": {
+            "min": 5.0,
+            "max": 7.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.0,
+            "max": 28.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 9.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.lock": {"entity_category": "config", "state": False},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "tevolve-0127": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 7.0,
+            "max_temp": 35.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.5,
+            "max": 31.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 11.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.easy_mode": {"entity_category": "config", "state": False},
+        "switch.lock": {"entity_category": "config", "state": False},
+        "binary_sensor.window_detection": {"device_class": "window"},
+        "binary_sensor.pir_presence": {"device_class": "occupancy"},
+    },
+    "climastar-013D": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.config_boost_temperature": {
+            "min": 5.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 21.0,
+        },
+        "number.config_boost_duration": {
+            "min": 60,
+            "max": 300.0,
+            "step": 60,
+            "unit": "min",
+            "device_class": "duration",
+            "state": 60.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.window_mode": {"entity_category": "config", "state": False},
+        "switch.true_radiant": {"entity_category": "config", "state": False},
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.lock": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.priority": {"options": ["low", "medium", "high"]},
+        "select.control_mode": {
+            "options": [
+                "PID",
+                "Hysteresis (0.2 °C)",
+                "Hysteresis (0.3 °C)",
+                "Hysteresis (0.5 °C)",
+                "Hysteresis (0.7 °C)",
+            ],
+            "state": "Hysteresis (0.2 °C)",
+        },
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "haverland-0147": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 5.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 5.0,
+            "max": 7.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 7.0,
+            "max": 28.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 9.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+    "lhz-relay-0136-config0": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "boost", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.boost_end_time": {"device_class": "timestamp"},
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 30.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 29.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 29.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 30.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.window_mode": {"entity_category": "config", "state": False},
+        "switch.true_radiant": {"entity_category": "config", "state": False},
+        "switch.boost": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "select.duty_limit": {
+            "options": ["Off", "LST", "Baby Care", "70 %", "80 %", "90 %"],
+            "state": "Off",
+        },
+        "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
     "lhz-wifi-0138": {
         "climate.thermostat": {
             "hvac_modes": ["heat", "auto", "off"],
             "preset_modes": ["away", "boost", "home"],
             "min_temp": 1.0,
             "max_temp": 30.0,
+            "preset": "home",
         },
         "sensor.temperature": {
             "device_class": "temperature",
@@ -2029,6 +3224,185 @@ SNAPSHOTS = {
         "select.lock_mode": {"options": ["Off", "Local lock", "Remote lock"]},
         "binary_sensor.window_detection": {"device_class": "window"},
     },
+    "tevolve-relay-011E": {
+        "climate.thermostat": {
+            "hvac_modes": ["heat", "auto", "off"],
+            "preset_modes": ["away", "home"],
+            "min_temp": 1.0,
+            "max_temp": 30.0,
+            "preset": "home",
+        },
+        "sensor.temperature": {
+            "device_class": "temperature",
+            "unit": "°C",
+            "state_class": "measurement",
+        },
+        "sensor.power": {
+            "device_class": "power",
+            "unit": "W",
+            "state_class": "measurement",
+            "state": 0,
+        },
+        "sensor.total_consumption": {
+            "device_class": "energy",
+            "unit": "Wh",
+            "state_class": "total_increasing",
+        },
+        "sensor.duty_cycle": {
+            "device_class": "power_factor",
+            "unit": "%",
+            "state_class": "measurement",
+        },
+        "sensor.schedule": {"device_class": "enum"},
+        "number.away_offset": {
+            "min": 0.0,
+            "max": 5.0,
+            "step": 0.5,
+            "unit": "°C",
+            "state": 2.0,
+        },
+        "number.max_temperature": {
+            "min": 16.0,
+            "max": 35.0,
+            "step": 1.0,
+            "unit": "°C",
+            "device_class": "temperature",
+            "state": 30.0,
+        },
+        "number.prog_frost_temperature": {
+            "min": 0.0,
+            "max": 34.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_eco_temperature": {
+            "min": 0.5,
+            "max": 34.5,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "number.prog_comfort_temperature": {
+            "min": 1.0,
+            "max": 35.0,
+            "step": 0.5,
+            "unit": "°C",
+            "device_class": "temperature",
+        },
+        "switch.lock": {"entity_category": "config", "state": False},
+        "switch.max_temperature_limit": {"entity_category": "config", "state": True},
+        "binary_sensor.window_detection": {"device_class": "window"},
+    },
+}
+CASES_BY_ID = {case.id: case.values[1] for case in CASES}
+
+STATE_CASES = [
+    pytest.param(
+        replace(
+            CASES_BY_ID["helki-0132"],
+            status={
+                "units": "C",
+                "stemp": "21.0",
+                "boost": True,
+                "boost_mode": "temp_and_time",
+                "boost_end_min": 600,
+                "boost_end_day": 0,
+                "mode": "auto",
+                "active": True,
+                "power": "1500",
+                "duty": "100",
+            },
+        ),
+        {
+            "climate.thermostat.preset": "boost",
+            "switch.boost": True,
+            "select.duty_limit": "Off",
+            "sensor.boost_end_time": "<timestamp>",
+            "sensor.duty_cycle": 100.0,
+        },
+        id="helki-boost-active",
+    ),
+    pytest.param(
+        replace(
+            CASES_BY_ID["tevolve-011A"],
+            status={
+                "units": "C",
+                "stemp": "20.0",
+                "runback": True,
+                "easy": False,
+                "mode": "auto",
+                "active": True,
+                "power": "1000",
+            },
+        ),
+        {
+            "climate.thermostat.preset": "home",
+            "switch.runback_mode": True,
+            "switch.easy_mode": False,
+        },
+        id="triac-runback-flag",
+    ),
+    pytest.param(
+        replace(
+            CASES_BY_ID["tevolve-0134-full-temp-and-runback"],
+            status={
+                "units": "C",
+                "stemp": "20.0",
+                "boost": True,
+                "boost_mode": "runback",
+                "boost_end_min": 600,
+                "boost_end_day": 0,
+                "mode": "auto",
+                "boost_modes_available": ["temp_and_time", "runback"],
+                "active": True,
+                "power": "800",
+            },
+        ),
+        {
+            "climate.thermostat.preset": "runback",
+            "switch.boost": True,
+            "number.config_runback_temperature": 20.0,
+            "number.config_runback_duration": 30.0,
+        },
+        id="full-runback-active",
+    ),
+    pytest.param(
+        replace(
+            CASES_BY_ID["storage-0814"],
+            status={
+                "units": "C",
+                "stemp": "20.0",
+                "charging": True,
+                "charge_level": "50",
+                "target_charge": "80",
+                "mode": "auto",
+                "power": "1200",
+            },
+        ),
+        {
+            "binary_sensor.charging": True,
+            "sensor.charge_level": 1000,
+            "select.storage_ui_mode": "Classic combined",
+        },
+        id="storage-charging",
+    ),
+]
+
+
+DEVICE_ATTRIBUTES = {
+    "box-with-power-limit": {
+        "switch.away_status": {"state": False},
+        "switch.no_power_limit": {"entity_category": "config", "state": False},
+        "number.power_limit": {"min": 0.0, "max": 60000, "unit": "W", "state": 6000},
+        "sensor.rtc_drift": {"unit": "s", "state_class": "measurement"},
+        "binary_sensor.connected": {"device_class": "connectivity", "state": True},
+    },
+    "boxless": {
+        "switch.away_status": {"state": False},
+        "sensor.rtc_drift": {"unit": "s", "state_class": "measurement"},
+        "binary_sensor.connected": {"device_class": "connectivity", "state": True},
+    },
 }
 
 DEVICE_CASES = [
@@ -2074,7 +3448,26 @@ def test_entity_attribute_matrix(node, expected) -> None:
     assert _attributes(node) == expected
 
 
+@pytest.mark.parametrize(("node", "expected"), STATE_CASES)
+def test_entity_state_matrix(node, expected) -> None:
+    """A live frame maps to the expected presets, flags and values."""
+    states = _states(node)
+    for key, value in expected.items():
+        assert states.get(key) == value, key
+
+
 @pytest.mark.parametrize(("box_power_limit_available", "expected"), DEVICE_CASES)
 def test_device_surface_matrix(box_power_limit_available, expected) -> None:
     """The box-level domains and unique keys for both box capabilities."""
     assert _device_surface(_device(box_power_limit_available)) == expected
+
+
+@pytest.mark.parametrize(
+    ("box_power_limit_available", "expected"),
+    [(case.values[0], DEVICE_ATTRIBUTES[case.id]) for case in DEVICE_CASES],
+    ids=[case.id for case in DEVICE_CASES],
+)
+def test_device_attribute_matrix(box_power_limit_available, expected) -> None:
+    """The box-level options, bounds and states for both box capabilities."""
+    device = _device(box_power_limit_available)
+    assert _device_attributes(device) == expected

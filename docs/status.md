@@ -4,6 +4,19 @@
 
 *Updated 2026-11-22. Keep this a 90-second read and prune entries as they close.*
 
+## Device-semantics migration (in progress)
+
+- Preservation branches: `preserve/pre-migration-2026-11-23` in both repos
+  (commit `e3b927d` integration, `cfc6491` library). Migration work happens on
+  `migration/device-semantics`.
+- Validation baseline: reviewed product-code fixture (51 codes), per-unit
+  entity-registry/diagnostics goldens, service snapshot, activation
+  request-shape matrix, and an old-vs-new profile equivalence harness.
+  Integration suite: 2076 passed; library: 696 passed.
+- Slice 1 landed: `smartbox.device.profile` owns limits/profiles/bounds and
+  `resolve_profile`; the integration re-exports them. Slices 2-4 remain;
+  `docs/vendor-deviations.md` lists the behaviour the extraction must keep.
+
 ## State of 3.2.1
 
 - Library `3.2.1` and integration `3.2.1` are the current stable releases. The integration pins `smartbox>=3.2.1,<3.3`; the upper bound keeps a future minor from installing before the integration is re-pinned.

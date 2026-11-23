@@ -13,7 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from smartbox.protocol.values import celsius_to_node_units, parse_number_or_none
+from smartbox.core.merging import boost_config
+from smartbox.protocol.values import (
+    BoostConfig,
+    celsius_to_node_units,
+    parse_number_or_none,
+)
 
 from .adapter import node_boost_params, node_runback_limits, node_runback_params
 from .boost_prefs import BoostPrefs, NodeBoostPrefs
@@ -75,9 +80,14 @@ def plan_boost(
     legacy = boost_uses_legacy_path(pid, setup)
     mode = None if legacy else boost_activation_mode(pid, setup, status)
 
-    if legacy and not boost_activation_takes_parameters(pid, setup):
-        return ActivationPlan(None, None, None, legacy=True)
-    if not legacy and mode is None and node.node_type != "acm":
+    if not boost_activation_takes_parameters(pid, setup) and mode is None:
+        return ActivationPlan(None, None, None, legacy=legacy)
+    if (
+        not legacy
+        and mode is None
+        and boost_config(setup) == BoostConfig.FULL
+        and node.node_type != "acm"
+    ):
         msg = "boost_mode_unavailable"
         raise validation_error(msg)
     if mode == "max_temp_fixed_time":

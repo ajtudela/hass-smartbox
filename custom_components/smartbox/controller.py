@@ -1,333 +1,61 @@
-"""Per-controller temperature ranges and programme profile catalogues.
+"""Controller families: limits, profiles, and the remaining adapter gates.
 
-The vendor app resolves a node's controller from ``version.pid[2:4]`` and the
-wire node type, then exposes that controller's own setpoint and programme
-limits (``docs/api-contract.md`` §1.9). This module encodes the decoded table
-once so the climate entity, the number entities and the write sanitizer agree.
-
-The controller constants are client-side app values. The app can additionally
-raise the minimum with a runtime ``controllerOpts.minTempCelsius``; the decoded
-2.54.2 builds never populate that field, and the mobile UI stops at 1.0 °C on a
-0-30 family (observed on HJM pid 0132). The climate floor therefore applies a
-1.0 °C UI floor on top of the controller minimum. Programme bounds keep the
-controller minimum, because the app derives them from it (comfort starts at
-``min + 2 * profile_offset``, which is 1.0 on the base family).
+The neutral limits and programme catalogue now live in
+``smartbox.device.profile``. This module re-exports them for the adapter's
+existing imports and keeps the gates that have not moved yet: lock kind, boost
+kinds/activation policy, and the surface predicates.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Literal
 
 from smartbox.core.merging import boost_config
+from smartbox.device.profile import (
+    ELNUR_STORAGE_CODES,
+    HAVERLAND_FIXED_TIME_CODES,
+    HELKI_HEATER_CODES,
+    HELKI_STORAGE_CODES,
+    PROFILES_BASE,
+    PROFILES_HTR_MOD,
+    PROFILES_WITH_OFF,
+    TEVOLVE_ATC_CODES,
+    TEVOLVE_THERMOSTAT_CODES,
+    TEVOLVE_TRIAC_CODES,
+    TEVOLVE_WIFI_CODES,
+    UI_MIN_TEMP_C,
+    ControllerLimits,
+    boost_temperature_bounds,
+    climate_bounds,
+    controller_limits,
+    firmware_at_least,
+    is_helki_heater_family,
+    is_htr_mod_controller,
+    is_lhz_family,
+    is_lhz_relay,
+    is_tevolve_atc_family,
+    is_tevolve_triac_family,
+    is_tevolve_wifi_family,
+    max_limit_bounds,
+    product_code,
+    profile_bounds,
+    prog_bounds_c,
+)
 from smartbox.protocol.values import BoostConfig
 
 from .const import SmartboxNodeType
 
-Profile = Literal["frost", "eco", "comfort", "off"]
+_product_code = product_code
 
-PROFILES_BASE: tuple[Profile, ...] = ("frost", "eco", "comfort")
-PROFILES_WITH_OFF: tuple[Profile, ...] = ("frost", "eco", "comfort", "off")
-PROFILES_HTR_MOD: tuple[Profile, ...] = ("off", "frost", "eco", "comfort")
-
-# The mobile UI's absolute floor. A controller with a higher minimum keeps it.
-UI_MIN_TEMP_C = 1.0
-
-# Family code sets from EProductCodeValue (docs/api-contract.md §3.1).
-# HelkiHeater subclasses: 32 HelkiWifi, 35 Helki7S, 33 LhzFourButton,
-# 38 LhzWifi, 36 LhzRelay. Codes 0D/18/43 fall to the factory default
-# ElectricHeaterController.
-_HELKI_HEATER_CODES = frozenset({"32", "35", "33", "38", "36"})
-_LHZ_HEATER_CODES = frozenset({"35", "33", "38", "36"})
-_HAVERLAND_CODES = frozenset({"17", "1D", "47"})
-_HAVERLAND_HTR_MOD_CODES = frozenset({"0A", "FF"})
-_TEVOLVE_TRIAC_CODES = frozenset({"1A", "21", "23", "27", "28"})
-_TEVOLVE_WIFI_CODES = frozenset({"31", "34", "39"})
-_TEVOLVE_ATC_CODES = frozenset({"4C", "4D"})
-_TEVOLVE_THERMOSTAT_CODES = frozenset({"28"})
-# Haverland's app-side boost is fixed max-temp, with no editable params.
-_HAVERLAND_FIXED_TIME_CODES = frozenset({"17", "1D", "47"})
-_TEVOLVE_RELAY_CODES = frozenset({"1E"})
-_HELKI_STORAGE_CODES = frozenset({"1C", "2E"})
-_ELNUR_STORAGE_CODES = frozenset({"14", "20", "25", "2A"})
-_THERMOSTAT_CODES = frozenset({"04", "09", "0F"})
-
-
-@dataclass(frozen=True)
-class ControllerLimits:
-    """Setpoint and programme limits for one controller family, in Celsius."""
-
-    min_c: float
-    max_c: float
-    ice_min_c: float | None = None
-    ice_max_c: float | None = None
-    profile_offset_c: float = 0.5
-    # TevolvePIRHeaterController raises the comfort/eco gap to 3.5 °C
-    # (PROG_TEMP_COMFORT_ECO_OFFSET_IN_CELSIUS); the default keeps the app's
-    # symmetric offset rule.
-    comfort_eco_offset_c: float | None = None
-    # PIR exposes the ICE slot non-editable; the wire still carries ice_temp.
-    ice_editable: bool = True
-    profiles: tuple[Profile, ...] = PROFILES_BASE
-    htr_mod: bool = False
-    max_limit_max_c: float | None = None
-    boost_max_c: float | None = None
-    boost_max_minutes: int = 1440
-    prog_min_c: float | None = None
-    prog_max_c: float | None = None
-
-
-_BASE_LIMITS = ControllerLimits(min_c=0.0, max_c=30.0)
-_HAVERLAND_LIMITS = ControllerLimits(
-    min_c=5.0,
-    max_c=30.0,
-    ice_min_c=5.0,
-    ice_max_c=7.0,
-    profile_offset_c=2.0,
-    profiles=PROFILES_WITH_OFF,
-)
-_HTR_MOD_LIMITS = ControllerLimits(
-    min_c=5.0,
-    max_c=28.0,
-    profile_offset_c=1.0,
-    profiles=PROFILES_HTR_MOD,
-    htr_mod=True,
-)
-_TEVOLVE_TRIAC_LIMITS = ControllerLimits(min_c=7.0, max_c=35.0)
-# TevolvePIRHeaterController raises the comfort/eco gap to 3.5 °C and makes
-# the ICE slot non-editable.
-_TEVOLVE_PIR_LIMITS = ControllerLimits(
-    min_c=7.0,
-    max_c=35.0,
-    comfort_eco_offset_c=3.5,
-    ice_editable=False,
-)
-# TevolveWifiHeaterController extends the triac controller without new bounds.
-_TEVOLVE_WIFI_LIMITS = _TEVOLVE_TRIAC_LIMITS
-_TEVOLVE_ATC_LIMITS = ControllerLimits(
-    min_c=5.0, max_c=30.0, ice_min_c=5.0, ice_max_c=10.0, boost_max_minutes=120
-)
-_TEVOLVE_RELAY_LIMITS = ControllerLimits(min_c=0.0, max_c=35.0)
-_ELNUR_STORAGE_LIMITS = ControllerLimits(min_c=3.0, max_c=30.0)
-_THERMOSTAT_LIMITS = ControllerLimits(min_c=7.0, max_c=35.0)
-_HELKI_LIMITS = ControllerLimits(min_c=0.0, max_c=30.0, profiles=PROFILES_WITH_OFF)
-_CLIMASTAR_TRIAC_LIMITS = ControllerLimits(min_c=0.0, max_c=30.0, boost_max_minutes=300)
-
-# Code -> fixed controller limits. Dynamic families (htr_mod, Helki storage)
-# are resolved before this table.
-_CODE_LIMITS: dict[str, ControllerLimits] = {
-    **dict.fromkeys(_HELKI_HEATER_CODES, _HELKI_LIMITS),
-    **dict.fromkeys(_HAVERLAND_CODES, _HAVERLAND_LIMITS),
-    **dict.fromkeys(_TEVOLVE_TRIAC_CODES, _TEVOLVE_TRIAC_LIMITS),
-    "27": _TEVOLVE_PIR_LIMITS,
-    **dict.fromkeys(_TEVOLVE_WIFI_CODES, _TEVOLVE_WIFI_LIMITS),
-    **dict.fromkeys(_TEVOLVE_ATC_CODES, _TEVOLVE_ATC_LIMITS),
-    "3D": _CLIMASTAR_TRIAC_LIMITS,
-    **dict.fromkeys(_TEVOLVE_RELAY_CODES, _TEVOLVE_RELAY_LIMITS),
-    **dict.fromkeys(_ELNUR_STORAGE_CODES, _ELNUR_STORAGE_LIMITS),
-    **dict.fromkeys(_THERMOSTAT_CODES, _THERMOSTAT_LIMITS),
-    **dict.fromkeys(
-        (
-            "01",
-            "02",
-            "07",
-            "08",
-            "0B",
-            "0C",
-            "0D",
-            "10",
-            "11",
-            "12",
-            "13",
-            "16",
-            "18",
-            "1B",
-            "1F",
-            "24",
-            "43",
-            "FF",
-        ),
-        _BASE_LIMITS,
-    ),
-}
-
-
-_PID_CODE_START = 2
-_PID_CODE_END = 4
-
-
-def _product_code(pid: str | None) -> str | None:
-    """Return ``pid[2:4]`` uppercased, matching the app's dispatch."""
-    if not isinstance(pid, str):
-        return None
-    value = pid.strip().upper()
-    return value[_PID_CODE_START:_PID_CODE_END] if len(value) >= _PID_CODE_END else None
-
-
-def _setup_number(setup: Mapping[str, object], key: str) -> float | None:
-    """Read one numeric setup field, tolerating wire strings."""
-    value = setup.get(key)
-    if isinstance(value, bool) or value is None:
-        return None
-    try:
-        return float(str(value))
-    except TypeError, ValueError:
-        return None
-
-
-def firmware_at_least(version: str | None, target: str) -> bool:
-    """Compare dotted firmware versions numerically (missing parts are 0)."""
-    if not isinstance(version, str):
-        return False
-
-    def parts(value: str) -> tuple[int, ...]:
-        try:
-            return tuple(int(part) for part in value.split(".") if part != "")
-        except ValueError:
-            return ()
-
-    left = parts(version)
-    right = parts(target)
-    if not left:
-        return False
-    width = max(len(left), len(right))
-    return left + (0,) * (width - len(left)) >= right + (0,) * (width - len(right))
-
-
-def _helki_storage_limits(
-    fw_version: str | None, setup: Mapping[str, object]
-) -> ControllerLimits:
-    """Return the Helki storage profile: setup bounds and fw-gated profiles."""
-    min_c = _setup_number(setup, "min_stemp")
-    max_c = _setup_number(setup, "max_stemp")
-    profiles = (
-        PROFILES_WITH_OFF if firmware_at_least(fw_version, "1.8") else PROFILES_BASE
-    )
-    return ControllerLimits(
-        min_c=min_c if min_c is not None else 5.0,
-        max_c=max_c if max_c is not None else 30.0,
-        profiles=profiles,
-    )
-
-
-def controller_limits(
-    node_type: str,
-    pid: str | None,
-    fw_version: str | None,
-    setup: Mapping[str, object] | None = None,
-) -> ControllerLimits:
-    """Resolve the decoded controller limits for one node.
-
-    ``node_type`` is the wire type. The app dispatches ``htr_mod`` nodes and
-    the Haverland htr_mod product codes to the off-first htr_mod catalogue;
-    a ``ff``-pid plain htr keeps the ElectricHeater catalogue.
-    """
-    setup = setup or {}
-    code = _product_code(pid)
-    if is_htr_mod_controller(pid, node_type):
-        return _HTR_MOD_LIMITS
-
-    if code in _HELKI_STORAGE_CODES:
-        return _helki_storage_limits(fw_version, setup)
-
-    limits = _CODE_LIMITS.get(code or "")
-    if limits is not None:
-        return limits
-    if node_type == SmartboxNodeType.ACM:
-        # The factory's default branch for an acm node is
-        # HelkiStorageHeaterController, including an unknown/00 PID.
-        return _helki_storage_limits(fw_version, setup)
-    # Every unlisted htr PID falls to the factory's default branch,
-    # ElectricHeaterController (0-30). The wire type decides only the acm case.
-    return _BASE_LIMITS
-
-
-def climate_bounds(
-    limits: ControllerLimits, max_limit_c: float | None
-) -> tuple[float, float]:
-    """Return the climate setpoint ``(min, max)`` in Celsius.
-
-    The maximum is clamped by the node's ``max_stemp_limit`` when it is
-    non-zero; the minimum applies the mobile UI's 1.0 °C floor.
-    """
-    if limits.htr_mod:
-        # htr_mod's per-mode bounds are handled by the climate entity; this is
-        # only the global fallback.
-        return (limits.min_c, limits.max_c)
-    maximum = limits.max_c
-    if max_limit_c is not None:
-        maximum = min(maximum, max_limit_c)
-    return (max(limits.min_c, UI_MIN_TEMP_C), maximum)
-
-
-def max_limit_bounds(limits: ControllerLimits) -> tuple[float, float]:
-    """Return the ``max_stemp_limit`` setting bounds in Celsius."""
-    maximum = (
-        limits.max_limit_max_c if limits.max_limit_max_c is not None else limits.max_c
-    )
-    return (max(limits.min_c + 1.0, 16.0), maximum)
-
-
-def boost_temperature_bounds(limits: ControllerLimits) -> tuple[float, float]:
-    """Return the boost-temperature setting bounds in Celsius."""
-    maximum = limits.boost_max_c if limits.boost_max_c is not None else limits.max_c
-    return (5.0, maximum)
-
-
-def _profile_ranges(limits: ControllerLimits) -> dict[str, tuple[float, float]]:
-    """Return the programme ranges in Celsius, keyed by profile.
-
-    The PIR family replaces the symmetric ``offset`` gap between frost, eco
-    and comfort with its wider ``comfort_eco_offset_c`` on the eco ceiling and
-    the comfort floor.
-    """
-    offset = limits.profile_offset_c
-    prog_min = limits.prog_min_c if limits.prog_min_c is not None else limits.min_c
-    prog_max = limits.prog_max_c if limits.prog_max_c is not None else limits.max_c
-    ice_min = limits.ice_min_c if limits.ice_min_c is not None else prog_min
-    ice_max = (
-        limits.ice_max_c if limits.ice_max_c is not None else prog_max - 2.0 * offset
-    )
-    gap = limits.comfort_eco_offset_c
-    eco_max = prog_max - (gap if gap is not None else offset)
-    comfort_min = prog_min + (gap + offset if gap is not None else 2.0 * offset)
-    return {
-        "frost": (ice_min, ice_max),
-        "eco": (prog_min + offset, eco_max),
-        "comfort": (comfort_min, prog_max),
-    }
-
-
-def profile_bounds(
-    limits: ControllerLimits, profile: str
-) -> tuple[float, float] | None:
-    """Return ``(min, max)`` Celsius for one editable programme profile.
-
-    ``None`` means the profile has no editable range (htr_mod's ICE slot, the
-    PIR ICE slot and the OFF profile).
-    """
-    if profile == "off":
-        return None
-    if limits.htr_mod:
-        return {"eco": (10.0, 18.0), "comfort": (18.0, 28.0)}.get(profile)
-    if profile == "frost" and not limits.ice_editable:
-        return None
-    return _profile_ranges(limits).get(profile)
-
-
-def prog_bounds_c(limits: ControllerLimits) -> dict[str, tuple[float, float]] | None:
-    """Return the write-sanitizer bounds in Celsius, or None for htr_mod.
-
-    The ICE clamp is included even when the slot is read-only: the wire body
-    carries ``ice_temp`` back unchanged, and the engine needs all three keys
-    when bounds are supplied.
-    """
-    if limits.htr_mod:
-        return None
-    names = {"ice_temp": "frost", "eco_temp": "eco", "comf_temp": "comfort"}
-    ranges = _profile_ranges(limits)
-    return {key: ranges[profile] for key, profile in names.items()}
+# Family sets still consumed by the lock/boost gates below.
+_HELKI_HEATER_CODES = HELKI_HEATER_CODES
+_HAVERLAND_FIXED_TIME_CODES = HAVERLAND_FIXED_TIME_CODES
+_TEVOLVE_TRIAC_CODES = TEVOLVE_TRIAC_CODES
+_TEVOLVE_WIFI_CODES = TEVOLVE_WIFI_CODES
+_TEVOLVE_ATC_CODES = TEVOLVE_ATC_CODES
+_TEVOLVE_THERMOSTAT_CODES = TEVOLVE_THERMOSTAT_CODES
+_HELKI_STORAGE_CODES = HELKI_STORAGE_CODES
+_ELNUR_STORAGE_CODES = ELNUR_STORAGE_CODES
 
 
 def lock_kind(
@@ -366,11 +94,6 @@ def lock_kind(
         )
         return "int" if super_lock else "bool"
     return "bool"
-
-
-def is_lhz_family(pid: str | None) -> bool:
-    """Return True for the controllers that hard-code 0/80/90 duty presets."""
-    return _product_code(pid) in _LHZ_HEATER_CODES
 
 
 _EASY_CODES = _TEVOLVE_TRIAC_CODES | _TEVOLVE_WIFI_CODES
@@ -450,11 +173,7 @@ def boost_params_editable(  # noqa: PLR0911 - one return per family/config
 
 
 def boost_is_fixed_time(pid: str | None) -> bool:
-    """Whether the app activates boost in its fixed-time mode.
-
-    Haverland 17/1D/47 override ``getSupportedBoostMode`` to
-    MAX_TEMP_FIXED_TIME for every configuration.
-    """
+    """Whether the app activates boost in its fixed-time mode."""
     return _product_code(pid) in _HAVERLAND_FIXED_TIME_CODES
 
 
@@ -500,12 +219,7 @@ def boost_params_configurable(
     setup: Mapping[str, object] | None,
     status: Mapping[str, object] | None,
 ) -> bool:
-    """Whether HA should expose boost temperature/duration controls.
-
-    Legacy controllers keep the values on the device. FULL WiFi/ATC expose
-    them only when the endpoint advertises ``temp_and_time``; a fixed-only or
-    unknown list has nothing to configure.
-    """
+    """Whether HA should expose boost temperature/duration controls."""
     if boost_params_editable(node_type, pid, setup):
         return True
     return boost_activation_mode(pid, setup, status) == "temp_and_time"
@@ -516,11 +230,7 @@ def runback_params_configurable(
     setup: Mapping[str, object] | None,
     status: Mapping[str, object] | None,
 ) -> bool:
-    """Whether HA should expose runback temperature/duration controls.
-
-    Only the FULL endpoint carries runback parameters. Legacy runback is the
-    status flag, and its device defaults are not part of the activation.
-    """
+    """Whether HA should expose runback temperature/duration controls."""
     if boost_config(setup or {}) != BoostConfig.FULL:
         return False
     code = _product_code(pid)
@@ -532,14 +242,7 @@ def runback_params_configurable(
 def boost_activation_takes_parameters(
     pid: str | None, setup: Mapping[str, object] | None
 ) -> bool:
-    """Whether activation should carry the stored boost temperature/duration.
-
-    Fixed-time controllers ignore the pair (Haverland 17/1D/47 and any
-    controller whose ``boost_config`` is MAX_TEMP_FIXED_TIME). The other BOOST
-    controllers accept it; the full WiFi/ATC path needs it even when the
-    parameter numbers are withheld until its ``boost_modes_available``
-    parameters are modelled.
-    """
+    """Whether activation should carry the stored boost temperature/duration."""
     code = _product_code(pid)
     if code in _HAVERLAND_FIXED_TIME_CODES:
         return False
@@ -568,19 +271,6 @@ def supports_runback(
             BoostConfig.MAX_TEMP_FIXED_TIME,
         }
     return False
-
-
-def is_htr_mod_controller(pid: str | None, node_type: str | None = None) -> bool:
-    """Return True for the product codes that use htr_mod control.
-
-    Code ``0A`` always dispatches to the htr_mod controller; code ``FF`` does
-    so only for the ``htr_mod`` wire type (a plain ``htr`` FF stays the base
-    ElectricHeater).
-    """
-    code = _product_code(pid)
-    if code == "0A":
-        return True
-    return code == "FF" and node_type == SmartboxNodeType.HTR_MOD
 
 
 # The factory dispatches these THM products to an htr-family controller.
@@ -619,26 +309,38 @@ def is_thermostat_surface(node_type: str, pid: str | None) -> bool:
     return node_type == SmartboxNodeType.THM and not is_heater_surface(node_type, pid)
 
 
-def is_helki_heater_family(pid: str | None) -> bool:
-    """Return True for the HelkiHeater/Lhz controller chain."""
-    return _product_code(pid) in _HELKI_HEATER_CODES
-
-
-def is_lhz_relay(pid: str | None) -> bool:
-    """Return True for the LhzRelayHeaterController (code 36)."""
-    return _product_code(pid) == "36"
-
-
-def is_tevolve_triac_family(pid: str | None) -> bool:
-    """Return True for Tevolve triac/towel-rail/PIR controllers."""
-    return _product_code(pid) in _TEVOLVE_TRIAC_CODES
-
-
-def is_tevolve_wifi_family(pid: str | None) -> bool:
-    """Return True for the Tevolve WiFi controller chain."""
-    return _product_code(pid) in _TEVOLVE_WIFI_CODES
-
-
-def is_tevolve_atc_family(pid: str | None) -> bool:
-    """Return True for the Tevolve/Ferroli ATC controllers."""
-    return _product_code(pid) in _TEVOLVE_ATC_CODES
+__all__ = [
+    "PROFILES_BASE",
+    "PROFILES_HTR_MOD",
+    "PROFILES_WITH_OFF",
+    "UI_MIN_TEMP_C",
+    "ControllerLimits",
+    "boost_activation_mode",
+    "boost_activation_takes_parameters",
+    "boost_is_fixed_time",
+    "boost_modes_available",
+    "boost_params_configurable",
+    "boost_params_editable",
+    "boost_temperature_bounds",
+    "boost_uses_legacy_path",
+    "climate_bounds",
+    "controller_limits",
+    "firmware_at_least",
+    "has_no_probes",
+    "is_heater_surface",
+    "is_helki_heater_family",
+    "is_htr_mod_controller",
+    "is_lhz_family",
+    "is_lhz_relay",
+    "is_tevolve_atc_family",
+    "is_tevolve_triac_family",
+    "is_tevolve_wifi_family",
+    "is_thermostat_surface",
+    "lock_kind",
+    "max_limit_bounds",
+    "profile_bounds",
+    "prog_bounds_c",
+    "runback_params_configurable",
+    "supports_easy",
+    "supports_runback",
+]

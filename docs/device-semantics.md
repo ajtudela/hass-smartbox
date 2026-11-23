@@ -189,6 +189,19 @@ with the profile, and keep the entity-surface matrix in the adapter.
 - Write confirmation and optimistic merges (library engine).
 - Card assets and frontend behaviour.
 
+## Migration progress
+
+- **Slice 1 (codes, profiles, limits) landed.** `smartbox.device.profile`
+  owns the neutral `ControllerLimits`, the code/family sets, bounds helpers
+  and `resolve_profile`. The integration's `controller.py` re-exports them and
+  keeps the not-yet-moved gates. The library golden test pins all 51 codes;
+  the temporary `tests/test_profile_equivalence.py` compares the old helpers
+  to the library resolver across 51 codes × 4 firmware branches × 2 setup
+  shapes. Behaviour is unchanged.
+- Slices 2-4 (control modes, lock/boost/storage, thermostat/setting gates)
+  remain. The adapter keeps boost activation, preferences and the FULL
+  attribute visibility throughout.
+
 ## Migration slices
 
 Each slice is behavior-preserving, lands with the adapter copy deleted in the

@@ -1,0 +1,17 @@
+{
+  "set_boost_mode": {
+    "supports_response": "none"
+  },
+  "set_boost_params": {
+    "supports_response": "none"
+  },
+  "set_charging_schedule": {
+    "supports_response": "none"
+  },
+  "set_schedule": {
+    "supports_response": "none"
+  },
+  "set_thermostat_schedule": {
+    "supports_response": "none"
+  }
+}

@@ -8,6 +8,8 @@ misgrouped production set fails this test instead of re-asserting itself.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -831,3 +833,31 @@ def test_no_probes_gate_reads_only_the_sensor_mode_enum(
 ) -> None:
     """NO_PROBES hides temperature control; strings and booleans are not the enum."""
     assert has_no_probes(setup) is expected
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "product_codes.json"
+
+
+def _jsonify(value: object) -> object:
+    """Render a row field as the deterministic JSON shape used by the fixture."""
+    if isinstance(value, dict):
+        return {key: _jsonify(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_jsonify(item) for item in value]
+    if isinstance(value, frozenset):
+        return sorted(_jsonify(item) for item in value)
+    return value
+
+
+def test_exported_fixture_matches_the_reviewed_table() -> None:
+    """The portable product-code fixture is the reviewed table, not a re-derivation."""
+    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    assert data["schema"] == 1
+    assert set(data["codes"]) == set(CODES)
+    for code, row in CODES.items():
+        expected = {
+            field.name: _jsonify(getattr(row, field.name))
+            for field in row.__dataclass_fields__.values()
+            if field.name != "extra"
+        }
+        assert data["codes"][code] == expected, code
