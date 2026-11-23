@@ -147,10 +147,14 @@ async def test_set_lock_body(sleeps, session, client, writes, locked):
     assert posts(session)[0]["json"] == {"locked": locked}
 
 
-async def test_set_lock_rejects_non_bool(sleeps, session, client, writes):
+async def test_set_lock_accepts_bool_or_wire_enum(sleeps, session, client, writes):
+    grant(session)
+    for value in (True, False, 0, 1, 2):
+        session.enqueue(FakeResponse())
+        await writes.set_lock("dev1", NODE, value)
+        assert posts(session)[-1]["json"] == {"locked": value}
     with pytest.raises(ValueError, match="locked"):
-        await writes.set_lock("dev1", NODE, 1)
-    assert session.calls == []
+        await writes.set_lock("dev1", NODE, 3)
 
 
 @pytest.mark.parametrize("on", [True, False])

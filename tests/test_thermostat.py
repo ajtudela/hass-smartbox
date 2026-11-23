@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -14,8 +15,15 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 import pytest
 from smartbox.core.engine import SmartboxEngine
 from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.protocol import NodeRef
 
-from custom_components.smartbox.climate import SmartboxThermostat, _build_node_climate
+from custom_components.smartbox.climate import (
+    SmartboxHeater,
+    SmartboxThermostat,
+    _build_node_climate,
+)
+from custom_components.smartbox.sensor import ThermostatScheduleSensor
+from custom_components.smartbox.switch import AntiGrippageSwitch
 from tests.mocks import get_entity_id_from_unique_id
 from tests.stack import seed_stack
 
@@ -112,6 +120,20 @@ def test_climate_platform_builds_a_thermostat() -> None:
     entity = groups[0][0][0]
     assert isinstance(entity, SmartboxThermostat)
     assert runtime.services.climate == [entity]
+
+
+def test_climate_platform_builds_a_heater_for_thm_28() -> None:
+    """PID 28 is the htr-family floor thermostat and uses the heater surface."""
+    node = _node()
+    node.pid = "0128"
+    node.thermostat_surface = False
+    node.heater_surface = True
+    node.boost_available = False
+    runtime = SimpleNamespace(services=SimpleNamespace(climate=[]))
+    groups = _build_node_climate(node, MagicMock(), runtime, _NoopFanout())
+    entity = groups[0][0][0]
+    assert isinstance(entity, SmartboxHeater)
+    assert not isinstance(entity, SmartboxThermostat)
 
 
 def test_off_thermostat_has_no_target_and_no_presets() -> None:
@@ -421,6 +443,7 @@ async def test_boost_mode_skips_thermostats_in_a_mixed_target(
     hass, mock_smartbox, config_entry
 ):
     """A device target with a full-boost heater and a thermostat writes the heater."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "01340000"
     mock_smartbox._node_setup["device_1"][0]["factory_options"]["boost_config"] = 3
     _add_thm_node(mock_smartbox)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
@@ -445,3 +468,132 @@ async def test_boost_mode_skips_thermostats_in_a_mixed_target(
     )
     heater.async_set_boost_mode.assert_awaited_once()
     thermostat.async_set_boost_mode.assert_not_awaited()
+
+
+def _thermostat_schedule_sensor(prog):
+    sensor = object.__new__(ThermostatScheduleSensor)
+    sensor._node = SimpleNamespace(
+        node_type="thm",
+        addr=0,
+        pid="0109",
+        version={"fw_version": "1.9"},
+        setup={"units": "C"},
+        status={},
+    )
+    sensor._node_state = lambda: NodeState(prog=prog, status={"units": "C"})
+    sensor._dev_id = DEV
+    sensor._runtime = MagicMock()
+    sensor._unsub_boundary = None
+    return sensor
+
+
+def test_thermostat_schedule_state_uses_the_current_segment(monkeypatch):
+    """The segment end is m; the state is the temperature in force now."""
+    prog = {"1": [{"m": 360, "t": "19.0"}, {"m": 1320, "t": "17.0"}]}
+    sensor = _thermostat_schedule_sensor(prog)
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 8, 0, tzinfo=UTC),  # Monday 08:00
+    )
+    assert sensor.native_value == 17.0
+    assert sensor.extra_state_attributes["schedule"] == prog
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 2, 0, tzinfo=UTC),
+    )
+    assert sensor.native_value == 19.0
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 23, 0, tzinfo=UTC),
+    )
+    assert sensor.native_value == 17.0
+
+
+def test_thermostat_schedule_accepts_numeric_string_minutes(monkeypatch):
+    """A server-reformatted ``m`` string still drives the state."""
+    sensor = _thermostat_schedule_sensor({"1": [{"m": "360", "t": "19.0"}]})
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 2, 0, tzinfo=UTC),
+    )
+    assert sensor.native_value == 19.0
+
+
+def test_thermostat_schedule_before_first_segment_uses_first_temperature(monkeypatch):
+    """At 02:00 the 00:00-06:00 segment applies, not yesterday's last one."""
+    sensor = _thermostat_schedule_sensor(
+        {"1": [{"m": 360, "t": "19.0"}, {"m": 1320, "t": "17.0"}]}
+    )
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 5, 59, tzinfo=UTC),
+    )
+    assert sensor.native_value == 19.0
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 6, 0, tzinfo=UTC),
+    )
+    assert sensor.native_value == 17.0
+
+
+def test_thermostat_schedule_1440_boundary_is_next_midnight(monkeypatch):
+    """A 1440 segment ends at midnight rather than constructing hour 24."""
+    sensor = _thermostat_schedule_sensor({"1": [{"m": 1440, "t": "19.0"}]})
+    now = datetime(2026, 11, 23, 8, 0, tzinfo=UTC)
+    assert sensor._next_change(now) == datetime(2026, 11, 24, 0, 0, tzinfo=UTC)
+
+
+def test_thermostat_schedule_empty_day_falls_back_to_previous_day(monkeypatch):
+    """A day with no segments keeps the previous day's final temperature."""
+    sensor = _thermostat_schedule_sensor({"0": [{"m": 1320, "t": "15.0"}], "1": []})
+    monkeypatch.setattr(
+        "custom_components.smartbox.sensor.dt_util.now",
+        lambda: datetime(2026, 11, 23, 2, 0, tzinfo=UTC),
+    )
+    assert sensor.native_value == 15.0
+
+
+async def test_thermostat_schedule_write_uses_the_thermostat_op():
+    prog = {"1": [{"m": 360, "t": 19.0}]}
+    sensor = _thermostat_schedule_sensor(prog)
+    sensor._runtime.engine.set_thermostat_prog = AsyncMock()
+    sensor.async_write_ha_state = MagicMock()
+    await sensor.async_set_thermostat_schedule(prog)
+    sensor._runtime.engine.set_thermostat_prog.assert_awaited_once_with(
+        DEV, NodeRef("thm", "0"), prog, "C"
+    )
+
+
+async def test_anti_grippage_switch_reads_and_writes_the_setup_string():
+    switch = object.__new__(AntiGrippageSwitch)
+    switch._node = SimpleNamespace(setup={"anti_grippage": "on"})
+    switch._node_state = lambda: NodeState(setup={"anti_grippage": "on"})
+    switch._dev_id = DEV
+    switch._ref = NodeRef("thm", "0")
+    switch._runtime = MagicMock()
+    switch._runtime.engine.set_setup_value = AsyncMock()
+    assert switch.is_on is True
+    await switch.async_turn_off()
+    switch._runtime.engine.set_setup_value.assert_awaited_once_with(
+        DEV, NodeRef("thm", "0"), "anti_grippage", "off"
+    )
+
+
+def test_thermostat_schedule_rearms_on_a_pushed_change():
+    """A programme frame re-arms the boundary timer."""
+    sensor = _thermostat_schedule_sensor({"1": [{"m": 360, "t": "19.0"}]})
+    sensor._track_next_change = MagicMock()
+    sensor.async_write_ha_state = MagicMock()
+    sensor._async_change(MagicMock())
+    sensor._track_next_change.assert_called_once_with()
+
+
+def test_thermostat_schedule_arms_next_midnight_for_the_new_day():
+    """A new day's first segment takes force at midnight."""
+    sensor = _thermostat_schedule_sensor(
+        {"0": [{"m": 1320, "t": "17.0"}], "1": [{"m": 360, "t": "19.0"}]}
+    )
+    now = datetime(2026, 11, 22, 23, 0, tzinfo=UTC)  # Sunday 23:00
+    assert sensor._next_change(now) == datetime(2026, 11, 23, 0, 0, tzinfo=UTC)
+    monkeypatch_now = datetime(2026, 11, 23, 0, 5, tzinfo=UTC)
+    assert sensor._scheduled_temperature(monkeypatch_now) == 19.0

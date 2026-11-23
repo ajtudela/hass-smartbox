@@ -28,12 +28,19 @@ ATTR_DURATION = "duration"
 SERVICE_SET_BOOST_PARAMS = "set_boost_params"
 SERVICE_SET_BOOST_MODE = "set_boost_mode"
 SERVICE_SET_SCHEDULE = "set_schedule"
+SERVICE_SET_CHARGING_SCHEDULE = "set_charging_schedule"
+SERVICE_SET_THERMOSTAT_SCHEDULE = "set_thermostat_schedule"
 FIELD_SCHEDULE = "schedule"
+FIELD_ACTIVE_DAYS = "active_days"
+FIELD_SLOT_1 = "slot_1"
+FIELD_SLOT_2 = "slot_2"
 # Schedule profile slot values; day keys are "0".."6" (Sunday..Saturday).
 DAY_KEYS = ("0", "1", "2", "3", "4", "5", "6")
-# Schedule profile indices for plain htr nodes, in the vendor app's sorted
-# order (docs/webapi-spec.md §5): 0=ICE, 1=ECO, 2=COMF. Unverified for the
-# acm/htr_mod families; unknown indices report as 'unknown'.
+# Base ElectricHeater programme catalogue, in the vendor app's sorted order
+# (docs/webapi-spec.md §5): 0=ICE, 1=ECO, 2=COMF. Per-controller catalogues
+# (the four-profile Helki/Haverland families and the off-first htr_mod order)
+# live in controller.py; this tuple is the default used by the sensor when a
+# node has no decoded controller-specific list.
 PROG_PROFILE_NAMES = ("frost", "eco", "comfort")
 CONF_API_NAME = "api_name"
 CONF_DISPLAY_ENTITY_PICTURES = "reseller_entity"
@@ -42,6 +49,11 @@ CONF_TIMEDELTA_POWER = "timedelta_update_power"
 DEFAULT_TIMEDELTA_POWER = 60
 DEFAULT_BOOST_TIME = 60
 DEFAULT_BOOST_TEMP = 21.0
+BOOST_TIME_MIN = 60
+BOOST_TIME_STEP = 60
+RUNBACK_TIME_DEFAULT = 30
+RUNBACK_TIME_STEP = 30
+RUNBACK_TIME_MAX = 1440
 # Restore value when the maximum temperature limit is re-enabled with no
 # remembered value (the wire erases max_stemp_limit on toggle-off); matches
 # the number entity's Celsius slider cap.

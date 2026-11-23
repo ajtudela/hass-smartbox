@@ -2,26 +2,34 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-21. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-22. Keep this a 90-second read and prune entries as they close.*
 
 ## State of 3.2.1
 
-- Library `3.2.0` and integration `3.2.1` are the current stable releases.
-- Integration 3.2.1 pins `smartbox>=3.2.0,<3.3`; the upper bound keeps a future minor from installing until the integration is updated for it.
-- 3.2.1 fixes the boxless power-limit purge: the confirmation required `connected` in REST `/dev_data`, which that endpoint never serves, so the box power-limit number and the "no power limit" switch were rebuilt on every setup on a boxless home. It adds the per-heater Power Limit Factor select (Off / LST / Baby Care) and limits radiator priority to heaters paired with a box, pruning both surfaces where they no longer apply.
-- 3.2.0 remains as shipped: the boxless power-limit skip, `locked` normalized to `bool`, write verification instead of a write timeout flipping Unavailable, the htr_mod setpoint contract (1 °C grid, the 10–28 °C union while comfort or eco is active with the profile chosen by the target, ice fixed, `mode: manual`), the accumulator `counters` sample shape, and the library split.
-- A soak on the maintainer's instance with a boxless and a boxed home ran clean: no errors, no entity churn, the boxless controls stayed gone and the new select wrote `user_duty_limit`.
-- Elnur account verification and the corresponding public-app docs/audit are the remaining external checks; the app-bundle evidence is recorded in `docs/api-ws-user.md` and `docs/api-contract.md`.
-- In flight: the library's `same_wire_value` now compares numeric strings numerically, so a heater's whole-number echo (`"20"` for a posted `"20.0"`) no longer logs `accepted but not applied` or falls through to the confirmation window and a verification GET for a write the heater applied. Library `3.2.1` is published with the write-echo fix, the Ducasa/Ducaheat alias row, and `set_control_mode`; the integration pin `smartbox>=3.2.1,<3.3` is in place (#76). The next integration release is `3.2.2` with the Control Mode select. #66 stays open until the reporter confirms the warning is gone on the seven units (`docs/api-contract.md` §5.2). Merged as #78: `thm` thermostat support, the wire-vs-product taxonomy, and the storage telemetry entities (target charge, charging, water ready/fully ready, window open, PIR presence, thermostat low battery). On `feat/control-mode` (uncommitted): the vendor-app Control Mode catalogue (htr + storage families; `0402` live-confirmed; thermostat family withheld).
+- Library `3.2.1` and integration `3.2.1` are the current stable releases. The integration pins `smartbox>=3.2.1,<3.3`; the upper bound keeps a future minor from installing before the integration is re-pinned.
+- Working tree after 3.2.1 (unreleased):
+  - Per-controller setpoint and programme ranges from the decoded 2.54.2 table (`controller.py`), applied to climate, programme numbers, max-limit and boost numbers, and the programme sanitizer. The Tevolve WiFi/towel-rail rows, Ferroli 4D, factory-default 0D/18/24/43 and the unknown-acm HelkiStorage fallback now match the factory.
+  - Controller-specific schedule catalogues: base three-profile, Helki/Haverland four-profile with OFF, and htr_mod off-first. The schedule sensor and program card accept a 24- or 48-slot day and render/edit the OFF slot; 48-slot storage is live-confirmed. THM code 28 gets the heater catalogue and surface; 04/09/0F keep the thermostat `{m,t}` shape.
+  - Integer child-lock families expose an Off / Local lock / Remote lock select; boolean families keep the switch. Helki/Lhz heater nodes take the integer select only with `factory_options.super_lock_available`; Haverland 1D joins at fw 1.7, 47 stays integer, and 43/0D/18 stay boolean.
+  - Boost availability follows each controller's app mode list; activation is family-aware (storage `/boost`, triac legacy setup+status even at FULL, other full-boost controllers `/boost_mode`); the full-boost presets and temperature editor follow the same endpoint decision; EASY and RUNBACK are separate gates; boost end time uses home-local `boost_end_min` and applies `boost_end_day`; duration is capped per controller (1440 base, 120 ATC, 300 Climastar); legacy boost temperatures are written back as Celsius for `extra_options.version >= 2` and formatted to one decimal.
+  - Lhz duty presets `0/80/90` plus 70/Baby Care/LST on the LhzHeater chain; Helki duty and max-limit gates follow the app. Storage 2A filters AUTO/MANUAL through `extra_nrg_conf`, withholds the generic schedule/programme numbers, away/window/true-radiant settings and the charging-schedule service target, and keeps only the read-only target-charge sensor.
+  - Tevolve EASY/RUNBACK switches (blind implementation from the decoded app; live hardware still needed). RUNBACK is withheld on full-boost WiFi/ATC until its `/boost_mode` parameters are modelled; SETBACK remains open.
+  - Lost-at-discovery nodes keep their programme-temperature numbers; the gate uses the controller catalogue instead of transient status keys. Schedule options and runtime storage/boost/lock/limit decisions use a late version PID. Entity creation still uses discovery, so a PID first seen later needs a reload to add/remove entities.
+  - Water storage in the combined extra-energy modes resolves ON to AUTO (AUTO/OFF); EXTRA_ENERGY_USAGE keeps HEAT/OFF. ATC 4C/4D use the WiFi integer lock. THM 28 with NO_PROBES hides temperature control, profile numbers, boost/EASY/RUNBACK, away/control-mode/window/true-radiant settings and the generic heater schedule, and rejects direct temperature writes. Fixed-time boost has no parameter numbers on Haverland 17/1D/47; config-less storage/LhzRelay/Tevolve triac keep them.
+  - Elnur storage UI-mode choices follow the product (`14`: classic combined/accumulator; `20/25`: Ecombi/classic combined; water `2A`: no setting), and the setting is hidden while the unit is in ECOMBI. Haverland WiFi `1D/47` BOOST is present whenever `boost_config` is not the fixed-time value 1, and at config 3 its activation uses `/boost_mode` with the fixed-time mode.
+  - Schedule writes reject profile indexes outside the controller catalogue; malformed temperature/duty/power/charge values read as unknown; legacy PIDs omit `extra_options` from setup POSTs; invited accounts work in the CLI.
+  - Coverage: `test_product_code_parity.py` pins all 51 decoded product codes and their family/bounds (climate, programme, max-limit, boost)/profiles/boost-mode policy/duty presets/EASY/RUNBACK/lock/firmware gates; `test_entity_surface_matrix.py` pins the domains and unique keys per representative family and variant (capability flags, boost config 0, NO_PROBES, fw-1.6 lock, PIR, FULL temp/fixed/empty mode lists), snapshots options, bounds and current states for 15 representative families, and covers the box-level entities.
+- Live-confirmed in this cycle: HJM `0132` schedule OFF index and 48-slot day, 0402/HJM controller ranges, child-lock `1`/`2`/`0` and the ignored boolean, setpoint while OFF, boost config 2 app path, and the lost-at-discovery/reload symptom on `Spálňa`.
+- No soak was run for the working tree; the prepared soak bundle was scrapped because it required an unpublished library. Most library changes are additive; the new `set_extra_options` omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
 
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
-- Soak 2026-11-22 (control-mode build): no errors or warnings. Obývačka window detection live-confirmed — `window_open` true at 01:07:00Z stopped heating while the room cooled from 17.2 to 16.4 °C, and closing it at 01:08:10Z resumed heating (`docs/api-contract.md` §8 E18c).
-- After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm on their units what the soak covered here; acm users to confirm `locked` reads `true`/`false`.
-- After 3.2.1: the boxless reporter to confirm on his install that the power-limit entities and the priority select stay gone, and watch for reports on the new Power Limit Factor select (a stored value outside Off / LST / Baby Care reads as unknown, as the vendor app leaves its field blank) (`docs/api-contract.md` §5.7/§9, §7 item 17).
+- After the next integration release: confirm the integer-lock select replaces the old switch without an orphan, the programme-temperature numbers survive a lost-at-discovery reload, and the new controller ranges match the app on one unit per family.
+- After 3.2.1: the boxless reporter to confirm the power-limit entities and priority select stay gone, and watch reports on the Power Limit Factor select. A stored value outside its presets reads as unknown in HA; the app's heater card shows `"<value> %"`, while its settings select is blank.
+- After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm what the maintainer's units cannot; acm users to confirm the integer `locked` surface.
 - After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.
-- After 3.2.2 ships (or on a manual 3.2.1 install): a Ducasa/Ducaheat user to confirm the new provider row completes setup (the row is static-bundle evidence only today; the portal decode is in `docs/api-contract.md` §1.1).
+- After the next release: a Ducasa/Ducaheat user to confirm the provider row completes setup (static-bundle evidence only today; the portal decode is in `docs/api-contract.md` §1.1).
 - Stale-device cleanup (unchanged since 3.1.0-rc.3): the unpair, power-cut and re-pair checks are the only release-adjacent live checks not recorded here. Record the results when they are exercised.
 - Token reconnect: the rc series showed the expected quiet cut every 4 hours. Revisit only if a cut lasts far longer than ~4 s or happens more often than every 4 h.
 - Write confirmation: a timed-out write now ends in one verification GET after the 6 s window plus a 1 s settle; a frame that overtakes the read wins. Revisit if ignored writes appear as `accepted but not applied` without a corresponding device change.
@@ -29,23 +37,27 @@
 
 ## Open items (hardware-gated)
 
-`docs/api-contract.md` §7 is canonical for the wire questions and their statuses; the max-limit `"0.0"` and 4-key prog-temp probes live in `docs/api-contract.md` §5.2 and E28. The ones that need the maintainer's hardware — or a season:
+`docs/api-contract.md` §7 is canonical for the wire questions and their statuses. The items that need matching hardware:
 
+- Storage: E2/extra-energy and water-storage settings; live confirmation of the classic-accumulator/boost/charging paths on real storage hardware. The app's MANUAL setpoint and mode writes use `/mode`, while the integration keeps `/status`; compare both on one unit before changing the path.
+- Full-boost WiFi/ATC: BOOST availability at config 3 depends on the live `status.boost_modes_available` list in the app, while the integration's setup gate still shows BOOST whenever config is not unsupported. The parameter surfaces now follow the advertised modes (temp-and-time only), and runback carries its own temperature/duration; confirm the list's stability and the `/boost_mode` acceptance on a full-boost unit before deciding whether BOOST presence should follow it too.
+- Tevolve thermostat 28 NO_PROBES: the app's ON/OFF timer programme is withheld from HA because the heater profile catalogue cannot represent it. Model it only if a user needs the timer from HA.
+- Haverland WiFi `1D/47`: the corrected BOOST gate (absent only at config 1) and the `/boost_mode` fixed-time activation at config 3 are static-decoded; confirm on one unit.
+- PMO: reverse/generation sign and sample keys, and `pmo_system` configuration.
+- SETBACK activation path; EASY/RUNBACK live confirmation on a Tevolve unit.
+- Full-boost live acceptance of `/boost_mode` (2.54.2 decode and config-2 live path are recorded).
 - `window_open` retry, cold night only: open the window AND door BEFORE starting heat, setpoint 23 °C, outside below 5 °C; success is `window_open: true` in the frame plus the heater self-pausing (active false, duty 0) while the temperature keeps falling.
 - RTC `n` month indexing — waits for December (the endpoint is app-orphaned; live only).
-- `htr_mod` preset/comfort writes — the 2.41.0 app sends the mixed-category body (`on`+`mode`+`selected_temp`+`comfort_temp`+`eco_offset`), so the shape is app-evidenced; live acceptance still needs an htr_mod unit.
-- PMO cadence, `pmo_system` frames and power-limit behavior — needs a pmo unit.
-- Boost write path: the app's dispatch is implemented from the 2.41.0 bundle — `boost_config` 1/2 use status/setup, 3 (FULL) posts `/boost_mode {active, mode, temp?, time?}`. Live acceptance on a full-boost unit remains open.
-- Full-boost UI: Runback/Advanced-boost presets are gated by `boost_modes_available`; the number entities remain defaults, the climate target is the active temperature, and `boost_mode`/ `boost_end_time`/`boost_remaining_minutes` are attributes. `smartbox.set_boost_mode` covers active duration and explicit modes.
-- Live 2026-10-20 (htr fw 1.9): `max_stemp_limit "0.0"` write accepted and persisted (restored `"24.0"`), and the app-shaped 4-key `/status` prog-temp body accepted and echoed (originals restored). The sentinel's enforcement is confirmed: with the ceiling at `"24.0"`, `stemp 24.5` clamped to `"24.0"`; with `"0.0"`, the same setpoint was accepted and echoed. The dedicated `/prog_temps` endpoint is dormant: the vendor apps still use the 4-key `/status` body, so revisit it only if a future Android app release calls the endpoint.
-- Programme-temperature writes now apply the app's per-profile clamp, ice/eco/comfort offset, and post-limit correction; the max-limit switch still deliberately restores the last remembered limit rather than the app's global maximum. Live 2026-10-20: lowering the ceiling from 24 to 19 pushed the corrected `18.0/18.5/19.0` status frame; both values were restored.
-- Statistics completion is recorded when the rows are queued to the recorder, not when the recorder commits them. A recorder job dropped after queueing would leave that node marked imported; revisit only if recorder failures are observed.
-- Tevolve tenant (`api-tevolve`, serial 15) is selectable. Its constants came from the vendor web bundle; a live login is still unverified.
 - Quality-scale brands submission (logo assets and the `home-assistant/brands` entry) is postponed; the manifest keeps `"quality_scale": "custom"` until it lands.
 
 Record results in `docs/api-contract.md` §7 as they are worked.
 
 ## Pending decisions
+
+- Device-semantics extraction: the design and migration plan are recorded in
+  `docs/device-semantics.md`; the trigger is visible (duplicated PID/family
+  facts and the CLI/diagnostics second consumer), but it starts only after the
+  current feature batch is released and behavior is frozen.
 
 - Minimum Home Assistant: 2026.5.0 is the supported floor; `tox -e min` (CI job `minimum-home-assistant`) pins the harness that exercises it.
 - Marketplace/HACS metadata: the 2026.11 release replaces HACS with Marketplace. The repository metadata and HACS Action are unchanged at the 2026.5 baseline; revisit when 2026.11 becomes the minimum.

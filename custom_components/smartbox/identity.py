@@ -14,7 +14,8 @@ create entities; entity properties read the LIVE store (``NodeState.setup``),
 which frames keep fresh. A predicate both sides need takes the data as an
 argument (see :func:`boost_available`) instead of reading one source.
 
-Status is fetched per node only for the ``prog_temps_available`` gate. PMO
+Status is fetched per node for diagnostics and availability; entity gates use
+the controller profile and setup, not transient status keys. PMO
 nodes carry no such gate, so their status stays empty.
 """
 
@@ -36,9 +37,33 @@ from smartbox.core.state import node_device_id
 from smartbox.protocol.client import NodeRef, SmartboxClient
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig, bounded_repr, parse_number_or_none
+from smartbox.protocol.writes import WriteApi
 
 from .const import HEATER_NODE_TYPES, WIRE_NODE_TYPES, SmartboxNodeType
+from .controller import (
+    boost_params_configurable,
+    controller_limits,
+    firmware_at_least,
+    has_no_probes,
+    is_heater_surface,
+    is_helki_heater_family,
+    is_htr_mod_controller,
+    is_lhz_family,
+    is_lhz_relay,
+    is_tevolve_atc_family,
+    is_tevolve_triac_family,
+    is_tevolve_wifi_family,
+    is_thermostat_surface,
+    runback_params_configurable,
+)
 from .product import product_code
+from .storage import (
+    boost_supported as storage_boost_supported,
+    classic_accumulator,
+    is_elnur_storage,
+    is_water_storage,
+    ui_mode as storage_ui_mode,
+)
 
 if TYPE_CHECKING:
     from smartbox.protocol.reseller import SmartboxReseller
@@ -58,17 +83,93 @@ __all__ = [
 ]
 
 
-def boost_available(setup: Mapping[str, Any]) -> bool:
-    """Report whether a node's setup advertises a usable boost configuration.
+def _storage_boost_available(
+    node_type: str,
+    pid: str | None,
+    fw_version: str | None,
+    brand_name: str | None,
+) -> bool:
+    """Helki storage's /boost path plus its Electrorad/Evconfort fw gate."""
+    if not storage_boost_supported(node_type, pid):
+        return False
+    legacy_brand = isinstance(brand_name, str) and brand_name.strip().lower() in {
+        "electrorad",
+        "evconfort",
+    }
+    return not (legacy_brand and not firmware_at_least(fw_version, "1.8"))
 
-    Any non-zero configuration exposes boost. The write path differs by
-    value: 1 and 2 use the status/setup path, 3 uses ``/boost_mode``
-    (docs/api-ws-user.md §2.3).
 
-    Cross-module contract: ``climate.py`` and ``switch.py`` import
-    :func:`boost_config` for the per-unit dispatch.
+def _heater_boost_available(  # noqa: PLR0911 - one return per controller family
+    setup: Mapping[str, Any],
+    node_type: str | None,
+    pid: str | None,
+) -> bool:
+    """Return the heater-controller BOOST rules from the 2.54.2 mode lists."""
+    code = product_code(pid)
+    if node_type == SmartboxNodeType.HTR_MOD and is_htr_mod_controller(pid, node_type):
+        return False
+    if code == "28" and has_no_probes(setup):
+        # TevolveThermostatController removes BOOST in its NO_PROBES timer.
+        return False
+    if code == "17":
+        return True
+    if code in {"1D", "47"}:
+        # HaverlandWifiHeaterController removes BOOST from its mode list when
+        # factory_options.boost_config is MAX_TEMP_FIXED_TIME (1); every other
+        # value keeps the fixed-time boost.
+        return boost_config(setup) != BoostConfig.MAX_TEMP_FIXED_TIME
+    if is_lhz_relay(pid):
+        return True
+    if code == "3D" or is_helki_heater_family(pid):
+        return boost_config(setup) == BoostConfig.SET_TEMP_AND_TIME
+    if is_tevolve_triac_family(pid):
+        # TevolvePIRHeaterController (27) removes BOOST from the triac list.
+        return code != "27"
+    if is_tevolve_wifi_family(pid) or is_tevolve_atc_family(pid):
+        return boost_config(setup) != BoostConfig.UNSUPPORTED
+    return False
+
+
+def boost_available(
+    setup: Mapping[str, Any],
+    *,
+    node_type: str | None = None,
+    pid: str | None = None,
+    fw_version: str | None = None,
+    brand_name: str | None = None,
+) -> bool:
+    """Report whether this controller advertises a usable boost mode.
+
+    The vendor app adds BOOST to each controller's UI mode list on its own
+    rule: the Helki/Lhz chain only with config 2 (LhzRelay 36 unconditionally),
+    the Tevolve triac/towel-rail family unconditionally, the WiFi/ATC chain
+    when its boost config/endpoint supports it, Haverland legacy always, and
+    Haverland WiFi unless its config is the fixed-time value 1. The base
+    ElectricHeater family (including 0402, 1E, 24, 43, 0D and 18) offers none.
     """
-    return boost_config(setup) != BoostConfig.UNSUPPORTED
+    if node_type == SmartboxNodeType.ACM:
+        return _storage_boost_available(node_type, pid, fw_version, brand_name)
+    return _heater_boost_available(setup, node_type, pid)
+
+
+def boost_params_available(node: SmartboxNodeInfo) -> bool:
+    """Whether HA should expose boost temperature/duration controls.
+
+    Legacy controllers keep the values on the device. FULL WiFi/ATC expose
+    them only when the status endpoint advertises ``temp_and_time``. This one
+    gate intentionally reads the frozen discovery status: it decides whether a
+    parameter exists for a mode, not whether the node itself exists.
+    """
+    return boost_params_configurable(node.node_type, node.pid, node.setup, node.status)
+
+
+def runback_params_available(node: SmartboxNodeInfo) -> bool:
+    """Whether HA should expose runback temperature/duration controls.
+
+    Only the FULL endpoint carries runback parameters; legacy runback is the
+    status flag and its device-side defaults are not part of the activation.
+    """
+    return runback_params_configurable(node.pid, node.setup, node.status)
 
 
 @dataclass(frozen=True)
@@ -160,6 +261,20 @@ class SmartboxNodeInfo:
         return self.node_type in HEATER_NODE_TYPES
 
     @property
+    def heater_surface(self) -> bool:
+        """Does this node get the heater entity surface.
+
+        A THM product that the factory dispatches to an htr-family controller
+        (code 28) uses the heater programme and boost/EASY settings.
+        """
+        return is_heater_surface(self.node_type, self.pid)
+
+    @property
+    def thermostat_surface(self) -> bool:
+        """Does this node get the thermostat climate and schedule surface."""
+        return is_thermostat_surface(self.node_type, self.pid)
+
+    @property
     def supported_wire_type(self) -> bool:
         """Is this node one of the API's wire node types.
 
@@ -172,7 +287,13 @@ class SmartboxNodeInfo:
     @property
     def boost_available(self) -> bool:
         """Is boost available (see :func:`boost_available`)."""
-        return boost_available(self.setup)
+        return boost_available(
+            self.setup,
+            node_type=self.node_type,
+            pid=self.pid,
+            fw_version=self.version.get("fw_version"),
+            brand_name=self.reseller.name if self.reseller is not None else None,
+        )
 
     def get_model_code(self, version: Mapping[str, Any] | None = None) -> str | None:
         """Get the model code from a node version payload.
@@ -606,28 +727,78 @@ def _factory_options(node: SmartboxNodeInfo) -> dict[str, Any]:
     return dict(factory) if isinstance(factory, Mapping) else {}
 
 
+def _floor_thermostat_no_probes(node: SmartboxNodeInfo) -> bool:
+    """TevolveThermostatController hides its probe-dependent settings."""
+    return (
+        node.node_type == SmartboxNodeType.THM
+        and is_heater_surface(node.node_type, node.pid)
+        and has_no_probes(node.setup)
+    )
+
+
+def _elnur_classic_ui(node: SmartboxNodeInfo) -> bool:
+    """ElnurStorage hides radiance/window settings in the classic UI modes."""
+    return is_elnur_storage(node.pid) and storage_ui_mode(node.setup) in (1, 2)
+
+
 def window_mode_available(node: SmartboxNodeInfo) -> bool:
     """Is window mode available."""
+    if _floor_thermostat_no_probes(node):
+        return False
+    if is_water_storage(node.pid) or _elnur_classic_ui(node):
+        return False
     return bool(_factory_options(node).get("window_mode_available", False))
 
 
 def true_radiant_available(node: SmartboxNodeInfo) -> bool:
     """Is true radiant available."""
+    if _floor_thermostat_no_probes(node):
+        return False
+    if is_water_storage(node.pid) or _elnur_classic_ui(node):
+        return False
     return bool(_factory_options(node).get("true_radiant_available", False))
 
 
 def away_offset_available(node: SmartboxNodeInfo) -> bool:
     """Is the away offset configurable on this node."""
+    if is_htr_mod_controller(node.pid, node.node_type):
+        return False
+    if _floor_thermostat_no_probes(node) or is_water_storage(node.pid):
+        return False
     return "away_offset" in node.setup
 
 
-def max_temp_limit_available(node: SmartboxNodeInfo) -> bool:
+def max_temp_limit_available(  # noqa: PLR0911 - one return per family gate
+    node: SmartboxNodeInfo,
+) -> bool:
     """Is the maximum target temperature limit configurable on this node.
 
     True whenever the setup carries the fw-1.9-family max_stemp_limit key,
     including "0.0" (limit disabled) -- the number and its on/off switch
     both exist so the limit can be re-enabled from HA.
     """
+    if is_htr_mod_controller(node.pid, node.node_type):
+        return False
+    if not isinstance(node.pid, str) or not node.pid:
+        # A lost-at-discovery node whose PID is still unknown is conservative:
+        # the factory default is the base controller, and a reload/version
+        # frame can add the entity once the PID is known.
+        return False
+    if not is_heater_surface(node.node_type, node.pid):
+        # A true thermostat or a PMO has no max-stemp setting.
+        return False
+    if node.node_type == SmartboxNodeType.ACM:
+        # StorageHeaterController removes the max-stemp settings entirely.
+        return False
+    if node.pid is not None and (
+        is_tevolve_triac_family(node.pid) or is_tevolve_wifi_family(node.pid)
+    ):
+        # Tevolve triac/WiFi/towel-rail set hasMaxStempLimit=false; the ATC
+        # subclasses set it true again.
+        return False
+    if node.pid is not None and node.pid[2:4].upper() == "1D":
+        # HaverlandWifiHeaterController sets hasMaxStempLimit=false.
+        return False
     return "max_stemp_limit" in node.setup
 
 
@@ -649,6 +820,7 @@ _DUTY_LIMIT_PRESETS = (
     ("LST", "lst_available", "lst_value"),
     ("Baby Care", "bbc_available", "bbc_value"),
 )
+_DUTY_LIMIT_70 = 70
 
 
 def _percent(value: object) -> int | None:
@@ -671,45 +843,96 @@ def duty_limit_value(setup: Mapping[str, Any]) -> int | None:
     return None if number is None else int(number)
 
 
-def duty_limit_options(setup: Mapping[str, Any]) -> tuple[tuple[str, int], ...]:
+def duty_limit_options(  # noqa: C901, PLR0911 - one branch per family/setup shape
+    setup: Mapping[str, Any], pid: str | None = None
+) -> tuple[tuple[str, int], ...]:
     """Return the (label, value) power-limit-factor choices for a node setup.
 
-    The vendor app offers only these: 0 (OFF) plus the node's own preset
-    percentages -- LST when ``factory_options.lst_available`` carries
-    ``lst_value``, Baby Care when ``bbc_available`` carries ``bbc_value`` --
-    and hides the control on a node whose rated power is 0; the labels are the
-    app's own (docs/api-contract.md §5.7). Only the modern
-    ``extra_options.user_duty_limit`` field is exposed, so a legacy node that
-    keeps the factor in ``factory_options.duty_limit`` builds nothing.
+    The Lhz controller family hard-codes 0/80/90, adds 70 when its LST value
+    is not 70, then appends the Baby Care and LST factory values. Other
+    families offer 0 plus the node's own LST/Baby Care presets. The app sorts
+    ``acceptedValues`` ascending before rendering, so the result is ordered by
+    percentage. The labels are the app's own (docs/api-contract.md §5.7). Only
+    the modern ``extra_options.user_duty_limit`` field is exposed, so a legacy
+    node that keeps the factor in ``factory_options.duty_limit`` builds nothing.
     """
+    if pid is None or not is_helki_heater_family(pid):
+        return ()
+    if not WriteApi.supports_extra_options(pid):
+        return ()
     extra = setup.get("extra_options")
     if not isinstance(extra, Mapping) or "user_duty_limit" not in extra:
         return ()
     power = parse_number_or_none(setup.get("power"))
     if not power:
         return ()
+    factory = setup.get("factory_options")
+    if not isinstance(factory, Mapping):
+        return ((DUTY_LIMIT_OFF, 0),)
+
     choices: list[tuple[str, int]] = [(DUTY_LIMIT_OFF, 0)]
     seen = {0}
-    factory = setup.get("factory_options")
-    if isinstance(factory, Mapping):
-        for label, available_key, value_key in _DUTY_LIMIT_PRESETS:
-            if not factory.get(available_key):
-                continue
-            value = _percent(factory.get(value_key))
-            if value is None or value in seen:
-                continue
-            seen.add(value)
-            choices.append((label, value))
-    return tuple(choices)
+
+    def add(label: str, value: int | None) -> None:
+        if value is None or value in seen:
+            return
+        seen.add(value)
+        choices.append((label, value))
+
+    lst_value = _percent(factory.get("lst_value"))
+    bbc_value = _percent(factory.get("bbc_value"))
+    if is_lhz_family(pid):
+        return _lhz_duty_choices(factory, choices, seen, lst_value, bbc_value)
+
+    for label, available_key, value_key in _DUTY_LIMIT_PRESETS:
+        if not factory.get(available_key):
+            continue
+        add(label, _percent(factory.get(value_key)))
+    return _sorted_duty(choices)
+
+
+def _sorted_duty(
+    choices: list[tuple[str, int]],
+) -> tuple[tuple[str, int], ...]:
+    """Return the choices in the app's displayed order (ascending percentage)."""
+    return tuple(sorted(choices, key=lambda choice: choice[1]))
+
+
+def _lhz_duty_choices(
+    factory: Mapping[str, Any],
+    choices: list[tuple[str, int]],
+    seen: set[int],
+    lst_value: int | None,
+    bbc_value: int | None,
+) -> tuple[tuple[str, int], ...]:
+    """Append the Lhz controller's duty presets and sort them like the app."""
+
+    def add(label: str, value: int | None) -> None:
+        if value is None or value in seen:
+            return
+        seen.add(value)
+        choices.append((label, value))
+
+    add("80 %", 80)
+    add("90 %", 90)
+    if lst_value != _DUTY_LIMIT_70:
+        add("70 %", _DUTY_LIMIT_70)
+    if factory.get("bbc_available"):
+        add("Baby Care", bbc_value)
+    if factory.get("lst_available"):
+        add("LST", lst_value)
+    return _sorted_duty(choices)
 
 
 def duty_limit_available(node: SmartboxNodeInfo) -> bool:
     """Is the power-limit factor select worth exposing on this node.
 
     A node with only the OFF choice has nothing to select, so at least one
-    preset must exist.
+    preset must exist. Only the Helki/Lhz heater chain lists the setting.
     """
-    return len(duty_limit_options(node.setup)) > 1
+    if node.pid is None or not is_helki_heater_family(node.pid):
+        return False
+    return len(duty_limit_options(node.setup, node.pid)) > 1
 
 
 def priority_available(node: SmartboxNodeInfo) -> bool:
@@ -730,10 +953,38 @@ def prog_temps_available(node: SmartboxNodeInfo) -> bool:
     Plain htr/acm nodes only: the schedule profiles resolve to their own
     temperatures. htr_mod nodes manage the same feature via
     comfort_temp/eco_offset through the climate setpoint instead.
+
+    The controller catalogue decides this, not the live status keys. Reading
+    those keys here made a node that was ``lost`` during discovery lose the
+    three number entities permanently: the registry kept the old entries, the
+    platform never re-added them, and a later ok frame did not rebuild the
+    entity set `[live 2026-11-22]`.
     """
-    return node.node_type in (
-        SmartboxNodeType.HTR,
-        SmartboxNodeType.ACM,
-    ) and all(
-        key in node.status for key in ("ice_temp", "eco_temp", "comf_temp", "units")
+    if node.node_type not in (SmartboxNodeType.HTR, SmartboxNodeType.ACM) and not (
+        node.node_type == SmartboxNodeType.THM and is_heater_surface("thm", node.pid)
+    ):
+        return False
+    limits = controller_limits(
+        node.node_type,
+        node.pid,
+        node.version.get("fw_version"),
+        node.setup,
     )
+    if limits.htr_mod:
+        return False
+    if node.node_type == SmartboxNodeType.ACM and classic_accumulator(
+        node.pid, node.setup
+    ):
+        return False
+    if node.node_type == SmartboxNodeType.ACM and is_water_storage(node.pid):
+        # ElnurWStorage exposes only ON/OFF_AUTO programme temperatures.
+        return False
+    if (
+        node.node_type == SmartboxNodeType.THM
+        and is_heater_surface("thm", node.pid)
+        and has_no_probes(node.setup)
+    ):
+        # The Tevolve floor thermostat exposes only ON/OFF_AUTO programme temps
+        # when the controller reports NO_PROBES.
+        return False
+    return all(profile in limits.profiles for profile in ("frost", "eco", "comfort"))

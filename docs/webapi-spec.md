@@ -54,7 +54,7 @@
 | `GET .../setup` ✔ | |
 | `POST .../setup` | **full merged setup object** — library already merges before POST ✔ (session.py `set_node_setup`) |
 | `GET .../version` ✔ | |
-| `GET .../prog` | **schedule read** — returns `{prog: {…}}`; per the app, `prog.prog` = 7 day-arrays of ints (profile indices) — ✔ captured live 2026-09-27: string day keys `"0".."6"`, 24 hourly slots at prog_resolution 0 |
+| `GET .../prog` | **schedule read** — returns `{prog: {…}}`; per the app, `prog.prog` = 7 day-arrays of ints (profile indices) — ✔ captured live 2026-09-27: string day keys `"0".."6"`, 24 hourly slots at prog_resolution 0; HJM 2026-11-22 stored 48 half-hourly slots with the same `prog_resolution: 0` |
 | `POST .../prog` | **schedule write** — body `{prog: …}` — ✔ implemented in 2.6.0 (`set_node_prog`); day-keyed object shape; the JSON-array shape is rejected with 400 (observed live) |
 | `POST .../prog_temps` | dedicated prog-temperature endpoint (in `APIManager`; app's manager actually uses `POST .../status` with `{ice_temp, eco_temp, comf_temp, units}` — see §4; no caller found for plain htr) |
 | `POST .../mode` | dedicated mode endpoint (in `APIManager`; node managers use `POST .../status {mode…}` — see §4) |
@@ -238,7 +238,7 @@ History: the adjudications below were made against the pre-rewrite stack (the re
 | D2 | `POST/GET .../prog` absent from library | **CLOSED (2.6.0)**: `get_node_prog`/`set_node_prog` in `session.py` (+ sync `Session`, `NodeProg`, websocket helper, CLI) |
 | D3 | Multi-key status semantics: pin refined (category-scoped, not absolute) | **CLOSED (2026-09-27)**: the pre-contract notes were rewritten to the category-scoped rule |
 | D4 | Dedicated `/mode`, `/lock`, `/boost`, `/prog_temps` endpoints unused by library | **CLOSED (2.6.0)**: implemented to spec; boost marked **unverified-on-hardware** (factory boost-disabled units) |
-| D5 | `prog_resolution` / `MULTIPLE_SCHEDULE_RESOLUTIONS` on fw-1.9 htr unverified | **PARTIALLY CLOSED (2026-09-27, live)**: this family's `factory_options` has **no `prog_resolution` key** — resolution not readable from setup; observed schedule is 24 hourly slots. 48-slot mode unverified (no capable hardware) |
+| D5 | `prog_resolution` / `MULTIPLE_SCHEDULE_RESOLUTIONS` on fw-1.9 htr unverified | **CLOSED (2026-11-22, live)**: HJM 0132 fw-1.8 reported `factory_options.prog_resolution: 0` and stored a 48-slot half-hourly programme; `prog_resolution` is not a hard capability gate. |
 | D6 | No live `GET .../prog` sample exists | **CLOSED (2026-09-27)**: captured from heater 5 + all nodes; the shape is recorded in `api-contract.md` §5.3 (the repo ships setup/status live fixtures, not the prog week) |
 | D7 | Local-LAN API (HelkiDigest) — no vendor client exists; dead end by design | CLOSED | summarized in the appendix below |
 

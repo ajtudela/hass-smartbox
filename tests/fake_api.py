@@ -13,6 +13,8 @@ Traps this fake encodes (each one a live-server behavior):
 - setup writes must mutate the SETUP dict (the GET-merge-POST op posts
   the complete merged object - the fake REPLACES the stored setup with
   the posted body, so a buggy op that drops keys fails the round trip).
+  Legacy product codes are the exception: their POSTs omit
+  ``extra_options`` by design, so the server's stored object keeps it.
 - prog writes merge at DAY level: the posted ``{"prog": {...}}`` object
   REPLACES the stored day-keyed schedule (the op is responsible for the
   merge; the fake only models the server).
@@ -57,6 +59,7 @@ class FakeNode:
     status: dict[str, object]
     setup: dict[str, object]
     prog: dict[str, object] | None = None
+    version: dict[str, object] | None = None
 
 
 class FakeSmartbox:
@@ -107,6 +110,7 @@ class FakeSmartbox:
         status: dict[str, object] | None = None,
         setup: dict[str, object] | None = None,
         prog: dict[str, object] | None = None,
+        version: dict[str, object] | None = None,
     ) -> None:
         """Add a node under a device (its key must exist - add the device first)."""
         if dev_id not in self._devices:
@@ -116,6 +120,7 @@ class FakeSmartbox:
             status=dict(status) if status else {},
             setup=dict(setup) if setup else {},
             prog=dict(prog) if prog else None,
+            version=dict(version) if version else None,
         )
 
     # --- SmartboxClient surface: reads ---
@@ -196,11 +201,11 @@ class FakeSmartbox:
         return self._dev(dev_id)["discovery"]  # type: ignore[return-value]
 
     async def get_node_version(self, dev_id: str, node: NodeRef) -> dict[str, object]:
-        """GET ``.../version``: an empty shell (version data unused so far)."""
+        """GET ``.../version``: the stored version payload, or an empty shell."""
         self._record("GET", f"devs/{dev_id}/{node.node_type}/{node.addr}/version", None)
         self._maybe_fail("GET", f"devs/{dev_id}/{node.node_type}/{node.addr}/version")
-        self._node(dev_id, node)
-        return {}
+        stored = self._node(dev_id, node).version
+        return dict(stored) if stored is not None else {}
 
     async def get_node_samples(
         self,
@@ -286,6 +291,11 @@ class FakeSmartbox:
                         if fake_node.prog is not None
                         else {}
                     ),
+                    **(
+                        {"version": dict(fake_node.version)}
+                        if fake_node.version is not None
+                        else {}
+                    ),
                 }
                 for (dev, node_type, addr), fake_node in self._nodes.items()
                 if dev == dev_id
@@ -349,7 +359,9 @@ class FakeSmartbox:
             raise SmartboxError(msg)
         return self._nodes[key]
 
-    def _apply_post(self, path: str, body: dict[str, object]) -> None:
+    def _apply_post(  # noqa: C901 - one branch per endpoint shape
+        self, path: str, body: dict[str, object]
+    ) -> None:
         """Mutate the model exactly as the server would for the posted shape."""
         segments = path.split("/")
         if len(segments) >= _NODE_PATH_SEGMENTS and segments[-1] == "status":
@@ -357,8 +369,21 @@ class FakeSmartbox:
                 body
             )
         elif len(segments) >= _NODE_PATH_SEGMENTS and segments[-1] == "setup":
-            # the op posts the COMPLETE merged object - replace wholesale
-            self._node(segments[1], NodeRef(segments[-3], segments[-2])).setup = body
+            # the op posts the COMPLETE merged object - replace wholesale.
+            # Legacy product codes are the one exception: the server drops
+            # their extra_options writes, so its stored object keeps the last
+            # accepted value even though every POST omits the key.
+            node = self._node(segments[1], NodeRef(segments[-3], segments[-2]))
+            posted = dict(body)
+            stored_extra = node.setup.get("extra_options")
+            version = node.version or {}
+            if (
+                "extra_options" not in posted
+                and isinstance(stored_extra, dict)
+                and not WriteApi.supports_extra_options(version.get("pid"))
+            ):
+                posted["extra_options"] = stored_extra
+            node.setup = posted
         elif segments[-1] == "prog" and isinstance(prog := body.get("prog"), dict):
             self._node(segments[1], NodeRef(segments[-3], segments[-2])).prog = dict(
                 prog
@@ -378,6 +403,18 @@ class FakeSmartbox:
             self._node(segments[1], NodeRef(segments[-3], segments[-2])).setup[
                 "power_limit"
             ] = value
+        elif len(segments) >= _NODE_PATH_SEGMENTS and segments[-1] == "boost":
+            node = self._node(segments[1], NodeRef(segments[-3], segments[-2]))
+            node.status["boost"] = body.get("boost") is True
+            if body.get("boost") is True and "stemp" in body:
+                node.status["stemp"] = body["stemp"]
+        elif len(segments) >= _NODE_PATH_SEGMENTS and segments[-1] == "lock":
+            node = self._node(segments[1], NodeRef(segments[-3], segments[-2]))
+            node.status["locked"] = body.get("locked")
+        elif len(segments) >= _NODE_PATH_SEGMENTS and segments[-1] == "mode":
+            self._node(segments[1], NodeRef(segments[-3], segments[-2])).status.update(
+                body
+            )
         elif len(segments) == _DEV_PATH_SEGMENTS and segments[2:] == [
             "htr_system",
             "power_limit",

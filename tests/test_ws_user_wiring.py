@@ -123,6 +123,7 @@ def _runtime_for(engine, transport):
         transport=transport,
         auth=MagicMock(),
         token_store=MagicMock(),
+        boost_prefs=MagicMock(),
         token_origin="granted",
         identity=MagicMock(),
         fanout=smartbox_init.EngineChangeFanOut(engine),

@@ -50,6 +50,8 @@ const PROFILE_COLORS = {
     "var(--smartbox-eco-color, color-mix(in srgb, #2f9e63 85%, var(--card-background-color, #1c1c1c)))",
   comfort:
     "var(--smartbox-comfort-color, color-mix(in srgb, #e8862e 85%, var(--card-background-color, #1c1c1c)))",
+  off:
+    "var(--smartbox-off-color, color-mix(in srgb, #8a8f94 85%, var(--card-background-color, #1c1c1c)))",
 };
 const UNKNOWN_COLOR = "#9aa0a6";
 const MINUTES_PER_DAY = 1440;
@@ -122,6 +124,7 @@ const STRINGS = {
     cycle: "Cycle",
     frost: "Frost",
     eco: "Eco",
+    off: "Off",
     comfort: "Comfort",
     unknown: "Unknown",
     noSchedule: "The heater has not reported a program yet.",
@@ -165,6 +168,7 @@ const STRINGS = {
     cycle: "Wechseln",
     frost: "Frost",
     eco: "Eco",
+    off: "Aus",
     comfort: "Komfort",
     unknown: "Unbekannt",
     noSchedule: "Die Heizung hat noch kein Programm gemeldet.",
@@ -209,6 +213,7 @@ const STRINGS = {
     cycle: "Alternar",
     frost: "Escarcha",
     eco: "Eco",
+    off: "Apagado",
     comfort: "Confort",
     unknown: "Desconocido",
     noSchedule: "El calefactor aún no ha comunicado un programa.",
@@ -253,6 +258,7 @@ const STRINGS = {
     cycle: "Alterner",
     frost: "Gel",
     eco: "Éco",
+    off: "Arrêt",
     comfort: "Confort",
     unknown: "Inconnu",
     noSchedule: "Le radiateur n'a pas encore signalé de programme.",

@@ -7,8 +7,9 @@ messages.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import logging
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
@@ -40,6 +41,7 @@ from custom_components.smartbox.mapping import (
     get_current_prog_profile,
     get_hvac_mode,
     get_next_prog_change,
+    get_target_temperature,
     get_temperature_unit,
     htr_mod_policy,
     htr_mod_setpoint_limits,
@@ -305,7 +307,10 @@ def test_htr_mod_setpoint_limits():
         7.0,
         7.0,
     )
-    assert htr_mod_setpoint_limits({"selected_temp": "off"}, policy) is None
+    assert htr_mod_setpoint_limits({"selected_temp": "off"}, policy) == (
+        10.0,
+        28.0,
+    )
     assert htr_mod_setpoint_limits({}, policy) is None
 
 
@@ -701,7 +706,7 @@ def test_rtc_time_to_datetime_malformed_returns_none(rtc):
 @pytest.fixture
 def fixed_utcnow(monkeypatch):
     fixed = datetime(2023, 10, 10, 1, 0, tzinfo=UTC)
-    monkeypatch.setattr(dt_util, "utcnow", lambda: fixed)
+    monkeypatch.setattr(dt_util, "now", lambda: fixed)
     return fixed
 
 
@@ -726,3 +731,119 @@ def test_boost_end_datetime_is_local(fixed_utcnow):
     assert get_boost_end_datetime("garbage") is None
     assert get_boost_end_datetime(-1) is None
     assert get_boost_end_datetime(1440) is None
+
+
+def test_boost_end_datetime_is_home_local_and_honours_the_day_offset():
+    """A 60-minute CET boost at 13:49 reports 889 (14:49), not 14:49 UTC."""
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 11, 22, 13, 49, tzinfo=paris)
+    assert get_boost_end_datetime(889, 0, now=now) == now.replace(
+        hour=14, minute=49, second=0, microsecond=0
+    )
+    assert get_boost_end_datetime(889, 1, now=now) == now.replace(
+        hour=14, minute=49, second=0, microsecond=0
+    ) + timedelta(days=1)
+    assert get_boost_end_datetime(0, 0, now=now) == now.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    assert get_boost_end_datetime(1440) is None
+
+
+def test_acm_target_is_none_while_off():
+    assert get_target_temperature("acm", {"mode": "off", "stemp": "21.0"}) is None
+    assert get_target_temperature("acm", {"mode": "manual", "stemp": "21.0"}) == 21.0
+
+
+def test_boost_target_is_visible_while_the_wire_mode_is_off():
+    """The app's boost mode owns the target before status.mode is read."""
+    frame = {"mode": "off", "boost": True, "stemp": "20.0"}
+    assert get_target_temperature("htr", dict(frame)) == 20.0
+    assert get_target_temperature("acm", dict(frame)) == 20.0
+
+
+def test_get_target_temperature_returns_none_for_malformed_numbers():
+    """Entity read paths must not raise on a malformed wire number."""
+    assert (
+        get_target_temperature("htr", {"mode": "manual", "stemp": "not-a-number"})
+        is None
+    )
+    assert (
+        get_target_temperature(
+            "htr_mod",
+            {
+                "mode": "manual",
+                "on": True,
+                "selected_temp": "comfort",
+                "comfort_temp": "bad",
+                "eco_offset": "4.0",
+            },
+        )
+        is None
+    )
+    assert (
+        get_target_temperature(
+            "htr_mod",
+            {
+                "mode": "manual",
+                "on": True,
+                "selected_temp": "eco",
+                "comfort_temp": "20.0",
+                "eco_offset": "bad",
+            },
+        )
+        is None
+    )
+
+
+def test_htr_mod_auto_target_comes_from_the_programme(monkeypatch):
+    """AUTO reads the current slot's profile, as getAutoModeTemp does."""
+    monkeypatch.setattr(
+        "custom_components.smartbox.mapping.dt_util.now",
+        lambda: datetime(2026, 11, 23, 5, 0, tzinfo=UTC),  # Monday, slot 5
+    )
+    status = {
+        "mode": "auto",
+        "on": True,
+        "comfort_temp": "21.0",
+        "eco_offset": "4.0",
+        "ice_temp": "7.0",
+    }
+    assert get_target_temperature("htr_mod", status, {"1": [3] * 24}) == 21.0
+    assert get_target_temperature("htr_mod", status, {"1": [2] * 24}) == 17.0
+    assert get_target_temperature("htr_mod", status, {"1": [1] * 24}) == 7.0
+    assert get_target_temperature("htr_mod", status, {"1": [0] * 24}) is None
+
+
+def test_htr_mod_manual_off_profile_is_off_and_accepts_a_setpoint():
+    """selected_temp off is OFF in manual, and a setpoint picks eco/comfort."""
+    status = {
+        "mode": "manual",
+        "on": True,
+        "selected_temp": "off",
+        "units": "C",
+        "comfort_temp": "20.0",
+        "eco_offset": "4.0",
+        "ice_temp": "7.0",
+    }
+    assert get_hvac_mode("htr_mod", status) == HVACMode.OFF
+    assert get_target_temperature("htr_mod", status) is None
+    write = temperature_write("htr_mod", status, 17.0, model_code="0a")
+    assert isinstance(write, HtrModWrite)
+    assert write.on is True
+    assert write.mode == "manual"
+    assert write.selected_temp == "eco"
+    assert write.comfort_temp == 21.0
+    assert write.eco_offset == "4.0"
+
+    heat = hvac_mode_write(
+        "htr_mod",
+        status,
+        HVACMode.HEAT,
+    )
+    assert isinstance(heat, HtrModWrite)
+    assert heat.selected_temp == "comfort"
+
+    fahrenheit = {**status, "units": "F"}
+    write = temperature_write("htr_mod", fahrenheit, 63.0, model_code="0a")
+    assert isinstance(write, HtrModWrite)
+    assert write.selected_temp == "comfort"

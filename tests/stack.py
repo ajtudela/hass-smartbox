@@ -56,6 +56,7 @@ async def build_fake_world(mock_smartbox):
                 ]
                 if node_info["type"] != SmartboxNodeType.PMO
                 else None,
+                version=await mock_smartbox.session.get_node_version(dev_id, node_info),
             )
     return fake
 

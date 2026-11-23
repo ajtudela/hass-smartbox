@@ -10,11 +10,12 @@ is kept only for registry identity, device-info fields and the ``priority`` and
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from smartbox.protocol import VALID_PRIORITIES
+from smartbox.protocol.values import parse_number_or_none
 
 from .adapter import EngineChangeFanOut, SmartboxNodeAdapterEntity
 from .control_mode import (
@@ -22,13 +23,22 @@ from .control_mode import (
     control_mode_choices,
     control_mode_label,
 )
+from .controller import lock_kind
 from .entity_builder import EntityBuilder
+from .exceptions import user_error
 from .identity import (
     SmartboxNodeInfo,
     duty_limit_available,
     duty_limit_options,
     duty_limit_value,
     priority_available,
+)
+from .storage import (
+    is_elnur_storage,
+    lock_endpoint,
+    ui_mode as storage_ui_mode,
+    ui_mode_available as storage_ui_mode_available,
+    ui_mode_options as storage_ui_mode_options,
 )
 
 if TYPE_CHECKING:
@@ -100,6 +110,23 @@ def _build_node_selects(
         node.setup.get("units"),
     ):
         groups.append(([ControlMode(node, entry, runtime, fanout)], True))
+    if node.node_type == "acm" and storage_ui_mode_available(node.pid, node.setup):
+        groups.append(
+            ([StorageUIMode(node, entry, runtime, fanout, "storage_ui_mode")], True)
+        )
+    if (
+        node.heater_surface
+        and lock_kind(
+            node.node_type,
+            node.pid,
+            node.version.get("fw_version"),
+            node.setup,
+        )
+        == "int"
+    ):
+        groups.append(
+            ([ChildLockMode(node, entry, runtime, fanout, "lock_mode")], True)
+        )
     return groups
 
 
@@ -160,13 +187,15 @@ class DutyLimit(SmartboxNodeSelectEntity):
         super().__init__(node, entry, runtime, fanout, "duty_limit")
 
     def _setup(self) -> Mapping[str, Any]:
-        """Return the node's live setup ({} until the first frame)."""
+        """Return the node's live setup, or the discovery copy before frames."""
         state = self._node_state()
-        return state.setup if state is not None else {}
+        if state is not None and state.setup:
+            return state.setup
+        return self._node.setup
 
     def _choices(self) -> tuple[tuple[str, int], ...]:
         """Return the (label, value) choices for the current setup."""
-        return duty_limit_options(self._setup())
+        return duty_limit_options(self._setup(), self._live_pid)
 
     @property
     def options(self) -> list[str]:
@@ -216,16 +245,18 @@ class ControlMode(SmartboxNodeSelectEntity):
         super().__init__(node, entry, runtime, fanout, "control_mode")
 
     def _setup(self) -> Mapping[str, Any]:
-        """Return the node's live setup ({} until the first frame)."""
+        """Return the node's live setup, or the discovery copy before frames."""
         state = self._node_state()
-        return state.setup if state is not None else {}
+        if state is not None and state.setup:
+            return state.setup
+        return self._node.setup
 
     def _choices(self) -> tuple[tuple[str, int], ...]:
         """Return the (label, wire index) choices for the current setup."""
         setup = self._setup()
         return (
             control_mode_choices(
-                self._node.pid,
+                self._live_pid,
                 self._node.node_type,
                 setup,
                 setup.get("units") or self._status.get("units"),
@@ -251,4 +282,89 @@ class ControlMode(SmartboxNodeSelectEntity):
         values = dict(self._choices())
         await self._runtime.engine.set_control_mode(
             self._dev_id, self._ref, values[option]
+        )
+
+
+class ChildLockMode(SmartboxNodeSelectEntity):
+    """Smartbox 0/1/2 child-lock select.
+
+    The integer-lock families use ``status.locked`` as an enum:
+    ``0`` unblocked, ``1`` locally blocked, ``2`` remotely blocked. The bool
+    family keeps the separate lock switch. The vendor app exposes the local and
+    remote states as two settings; HA presents the wire value as one select.
+    """
+
+    _attr_name = "Child lock"
+    _attr_icon = "mdi:lock"
+
+    _OPTION_VALUES: ClassVar[dict[str, int]] = {
+        "Off": 0,
+        "Local lock": 1,
+        "Remote lock": 2,
+    }
+    _VALUE_OPTIONS: ClassVar[dict[int, str]] = {
+        0: "Off",
+        1: "Local lock",
+        2: "Remote lock",
+    }
+
+    @property
+    def options(self) -> list[str]:
+        """Return the wire lock states."""
+        return list(self._OPTION_VALUES)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the wire lock state as a label."""
+        value = self._status.get("locked")
+        if isinstance(value, bool):
+            return "Local lock" if value else "Off"
+        number = parse_number_or_none(value)
+        if number is None or not float(number).is_integer():
+            return None
+        return self._VALUE_OPTIONS.get(int(number))
+
+    async def async_select_option(self, option: str) -> None:
+        """Write the selected lock state as an integer."""
+        value = self._OPTION_VALUES[option]
+        if lock_endpoint(self._node.node_type):
+            await self._runtime.engine.set_lock_endpoint(self._dev_id, self._ref, value)
+        else:
+            await self._runtime.engine.set_lock(self._dev_id, self._ref, value)
+
+
+class StorageUIMode(SmartboxNodeSelectEntity):
+    """Storage-heater UI mode (factory_options.ui_mode)."""
+
+    _attr_name = "Storage UI mode"
+    _attr_icon = "mdi:radiator"
+
+    @property
+    def _options(self) -> dict[str, int]:
+        """Return this product's accepted UI-mode labels and values."""
+        return dict(storage_ui_mode_options(self._live_pid))
+
+    @property
+    def options(self) -> list[str]:
+        """Return the app's accepted storage UI modes for this product."""
+        return list(self._options)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the configured UI mode."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        value = storage_ui_mode(setup)
+        for label, index in self._options.items():
+            if index == value:
+                return label
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Write the selected storage UI mode."""
+        if not is_elnur_storage(self._live_pid):
+            msg = "storage_ui_mode_unsupported"
+            raise user_error(msg)
+        await self._runtime.engine.set_storage_ui_mode(
+            self._dev_id, self._ref, self._options[option]
         )

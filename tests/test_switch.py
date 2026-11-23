@@ -12,7 +12,9 @@ up in-body so setup log lines land in caplog.
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
+from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.components.switch import (
     DOMAIN as SWITCH_DOMAIN,
     SERVICE_TURN_OFF,
@@ -21,11 +23,15 @@ from homeassistant.components.switch import (
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
 from homeassistant.core import State
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_component import async_update_entity
 import pytest
 from pytest_homeassistant_custom_component.common import mock_restore_cache
+from smartbox.core.state import NodeState
 
 from custom_components.smartbox.const import DOMAIN
+from custom_components.smartbox.identity import boost_available
+from custom_components.smartbox.switch import MaxTemperatureLimitSwitch
 from tests.mocks import (
     get_away_status_switch_entity_id,
     get_away_status_switch_entity_name,
@@ -61,11 +67,27 @@ async def _switch_entity(hass, entity_id):
     return hass.data["entity_components"]["switch"].get_entity(entity_id)
 
 
+def test_switch_limits_fall_back_to_the_discovery_pid():
+    """A partial live version still uses the discovery PID for limits."""
+    entity = object.__new__(MaxTemperatureLimitSwitch)
+    entity._node = SimpleNamespace(
+        node_type="htr",
+        pid="04020000",
+        version={"fw_version": "1.9"},
+        setup={},
+    )
+    entity._node_state = lambda: NodeState(
+        version={"fw_version": "1.9"}, setup={}, status={}
+    )
+    limits = entity._controller_limits()
+    assert (limits.min_c, limits.max_c) == (0.0, 30.0)
+
+
 async def test_away_status(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, _fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -163,7 +185,7 @@ async def test_no_power_limit_switch(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, _fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
 
     mock_device_dict = (await mock_smartbox.session.get_devices())[0]
     dev_id = mock_device_dict["dev_id"]
@@ -237,7 +259,7 @@ async def test_basic_window_mode(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -339,7 +361,7 @@ async def test_basic_true_radiant(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -444,7 +466,7 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -456,9 +478,17 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
             mock_node_setup = await mock_smartbox.session.get_node_setup(
                 mock_device["dev_id"], mock_node
             )
-            if "factory_options" not in mock_node_setup or not mock_node_setup[
-                "factory_options"
-            ].get("boost_config", 2):
+            info = next(
+                item
+                for item in mock_smartbox._node_info[mock_device["dev_id"]]
+                if int(item["addr"]) == int(mock_node["addr"])
+            )
+            if not boost_available(
+                mock_node_setup,
+                node_type=mock_node["type"],
+                pid=info.get("product_id"),
+                fw_version=info.get("fw_version"),
+            ):
                 # We shouldn't have created a switch entity for this
                 assert hass.states.get(entity_id) is None
                 assert_log_message(
@@ -535,14 +565,22 @@ async def test_basic_boost_switch(hass, mock_smartbox, config_entry, caplog):
 
 async def test_lock_switch(hass, mock_smartbox, config_entry):
     """Lock switches exist for heater nodes; on means the lock is engaged."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "04020000"
+    mock_smartbox._node_info["device_1"][0]["fw_version"] = "1.9"
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    runtime, _fake = await seed_stack(hass, mock_smartbox)
+    runtime, fake = await seed_stack(hass, mock_smartbox)
 
     mock_device = (await mock_smartbox.session.get_devices())[0]
     node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
     entity_id = get_entity_id_from_unique_id(
         hass, SWITCH_DOMAIN, get_node_unique_id(mock_device, node, "lock")
+    )
+    assert (
+        er.async_get(hass).async_get_entity_id(
+            SELECT_DOMAIN, DOMAIN, get_node_unique_id(mock_device, node, "lock_mode")
+        )
+        is None
     )
     # Mock heater node starts unlocked (locked == False).
     assert hass.states.get(entity_id).state == "off"
@@ -558,8 +596,10 @@ async def test_lock_switch(hass, mock_smartbox, config_entry):
         {ATTR_ENTITY_ID: entity_id},
         blocking=True,
     )
-    await hass.async_block_till_done()
+    await confirm_write(hass, runtime, fake, mock_device["dev_id"], node)
     assert hass.states.get(entity_id).state == "on"
+    status = await fake.get_node_status(mock_device["dev_id"], ref(node))
+    assert status["locked"] is True
 
     # A websocket frame turning the lock off wins over the local state.
     await runtime.transport.deliver_update(
@@ -571,12 +611,55 @@ async def test_lock_switch(hass, mock_smartbox, config_entry):
     assert hass.states.get(entity_id).state == "off"
 
 
+async def test_legacy_pid_setup_write_keeps_the_omitted_extra_options(
+    hass, mock_smartbox, config_entry
+):
+    """A legacy setup POST omits extra_options without blanking the store."""
+    info = mock_smartbox._node_info["device_1"][0]
+    info["product_id"] = "04020000"
+    info["fw_version"] = "1.9"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["extra_options"] = {"user_duty_limit": 25}
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[0]
+    entity_id = get_window_mode_switch_entity_id(node)
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON,
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    posted = [
+        body
+        for method, path, body in fake.requests
+        if method == "POST" and path.endswith("/setup")
+    ]
+    assert posted
+    assert "extra_options" not in posted[-1]
+    stored = runtime.engine.node(device["dev_id"], f"{node['type']}/{node['addr']}")
+    assert stored is not None
+    assert stored.setup["extra_options"] == {"user_duty_limit": 25}
+    assert stored.setup["window_mode_enabled"] is True
+
+    await confirm_setup_write(hass, runtime, fake, device["dev_id"], node)
+    confirmed = runtime.engine.node(device["dev_id"], f"{node['type']}/{node['addr']}")
+    assert confirmed is not None
+    assert confirmed.setup["extra_options"] == {"user_duty_limit": 25}
+
+
 async def test_max_temperature_limit_switch(hass, mock_smartbox, config_entry):
     """The max limit switch tracks max_stemp_limit and toggles it off/on."""
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 26
+    assert len(hass.states.async_entity_ids(SWITCH_DOMAIN)) == 21
 
     mock_device = (await mock_smartbox.session.get_devices())[0]
     mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[0]
@@ -762,8 +845,8 @@ async def test_boost_switch_malformed_extra_options_render_none(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     entity_id = get_boost_switch_entity_id(mock_node)
     entity = await _switch_entity(hass, entity_id)
     assert entity is not None

@@ -19,7 +19,7 @@ directly.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +39,7 @@ from smartbox.protocol.client import NodeRef
 from smartbox.protocol.errors import SmartboxError
 from smartbox.protocol.values import (
     celsius_to_node_units,
+    node_units_to_celsius,
     parse_number,
     parse_number_or_none,
 )
@@ -339,6 +340,32 @@ class SmartboxNodeAdapterEntity(SmartboxAdapterEntity):
         return state.status if state is not None else {}
 
     @property
+    def _live_pid(self) -> str | None:
+        """The PID from the live version slot, falling back to discovery.
+
+        A node whose REST version read failed still gets its PID from the
+        first pushed version frame; runtime semantics must use that value.
+        """
+        state = self._node_state()
+        version = state.version if state is not None else None
+        if isinstance(version, Mapping):
+            pid = version.get("pid")
+            if isinstance(pid, str) and pid:
+                return pid
+        return self._node.pid
+
+    @property
+    def _live_fw_version(self) -> str | None:
+        """The firmware version from the live version slot, else discovery."""
+        state = self._node_state()
+        version = state.version if state is not None else None
+        if isinstance(version, Mapping):
+            fw_version = version.get("fw_version")
+            if isinstance(fw_version, str) and fw_version:
+                return fw_version
+        return self._node.version.get("fw_version")
+
+    @property
     def device_info(self) -> DeviceInfo:
         """Return the node device info, linked to its box device."""
         pid = self._node.pid
@@ -530,6 +557,18 @@ def _extra_temp_to_node_units(state: NodeState | None, value: object) -> float |
     if node_units(state) == "F" and extra_options_temps_in_celsius(state):
         return celsius_to_node_units(number, "F")
     return number
+
+
+def extra_temp_from_node_units(state: NodeState | None, value: float) -> float:
+    """Encode a node-scale temperature for ``extra_options``.
+
+    ``extra_options.version >= 2`` stores temperatures in Celsius even on a
+    Fahrenheit node. A version-less/older extra_options block uses the node's
+    scale, so the value passes through.
+    """
+    if node_units(state) == "F" and extra_options_temps_in_celsius(state):
+        return node_units_to_celsius(value, "F")
+    return value
 
 
 def node_boost_params(state: NodeState | None) -> tuple[float | None, float | None]:

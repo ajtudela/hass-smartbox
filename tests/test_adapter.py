@@ -29,6 +29,7 @@ from custom_components.smartbox.adapter import (
     EngineChangeFanOut,
     SmartboxAdapterEntity,
     extra_options_temps_in_celsius,
+    extra_temp_from_node_units,
     node_boost_params,
     node_extra_options,
     node_max_stemp_limit,
@@ -296,6 +297,21 @@ def test_node_boost_params_tolerate_malformed_wire_values() -> None:
         setup={"extra_options": {"boost_temp": "junk", "boost_time": "junk"}}
     )
     assert node_boost_params(state) == (None, None)
+
+
+def test_extra_temp_from_node_units_encodes_version_two_as_celsius() -> None:
+    """The write side mirrors node_boost_params for version >= 2."""
+    celsius = _node_state(status={"units": "C"})
+    fahrenheit_v2 = _node_state(
+        status={"units": "F"}, setup={"extra_options": {"version": 2}}
+    )
+    fahrenheit_legacy = _node_state(
+        status={"units": "F"}, setup={"extra_options": {"version": 1}}
+    )
+    assert extra_temp_from_node_units(celsius, 21.0) == 21.0
+    assert extra_temp_from_node_units(fahrenheit_v2, 70.0) == 21.0
+    assert extra_temp_from_node_units(fahrenheit_legacy, 70.0) == 70.0
+    assert extra_temp_from_node_units(None, 21.0) == 21.0
 
 
 def test_node_boost_temp_converts_celsius_extra_options_to_node_units() -> None:

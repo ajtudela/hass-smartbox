@@ -276,3 +276,13 @@ async def test_select_writes_the_wire_index() -> None:
         assert host.posts[-1][1]["priority"] == "low"
     finally:
         await select._runtime.engine.stop()
+
+
+def test_unlisted_acm_defaults_to_the_storage_controller():
+    """The app's factory default for an unlisted acm is HelkiStorage."""
+    choices = control_mode_choices("0899", "acm", {"control_mode": 0}, "C")
+    assert choices is not None
+    # Storage relay UI keeps PID_15 as the first offered label, with the
+    # storage wire array's OFF at index 0 still excluded.
+    assert choices[0][0] == "PID (15 min. period)"
+    assert control_mode_choices("0899", "thm", {"control_mode": 0}, "C") is None

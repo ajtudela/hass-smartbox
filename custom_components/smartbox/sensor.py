@@ -17,7 +17,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 import logging
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 # The recorder root re-exports DOMAIN and get_instance for integrations;
 # mypy strict's no_implicit_reexport cannot see that re-export.
@@ -68,10 +68,10 @@ from .const import (
     ENERGY_NODE_TYPES,
     FIELD_SCHEDULE,
     PRODUCT_CODE_ELNUR_STEPPED_STORAGE,
-    PROG_PROFILE_NAMES,
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
+from .controller import controller_limits, has_no_probes
 from .entity_builder import EntityBuilder
 from .mapping import (
     ProgDict,
@@ -81,6 +81,7 @@ from .mapping import (
     get_temperature_unit,
     rtc_time_to_datetime,
 )
+from .storage import is_water_storage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -94,6 +95,8 @@ if TYPE_CHECKING:
     from .identity import SmartboxDeviceInfo, SmartboxNodeInfo
 
 _LOGGER = logging.getLogger(__name__)
+
+_MINUTES_PER_DAY = 24 * 60
 
 # Every energy sensor shares SCAN_INTERVAL, so a multi-node account would fire
 # one REST samples read per node at the same instant. Queue them: the vendor
@@ -172,7 +175,7 @@ async def async_setup_entry(
     # Box device clock drift (diagnostic): polls the box's own RTC.
     def build_device(device: SmartboxDeviceInfo) -> list[EntityGroup]:
         """Build the box clock-drift sensor."""
-        return [([ClockDriftSensor(device, entry, runtime, fanout)], False)]
+        return _build_device_sensors(device, entry, runtime, fanout)
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the sensors this node's type and setup expose."""
@@ -189,6 +192,16 @@ async def async_setup_entry(
     _LOGGER.debug("Finished setting up Smartbox sensor platform")
 
 
+def _build_device_sensors(
+    device: SmartboxDeviceInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the box clock-drift sensor."""
+    return [([ClockDriftSensor(device, entry, runtime, fanout)], False)]
+
+
 def _build_node_sensors(
     node: SmartboxNodeInfo,
     entry: SmartboxConfigEntry,
@@ -203,8 +216,12 @@ def _build_node_sensors(
     if not node.supported_wire_type:
         return []
     groups: list[EntityGroup] = []
-    if node.heater_node or node.node_type == SmartboxNodeType.THM:
+    if node.heater_surface or node.thermostat_surface:
         groups.append(([TemperatureSensor(node, entry, runtime, fanout)], False))
+    if node.thermostat_surface:
+        thermostat_schedule = ThermostatScheduleSensor(node, entry, runtime, fanout)
+        runtime.services.thermostat_schedule.append(thermostat_schedule)
+        groups.append(([thermostat_schedule], False))
     if node.node_type in ENERGY_NODE_TYPES:
         groups.append(([PowerSensor(node, entry, runtime, fanout)], False))
         groups.append(
@@ -220,13 +237,24 @@ def _build_node_sensors(
         groups.append(([DutyCycleSensor(node, entry, runtime, fanout)], False))
     if node.heater_node and node.node_type == SmartboxNodeType.ACM:
         groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
-        groups.append(([TargetChargeSensor(node, entry, runtime, fanout)], False))
-    if node.heater_node and node.boost_available:
+        target = TargetChargeSensor(node, entry, runtime, fanout)
+        if not is_water_storage(node.pid):
+            # Water storage's settings list omits the charge days and valley
+            # slots, so its target-charge sensor is read-only.
+            runtime.services.charging.append(target)
+        groups.append(([target], False))
+    if node.heater_surface and node.boost_available:
         groups.append(([BoostEndTimeSensor(node, entry, runtime, fanout)], False))
-    if node.heater_node:
+    if node.heater_surface and not (
+        (node.node_type == SmartboxNodeType.ACM and is_water_storage(node.pid))
+        or (node.node_type == SmartboxNodeType.THM and has_no_probes(node.setup))
+    ):
         # Publish the entities the (domain-global) service acts on. A thm
         # programme is a per-day list of {m, t} temperature objects and its
         # write is {prog, units}; the heater int-slot shape does not apply.
+        # Water storage uses ON/OFF_AUTO profiles and the NO_PROBES Tevolve
+        # thermostat uses [OFF, ON], neither of which the heater profile
+        # catalogue can render, so neither gets a generic heater schedule.
         schedule = ScheduleSensor(node, entry, runtime, fanout)
         runtime.services.schedule.append(schedule)
         groups.append(([schedule], False))
@@ -291,10 +319,7 @@ class TemperatureSensor(SmartboxNodeSensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the native value of the sensor."""
-        mtemp = self._status.get("mtemp")
-        if mtemp is None:
-            return None
-        return float(mtemp)
+        return parse_number_or_none(self._status.get("mtemp"))
 
     @property
     def native_unit_of_measurement(self) -> UnitOfTemperature | None:
@@ -396,15 +421,29 @@ class PowerSensor(SmartboxNodeSensorEntity):
         if not status:
             # No status body yet: unknown, not a real zero.
             return None
-        if "power" in status and self._is_heating(status):
-            return cast("float", status["power"])
-        return 0
+        return self._node_power(status)
 
-    def _is_heating(self, status: dict[str, Any]) -> bool:
-        """Is the node heating right now (acm charges, others run active)."""
+    def _node_power(self, status: dict[str, Any]) -> float | None:
+        """Return the controller-specific power reading."""
+        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+            # HaverlandHtrModController.getPower() uses the configured rated
+            # power while active/heating, not status.power.
+            if status.get("active") or status.get("heating"):
+                state = self._node_state()
+                setup = state.setup if state is not None else self._node.setup
+                return parse_number_or_none(setup.get("power"))
+            return 0
         if self._node.node_type == SmartboxNodeType.ACM:
-            return bool(status.get("charging"))
-        return bool(status.get("active"))
+            # StorageHeaterController.getPower() reports status.power even
+            # while not charging (fan/resistor load).
+            return parse_number_or_none(status.get("power")) if "power" in status else 0
+        # ElectricHeaterController.getPower() requires a synced, active body.
+        if status.get("sync_status") == "ok" and status.get("active") is True:
+            if "power" not in status:
+                # The app reads a missing field as zero while active.
+                return 0
+            return parse_number_or_none(status.get("power"))
+        return 0
 
 
 class DutyCycleSensor(SmartboxNodeSensorEntity):
@@ -431,10 +470,7 @@ class DutyCycleSensor(SmartboxNodeSensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the native value of the sensor."""
-        duty = self._status.get("duty")
-        if duty is None:
-            return None
-        return float(duty)
+        return parse_number_or_none(self._status.get("duty"))
 
 
 class TotalConsumptionSensor(SmartboxNodeSensorEntity):
@@ -787,14 +823,16 @@ class ChargeLevelSensor(SmartboxNodeSensorEntity):
         model_code = self._node.get_model_code(
             state.version if state is not None else None
         )
-        if model_code == "1C":
-            return status.get("current_charge_per")
+        if model_code in ("1C", "2E"):
+            value = parse_number_or_none(status.get("current_charge_per"))
+            return int(value) if value is not None else None
         if model_code == PRODUCT_CODE_ELNUR_STEPPED_STORAGE:
             # Elnur's storage controller reports charge_level in 0..5 steps
             # and multiplies by 20 (docs/api-contract.md §3.4).
             level = parse_number_or_none(status.get("charge_level"))
             return int(level * 20) if level is not None else None
-        return status.get("charge_level")
+        value = parse_number_or_none(status.get("charge_level"))
+        return int(value) if value is not None else None
 
 
 class TargetChargeSensor(SmartboxNodeSensorEntity):
@@ -827,6 +865,23 @@ class TargetChargeSensor(SmartboxNodeSensorEntity):
             return None
         value = parse_number_or_none(self._status.get("target_charge_per"))
         return int(value) if value is not None else None
+
+    async def async_set_charging_schedule(
+        self,
+        *,
+        active_days: list[int] | None,
+        slot_1: dict[str, int] | None,
+        slot_2: dict[str, int] | None,
+    ) -> None:
+        """Write the storage charging configuration."""
+        ref = NodeRef(self._node.node_type, str(self._node.addr))
+        await self._runtime.engine.set_charging_conf(
+            self._dev_id,
+            ref,
+            active_days=active_days,
+            slot_1=slot_1,
+            slot_2=slot_2,
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -919,7 +974,9 @@ class BoostEndTimeSensor(SmartboxNodeSensorEntity):
         status = self._status
         if not status.get("boost"):
             return None
-        return get_boost_end_datetime(status.get("boost_end_min", 0))
+        return get_boost_end_datetime(
+            status.get("boost_end_min", 0), status.get("boost_end_day")
+        )
 
 
 class ScheduleSensor(SmartboxNodeSensorEntity):
@@ -942,7 +999,14 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
     ) -> None:
         """Initialize the schedule sensor."""
         super().__init__(node, entry, runtime, fanout, "schedule")
-        self._attr_options = list(PROG_PROFILE_NAMES)
+        limits = controller_limits(
+            node.node_type,
+            node.pid,
+            node.version.get("fw_version"),
+            node.setup,
+        )
+        self._profiles = limits.profiles
+        self._attr_options = list(self._profiles)
         self._unsub_boundary: Callable[[], None] | None = None
 
     @property
@@ -966,14 +1030,16 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
         if prog is None:
             return None
         profile = get_current_prog_profile(prog, dt_util.now())
-        if profile is None or profile >= len(PROG_PROFILE_NAMES):
-            # Unknown index (unverified mapping for acm/htr_mod families).
+        if profile is None or profile >= len(self._profiles):
+            # A node that reports more profiles than its controller catalogue
+            # holds is malformed; keep the state unknown rather than guessing.
             return None
-        return PROG_PROFILE_NAMES[profile]
+        return self._profiles[profile]
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
         await super().async_added_to_hass()
+        self._refresh_profiles()
         self._track_next_change()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -989,8 +1055,23 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
 
     def _async_change(self, change: Change) -> None:
         """Refresh on any node change (prog frames included)."""
+        self._refresh_profiles()
         self._track_next_change()
         super()._async_change(change)
+
+    def _refresh_profiles(self) -> None:
+        """Re-resolve the catalogue when a late version frame arrives."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        limits = controller_limits(
+            self._node.node_type,
+            self._live_pid,
+            self._live_fw_version,
+            setup,
+        )
+        if limits.profiles != self._profiles:
+            self._profiles = limits.profiles
+            self._attr_options = list(self._profiles)
 
     @callback
     def _track_next_change(self) -> None:
@@ -1017,8 +1098,208 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
 
     async def async_set_schedule(self, prog: ProgDict) -> None:
         """Write the schedule and refresh the entity state immediately."""
+        days = normalize_prog(prog)
+        if days is not None:
+            profile_count = len(self._profiles)
+            for day, slots in days.items():
+                if any(not 0 <= slot < profile_count for slot in slots):
+                    msg = (
+                        f"profile index out of range for day {day!r}: "
+                        f"0..{profile_count - 1} allowed"
+                    )
+                    raise ValueError(msg)
         ref = NodeRef(self._node.node_type, str(self._node.addr))
         await self._runtime.engine.set_prog(self._dev_id, ref, prog)
+        self._track_next_change()
+        self.async_write_ha_state()
+
+
+class ThermostatScheduleSensor(SmartboxNodeSensorEntity):
+    """Thermostat programme (day-keyed ``{m, t}`` segments).
+
+    The app stores a thermostat day as a list of segment-ending minutes and
+    the temperature for that segment. The state is the temperature scheduled
+    for the current minute; the raw programme is an attribute and is written
+    by ``smartbox.set_thermostat_schedule``.
+    """
+
+    _attr_name = "Thermostat schedule"
+    _attr_icon = "mdi:calendar-clock"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the thermostat schedule sensor."""
+        super().__init__(node, entry, runtime, fanout, "thermostat_schedule")
+        self._unsub_boundary: Callable[[], None] | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Arm the segment-boundary tracker."""
+        await super().async_added_to_hass()
+        self._track_next_change()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel the boundary tracker."""
+        if self._unsub_boundary is not None:
+            self._unsub_boundary()
+            self._unsub_boundary = None
+        await super().async_will_remove_from_hass()
+
+    @property
+    def _program(self) -> Mapping[str, Any]:
+        """Return the raw day-keyed thermostat programme."""
+        state = self._node_state()
+        payload = state.prog if state is not None else None
+        if isinstance(payload, Mapping) and isinstance(payload.get("prog"), Mapping):
+            payload = payload["prog"]
+        return payload if isinstance(payload, Mapping) else {}
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the node's temperature unit."""
+        units = self._status.get("units")
+        if isinstance(units, str):
+            return units
+        units = self._node.setup.get("units")
+        return units if isinstance(units, str) else "C"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature scheduled for the current minute."""
+        return self._scheduled_temperature(dt_util.now())
+
+    def _scheduled_temperature(self, now: datetime) -> float | None:
+        """Return the temperature in force at ``now``.
+
+        An API ``{m, t}`` object covers the interval ending at ``m`` with
+        temperature ``t``, so the active segment is the first whose end is
+        after the current minute. After the last end, the last temperature
+        remains in force until midnight.
+        """
+        day_key = str((now.weekday() + 1) % 7)
+        day = self._program.get(day_key)
+        if not isinstance(day, list) or not day:
+            previous = str((int(day_key) - 1) % 7)
+            day = self._program.get(previous)
+        if not isinstance(day, list):
+            return None
+        segments = sorted(
+            (seg for seg in day if isinstance(seg, Mapping)),
+            key=self._segment_end,
+        )
+        minute = now.hour * 60 + now.minute
+        for seg in segments:
+            end = self._segment_minute(seg)
+            if end is not None and end > minute:
+                return parse_number_or_none(seg.get("t"))
+        return parse_number_or_none(segments[-1].get("t")) if segments else None
+
+    @staticmethod
+    def _segment_minute(segment: Mapping[str, Any]) -> int | None:
+        """Return a segment's integral end minute, or None when malformed."""
+        value = segment.get("m")
+        if isinstance(value, bool):
+            return None
+        number = parse_number_or_none(value)
+        if number is None or not float(number).is_integer():
+            return None
+        return int(number)
+
+    @classmethod
+    def _segment_end(cls, segment: Mapping[str, Any]) -> int:
+        """Return a segment's end minute for sorting."""
+        return cls._segment_minute(segment) or 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the raw programme."""
+        return {"schedule": dict(self._program)}
+
+    def _next_change(self, now: datetime) -> datetime | None:
+        """Return the next boundary: a segment end or the next midnight."""
+        day_key = str((now.weekday() + 1) % 7)
+        next_key = str((int(day_key) + 1) % 7)
+        minute = now.hour * 60 + now.minute
+        tomorrow = dt_util.start_of_local_day(now + timedelta(days=1))
+        candidates: list[datetime] = []
+        current = self._program.get(day_key)
+        if isinstance(current, list):
+            for seg in sorted(
+                (seg for seg in current if isinstance(seg, Mapping)),
+                key=self._segment_end,
+            ):
+                end = self._segment_minute(seg)
+                if end is None or end <= minute:
+                    continue
+                if end == _MINUTES_PER_DAY:
+                    candidates.append(tomorrow)
+                else:
+                    candidates.append(
+                        now.replace(
+                            hour=end // 60,
+                            minute=end % 60,
+                            second=0,
+                            microsecond=0,
+                        )
+                    )
+        following = self._program.get(next_key)
+        if isinstance(following, list) and following:
+            # A new day's first segment is in force from midnight, even when
+            # its first explicit end is later.
+            candidates.append(tomorrow)
+            for seg in sorted(
+                (seg for seg in following if isinstance(seg, Mapping)),
+                key=self._segment_end,
+            ):
+                end = self._segment_minute(seg)
+                if end is None:
+                    continue
+                if end == _MINUTES_PER_DAY:
+                    candidates.append(
+                        dt_util.start_of_local_day(tomorrow + timedelta(days=1))
+                    )
+                else:
+                    candidates.append(tomorrow.replace(hour=end // 60, minute=end % 60))
+        return min(candidates) if candidates else None
+
+    @callback
+    def _async_change(self, change: Change) -> None:
+        """Re-arm when a pushed programme changes the next boundary."""
+        self._track_next_change()
+        super()._async_change(change)
+
+    def _track_next_change(self) -> None:
+        """Arm one shot at the next segment boundary."""
+        if self._unsub_boundary is not None:
+            self._unsub_boundary()
+            self._unsub_boundary = None
+        next_change = self._next_change(dt_util.now())
+        if next_change is None or self.hass is None:
+            return
+        self._unsub_boundary = async_track_point_in_time(
+            self.hass, self._async_boundary, next_change
+        )
+
+    @callback
+    def _async_boundary(self, _: Any) -> None:  # noqa: ANN401
+        """Flip the state at a boundary and re-arm."""
+        self._unsub_boundary = None
+        self.async_write_ha_state()
+        self._track_next_change()
+
+    async def async_set_thermostat_schedule(
+        self, prog: dict[str, list[dict[str, object]]]
+    ) -> None:
+        """Write the thermostat programme."""
+        ref = NodeRef(self._node.node_type, str(self._node.addr))
+        await self._runtime.engine.set_thermostat_prog(
+            self._dev_id, ref, prog, self.native_unit_of_measurement or "C"
+        )
         self._track_next_change()
         self.async_write_ha_state()
 

@@ -6,7 +6,7 @@ How the integration is put together, and why it is shaped this way. It is writte
 
 A Home Assistant custom integration (domain `smartbox`) for Smartbox electric heaters. It talks to the vendor's cloud directly: REST calls for reads and writes, plus one `ws_user` websocket per account for pushed updates. A "box" (the site gateway) carries several heater nodes; both become Home Assistant devices.
 
-Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.2.0,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.2.1,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 ## The three layers
 
@@ -100,6 +100,8 @@ It renders store state into entities and translates entity and service actions i
 
 Component-level setup (`async_setup`) also serves the optional bundled programme card: it registers `frontend/` as a static path and loads `smartbox-program-card.js` as an extra frontend module when the asset is present. The card reads the schedule sensor's attributes and calls `smartbox.set_schedule`; that entity/service contract is its only coupling to the Python side.
 
+Entity creation uses the discovery identity: `identity.py` freezes the REST node PID/version/setup and the platform builders decide which entities exist from that snapshot. Runtime properties use the live version and setup slots, so a late version frame updates bounds, storage modes and the schedule catalogue. A PID first seen in such a frame does not add or remove entities until the entry reloads; the `NodeAdded` membership path already requests a reload when the node set changes.
+
 ## Repository map
 
 ```
@@ -191,6 +193,7 @@ Availability moves on evidence: a lost marker opens an unavailable window, an ok
 | Wire units | `test_client`, `test_auth`, `test_writes`, `test_values`, `test_mapping`, `test_ws_user_transport` | The wire rules: request shapes, body forms, normalization, the token lifecycle. Expected values trace to the contract record. |
 | Domain units | `test_core_engine`, `test_core_availability`, `test_core_writes`, `test_core_state` | Store merging and engine behavior, exercised with no Home Assistant involved. |
 | Platform behavior | `test_climate`, `test_sensor`, `test_number`, `test_switch`, `test_select`, `test_binary_sensor`, `test_init`, `test_availability`, `test_config_flow`, `test_diagnostics`, `test_system_health`, `test_identity`, `test_adapter`, `test_ws_user_wiring` | Real service calls and entity states. Only the wire endpoints are fakes; the engine, store and adapter under them are the real code. |
+| Device matrix | `test_product_code_parity`, `test_entity_surface_matrix`, `test_controller`, `test_storage` | Every decoded product code's family, bounds (climate, programme, max-limit, boost), profiles, boost-parameter policy, duty presets and capability/firmware gates, plus the exact entity domains/unique keys per representative family and variant, including the box-level entities. |
 | Wire reality | `test_loopback` | The real client against a real local aiohttp server: pins what the transport fakes assume about handshakes, closes and timeout shapes. |
 | Chaos | `test_soak` | The whole stack against a hostile local server — kills, stalls, 5xx, lost frames — asserting structural invariants: no stuck deadline, no leaked timer, silent teardown. |
 | Gates and tooling | `test_layering`, `test_docs_references`, `test_translations`, `test_version`, `test_utils`, `test_lib_contract`, `test_payload_bounding`, `test_live_probe`, `test_fake_api`, `test_fake_transport` | Architecture, documentation and tooling rules, and the fakes' own behavior. |
@@ -226,6 +229,15 @@ Three documents, three roles: `docs/api-contract.md` settles wire acceptance —
 
 `smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to a tagged tarball. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
 
+### Device semantics (planned extraction)
+
+Product/controller profiles (setpoint and programme ranges, control-mode
+catalogues, lock/boost/storage/thermostat rules) still live in the adapter.
+The target is a Home Assistant-free `smartbox.device` layer consumed by the
+entities, the CLI and diagnostics, with the adapter keeping only presentation
+and entity lifecycle. The design, migration slices and acceptance tests are in
+[device-semantics.md](device-semantics.md). It is not scheduled.
+
 ## Where to go deeper
 
 | Question | Document |
@@ -236,5 +248,6 @@ Three documents, three roles: `docs/api-contract.md` settles wire acceptance —
 | How do I set up and contribute? | `CONTRIBUTING.md` |
 | How is the integration used? | `README.md` |
 | What is in flight right now? | `docs/status.md` |
+| Where is the device-semantics extraction design? | `docs/device-semantics.md` |
 | How do I verify a claim against the real cloud? | `tools/live_probe.py` |
 | What changed in each release? | `CHANGELOG.md` |

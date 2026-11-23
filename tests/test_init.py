@@ -574,6 +574,33 @@ async def test_thermostat_energy_entities_are_pruned(hass, config_entry):
 
 
 @pytest.mark.asyncio
+async def test_integer_lock_switch_is_pruned(hass, config_entry):
+    """The old boolean lock switch is removed on integer-lock families."""
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "switch", DOMAIN, "node_11_lock", config_entry=config_entry
+    )
+    identity = SimpleNamespace(
+        nodes=[
+            SimpleNamespace(
+                node_id="node_11",
+                node_type=SmartboxNodeType.ACM,
+                heater_node=True,
+                heater_surface=True,
+                pid="081c",
+                version={"fw_version": "1.8.0"},
+                setup={},
+                status={"locked": 0},
+            )
+        ]
+    )
+
+    smartbox_init._async_prune_integer_lock_switches(hass, config_entry, identity)
+
+    assert registry.async_get_entity_id("switch", DOMAIN, "node_11_lock") is None
+
+
+@pytest.mark.asyncio
 async def test_boxless_device_skips_box_power_limit_entities(
     hass, mock_smartbox, config_entry
 ):

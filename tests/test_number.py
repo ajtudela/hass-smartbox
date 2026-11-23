@@ -12,6 +12,7 @@ log lines land in caplog.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 from homeassistant.components.number import ATTR_VALUE, DOMAIN as NUMBER_DOMAIN
 from homeassistant.components.number.const import SERVICE_SET_VALUE
@@ -25,16 +26,19 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_component import async_update_entity
 from homeassistant.util.unit_conversion import TemperatureConverter
 import pytest
+from smartbox.core.state import NodeState
 from smartbox.protocol.values import celsius_to_node_units, node_units_to_celsius
 
 from custom_components.smartbox.compat import vol
 from custom_components.smartbox.const import DOMAIN, SERVICE_SET_BOOST_PARAMS
+from custom_components.smartbox.number import MaxTemperature
 from tests.const import MOCK_SMARTBOX_DEVICE_POWER
 from tests.mocks import (
     get_away_offset_entity_id,
     get_away_offset_entity_name,
     get_boost_duration_entity_id,
     get_boost_duration_entity_name,
+    get_boost_switch_entity_id,
     get_boost_temperature_entity_id,
     get_boost_temperature_entity_name,
     get_device_unique_id,
@@ -62,7 +66,7 @@ async def test_power_limit(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, _fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 27
+    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 19
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -112,17 +116,33 @@ async def test_power_limit(hass, mock_smartbox, config_entry):
     assert runtime.engine.device(dev_id).power_limit == 500
 
 
+def test_number_limits_fall_back_to_the_discovery_pid():
+    """A partial live version still uses the discovery PID for limits."""
+    entity = object.__new__(MaxTemperature)
+    entity._node = SimpleNamespace(
+        node_type="htr",
+        pid="04020000",
+        version={"fw_version": "1.9"},
+        setup={},
+    )
+    entity._node_state = lambda: NodeState(
+        version={"fw_version": "1.9"}, setup={}, status={}
+    )
+    limits = entity._controller_limits()
+    assert (limits.min_c, limits.max_c) == (0.0, 30.0)
+
+
 async def test_boost_temperature(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 27
+    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 19
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
     assert DOMAIN in hass.config.components
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     entity_id = get_boost_temperature_entity_id(mock_node)
     state = hass.states.get(entity_id)
     # check basic properties
@@ -156,13 +176,13 @@ async def test_boost_duration(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 27
+    assert len(hass.states.async_entity_ids(NUMBER_DOMAIN)) == 19
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
     assert DOMAIN in hass.config.components
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     entity_id = get_boost_duration_entity_id(mock_node)
     state = hass.states.get(entity_id)
     # check basic properties
@@ -189,10 +209,82 @@ async def test_boost_duration(hass, mock_smartbox, config_entry):
     assert setup["extra_options"]["boost_time"] == 120
 
     entity = hass.data["entity_components"]["number"].get_entity(entity_id)
+    assert entity.native_max_value == 1440
     with pytest.raises(ServiceValidationError) as err:
         await entity.async_set_native_value(10)
     assert err.value.translation_key == "boost_duration_out_of_range"
     assert set(err.value.translation_placeholders) == {"min", "max", "unit"}
+
+
+async def test_legacy_pid_has_no_boost_number_entities(
+    hass, mock_smartbox, config_entry
+):
+    """Legacy codes reject extra_options, so they get no boost parameters."""
+    info = mock_smartbox._node_info["device_1"][0]
+    info["product_id"] = "04020000"
+    info["fw_version"] = "1.9"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["factory_options"] = {**setup.get("factory_options", {}), "boost_config": 2}
+    setup["extra_options"] = {"user_duty_limit": 25}
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    _runtime, _fake = await seed_stack(hass, mock_smartbox)
+
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[0]
+    assert hass.states.get(get_boost_temperature_entity_id(node)) is None
+    assert hass.states.get(get_boost_duration_entity_id(node)) is None
+    # The base ElectricHeater family exposes no boost mode either.
+    assert hass.states.get(get_boost_switch_entity_id(node)) is None
+
+
+async def test_storage_boost_numbers_exist_without_a_boost_config(
+    hass, mock_smartbox, config_entry
+):
+    """An absent boost_config keeps the legacy boost parameters on storage."""
+    mock_smartbox._node_info["device_1"][1]["product_id"] = "081C0000"
+    mock_smartbox._node_info["device_1"][1]["fw_version"] = "1.8.0"
+    setup = mock_smartbox._node_setup["device_1"][1]
+    setup["factory_options"].pop("boost_config", None)
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    _runtime, _fake = await seed_stack(hass, mock_smartbox)
+
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[1]
+    assert hass.states.get(get_boost_temperature_entity_id(node)) is not None
+    assert hass.states.get(get_boost_duration_entity_id(node)) is not None
+    assert hass.states.get(get_boost_switch_entity_id(node)) is not None
+
+
+@pytest.mark.parametrize(
+    ("product_id", "boost_config"),
+    [("01170000", 1), ("011D0000", 2), ("01470000", 3)],
+)
+async def test_fixed_time_boost_has_no_parameter_numbers(
+    hass, mock_smartbox, config_entry, product_id, boost_config
+):
+    """Haverland fixed-time boost has no editable temperature or duration."""
+    info = mock_smartbox._node_info["device_1"][0]
+    info["product_id"] = product_id
+    info["fw_version"] = "1.9"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["factory_options"] = {
+        **setup.get("factory_options", {}),
+        "boost_config": boost_config,
+    }
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    _runtime, _fake = await seed_stack(hass, mock_smartbox)
+
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[0]
+    assert hass.states.get(get_boost_temperature_entity_id(node)) is None
+    assert hass.states.get(get_boost_duration_entity_id(node)) is None
+    assert hass.states.get(get_boost_switch_entity_id(node)) is not None
 
 
 async def test_set_boost_params_service_targets_entities(
@@ -203,8 +295,8 @@ async def test_set_boost_params_service_targets_entities(
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
 
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     temp_entity_id = get_boost_temperature_entity_id(mock_node)
     duration_entity_id = get_boost_duration_entity_id(mock_node)
     mock_node_status = await fake.get_node_status(mock_device["dev_id"], ref(mock_node))
@@ -296,8 +388,8 @@ async def test_set_boost_params_service_refuses_a_param_without_a_target(
     await hass.async_block_till_done()
     _runtime, fake = await seed_stack(hass, mock_smartbox)
 
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     temp_entity_id = get_boost_temperature_entity_id(mock_node)
     before = await fake.get_node_setup(mock_device["dev_id"], ref(mock_node))
 
@@ -328,8 +420,8 @@ async def test_set_boost_params_service_rejects_an_out_of_range_duration(
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
 
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     duration_entity_id = get_boost_duration_entity_id(mock_node)
 
     with pytest.raises(vol.Invalid):
@@ -349,8 +441,8 @@ async def test_set_boost_params_service_maps_api_failure(
     await hass.async_block_till_done()
     _runtime, fake = await seed_stack(hass, mock_smartbox)
 
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     entity_id = get_boost_temperature_entity_id(mock_node)
     status = await fake.get_node_status(mock_device["dev_id"], ref(mock_node))
     boost_temp = 21.5 if status["units"] == "C" else 70.0
@@ -454,8 +546,8 @@ async def test_boost_temperature_bounds_follow_the_node_scale(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     _runtime, fake = await seed_stack(hass, mock_smartbox)
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     entity_id = get_boost_temperature_entity_id(mock_node)
     entity = hass.data["entity_components"]["number"].get_entity(entity_id)
     status = await fake.get_node_status(mock_device["dev_id"], ref(mock_node))
@@ -644,8 +736,8 @@ async def test_boost_numbers_malformed_extra_options_render_none(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     runtime, fake = await seed_stack(hass, mock_smartbox)
-    mock_device = (await mock_smartbox.session.get_devices())[1]
-    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[3]
+    mock_device = (await mock_smartbox.session.get_devices())[0]
+    mock_node = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     await push_setup_update(
         hass,
         runtime,

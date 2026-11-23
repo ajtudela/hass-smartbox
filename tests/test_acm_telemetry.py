@@ -71,6 +71,8 @@ def _node(node_type: str = "acm") -> MagicMock:
     node.hw_version = "hw"
     node.supported_wire_type = node_type in {t.value for t in SmartboxNodeType}
     node.heater_node = node_type in {"htr", "htr_mod", "acm"}
+    node.heater_surface = node_type in {"htr", "htr_mod", "acm"}
+    node.thermostat_surface = node_type == "thm"
     node.boost_available = False
     return node
 
@@ -180,16 +182,52 @@ def test_charging_helpers_reject_malformed_schedule() -> None:
     assert _format_charging_days({"active_days": [True]}) is None
 
 
-def test_thermostat_gets_temperature_but_no_heater_schedule_or_energy() -> None:
-    runtime = SimpleNamespace(services=SimpleNamespace(schedule=[]))
+def test_thermostat_gets_temperature_and_its_own_schedule_but_no_energy() -> None:
+    runtime = SimpleNamespace(
+        services=SimpleNamespace(schedule=[], thermostat_schedule=[])
+    )
     groups = _build_node_sensors(_node("thm"), MagicMock(), runtime, _NoopFanout())
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
-    assert classes == {"TemperatureSensor"}
+    assert classes == {"TemperatureSensor", "ThermostatScheduleSensor"}
+    assert runtime.services.schedule == []
+    assert len(runtime.services.thermostat_schedule) == 1
+
+
+def test_thm_28_gets_the_heater_schedule_not_the_thermostat_one() -> None:
+    """The Tevolve floor thermostat uses the heater int-slot programme."""
+    node = _node("thm")
+    node.pid = "0128"
+    node.heater_surface = True
+    node.thermostat_surface = False
+    runtime = SimpleNamespace(
+        services=SimpleNamespace(schedule=[], thermostat_schedule=[])
+    )
+    groups = _build_node_sensors(node, MagicMock(), runtime, _NoopFanout())
+    classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
+    assert classes == {"TemperatureSensor", "ScheduleSensor"}
+    assert len(runtime.services.schedule) == 1
+    assert runtime.services.thermostat_schedule == []
+
+
+def test_water_storage_has_no_generic_heater_schedule() -> None:
+    """2A uses ON/OFF_AUTO profiles this integration does not model."""
+    node = _node("acm")
+    node.pid = "082A"
+    runtime = SimpleNamespace(
+        services=SimpleNamespace(
+            schedule=[], thermostat_schedule=[], charging=[], boost=[]
+        )
+    )
+    groups = _build_node_sensors(node, MagicMock(), runtime, _NoopFanout())
+    classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
+    assert "ScheduleSensor" not in classes
     assert runtime.services.schedule == []
 
 
 def test_unknown_wire_type_gets_no_sensors() -> None:
-    runtime = SimpleNamespace(services=SimpleNamespace(schedule=[]))
+    runtime = SimpleNamespace(
+        services=SimpleNamespace(schedule=[], thermostat_schedule=[])
+    )
     assert (
         _build_node_sensors(
             _node("towel_rail_heater"), MagicMock(), runtime, _NoopFanout()

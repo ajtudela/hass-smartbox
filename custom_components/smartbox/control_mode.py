@@ -23,9 +23,10 @@ inheritance, and the two methods above. The wire record and provenance are in
   That family is withheld until the discrepancy is resolved on a real device.
 
 The factory switches on ``version.pid[2:4]`` only; codes absent from the
-explicit table use its default ``ElectricHeaterController`` (the htr wire
-array). THM nodes are withheld by integration choice, except explicit
-htr-family products such as code ``28`` (the Tevolve floor thermostat).
+explicit table use ``ElectricHeaterController`` for htr/htr_mod and
+``HelkiStorageHeaterController`` (off-first storage wire, relay actuation) for
+acm. THM nodes are withheld by integration choice, except explicit htr-family
+products such as code ``28`` (the Tevolve floor thermostat).
 
 The UI list is actuation-dependent: triac ``pid, hyst_02, hyst_03, hyst_05,
 hyst_07``; relay ``pid_15, pid_30, hyst_02, hyst_03, hyst_05, hyst_07``; a
@@ -38,6 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from .controller import has_no_probes, is_htr_mod_controller
 from .product import product_code
 
 # Product code (version.pid[2:4]) -> family. The app's factory switch is on
@@ -49,6 +51,25 @@ EXPLICIT_FAMILY: dict[str, str] = {
     "0F": "thermostat",
     "1C": "storage",
     "2E": "storage",
+    # ElectricHeater-family product codes that the app's factory routes to a
+    # heater controller. They must stay explicit: an unlisted *acm* otherwise
+    # falls back to HelkiStorageController.
+    "01": "htr",
+    "02": "htr",
+    "07": "htr",
+    "08": "htr",
+    "0B": "htr",
+    "0C": "htr",
+    "0D": "htr",
+    "10": "htr",
+    "11": "htr",
+    "12": "htr",
+    "13": "htr",
+    "16": "htr",
+    "18": "htr",
+    "1B": "htr",
+    "1F": "htr",
+    "24": "htr",
     "0A": "htr",
     "14": "htr",
     "17": "htr",
@@ -204,8 +225,13 @@ def _family(code: str | None, node_type: str) -> str | None:
     explicit = EXPLICIT_FAMILY.get(code or "")
     if explicit is not None:
         return explicit
-    # No THM/ACM fallback: the app switches on version.pid[2:4] only and its
-    # default branch is ElectricHeaterController.
+    # The app's factory default is ElectricHeaterController for htr/htr_mod,
+    # but HelkiStorageHeaterController for acm (its wire array starts with OFF).
+    # A thm without an explicit htr-family code stays withheld.
+    if node_type == "acm":
+        return "storage"
+    if node_type == "thm":
+        return None
     return "htr"
 
 
@@ -267,7 +293,10 @@ def control_mode_choices(
     sensor_mode = extra.get("sensor_mode") if isinstance(extra, Mapping) else None
 
     if family == "storage":
-        if ACTUATION.get(code or "", "TRIAC") != "RELAY":
+        # The app's unlisted-acm fallback is HelkiStorageHeaterController,
+        # whose storage wire array is relay-actuated even when the PID table
+        # has no actuation entry.
+        if ACTUATION.get(code or "", "RELAY") != "RELAY":
             return None
         ui = _ui_for_actuation("RELAY", sensor_mode)
         wire = STORAGE_WIRE
@@ -280,7 +309,7 @@ def control_mode_choices(
     return choices
 
 
-def control_mode_available(
+def control_mode_available(  # noqa: PLR0911 - one gate per controller family
     pid: str | None,
     node_type: str,
     setup: Mapping[str, object] | None,
@@ -296,6 +325,11 @@ def control_mode_available(
     """
     setup = setup or {}
     if "control_mode" not in setup:
+        return False
+    if node_type == "thm" and product_code(pid) == "28" and has_no_probes(setup):
+        # TevolveThermostat's NO_PROBES timer hides CONTROL_MODE.
+        return False
+    if node_type == "htr_mod" and is_htr_mod_controller(pid, node_type):
         return False
     if control_mode_choices(pid, node_type, setup, units) is None:
         return False

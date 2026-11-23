@@ -19,15 +19,13 @@ from __future__ import annotations
 import logging
 import math
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.components.climate import HVACAction, HVACMode
+from homeassistant.components.climate import ClimateEntityFeature, HVACAction, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_MODE,
     ATTR_PRESET_MODE,
-    DEFAULT_MAX_TEMP,
-    DEFAULT_MIN_TEMP,
     DOMAIN as CLIMATE_DOMAIN,
     PRESET_ACTIVITY,
     PRESET_AWAY,
@@ -63,6 +61,7 @@ from smartbox.protocol.events import Snapshot, Update
 from smartbox.protocol.writes import VALID_BOOST_MODES
 
 from custom_components.smartbox.adapter import node_boost_params
+from custom_components.smartbox.boost_prefs import NodeBoostPrefs
 from custom_components.smartbox.climate import SmartboxHeater
 from custom_components.smartbox.const import (
     DOMAIN,
@@ -144,7 +143,14 @@ def _check_state(hass, mock_node, mock_node_status, state):
         hass,
         convert_temp(hass, mock_node_status["units"], float(mock_node_status["mtemp"])),
     )
-    # ATTR_TEMPERATURE actually stores the target temperature
+    # ATTR_TEMPERATURE actually stores the target temperature. htr_mod AUTO
+    # derives it from the programme (covered by its own test); this helper
+    # only has the status frame, so skip that one comparison.
+    if (
+        mock_node["type"] == SmartboxNodeType.HTR_MOD
+        and mock_node_status.get("mode") == "auto"
+    ):
+        return
     if mock_node["type"] == SmartboxNodeType.HTR_MOD:
         if mock_node_status["selected_temp"] == "comfort":
             target_temp = float(mock_node_status["comfort_temp"])
@@ -883,7 +889,7 @@ async def _push_haverland_pid(hass, runtime, dev_id, node):
     so a test node needs the version slot a live box pushes.
     """
     await runtime.transport.deliver_update(
-        dev_id, f"/{node['type']}/{node['addr']}/version", {"pid": "020A0000"}
+        dev_id, f"/{node['type']}/{node['addr']}/version", {"pid": "010A0000"}
     )
     await hass.async_block_till_done()
 
@@ -905,7 +911,7 @@ async def test_htr_mod_climate_grid_and_profile_limits(
     # Comfort and eco share the union; ice is the slot's own value.
     expectations = (
         (1, "comfort", (10.0, 28.0)),
-        (2, "eco", (10.0, 28.0)),
+        (2, "eco", (5.0, 28.0)),  # AUTO in the fixture; global htr_mod bounds
         (3, "ice", (7.0, 7.0)),
     )
     for addr in (1, 2, 3):
@@ -928,6 +934,10 @@ async def test_htr_mod_climate_grid_and_profile_limits(
         assert entity.target_temperature_step == 1.0
         assert entity.min_temp == pytest.approx(expected[0])
         assert entity.max_temp == pytest.approx(expected[1])
+        if status["mode"] == "auto":
+            # The programme-derived AUTO target is covered separately; this
+            # test is the profile-bound grid.
+            continue
         if selected == "eco":
             # comfort 24.3 - offset 4: inside the union, reported as stored.
             eco = float(status["comfort_temp"]) - float(status["eco_offset"])
@@ -970,7 +980,7 @@ async def test_htr_mod_non_haverland_product_keeps_the_generic_grid(
     nodes = await mock_smartbox.session.get_nodes("device_2")
     node = nodes[1]  # selected comfort, comfort_temp "20.3"
     await runtime.transport.deliver_update(
-        "device_2", f"/{node['type']}/{node['addr']}/version", {"pid": "081C0000"}
+        "device_2", f"/{node['type']}/{node['addr']}/version", {"pid": "08010000"}
     )
     await hass.async_block_till_done()
     status = await fake.get_node_status("device_2", ref(node))
@@ -985,10 +995,10 @@ async def test_htr_mod_non_haverland_product_keeps_the_generic_grid(
         0.5 if unit is UnitOfTemperature.CELSIUS else 1.0
     )
     assert entity.min_temp == pytest.approx(
-        TemperatureConverter.convert(DEFAULT_MIN_TEMP, UnitOfTemperature.CELSIUS, unit)
+        TemperatureConverter.convert(1.0, UnitOfTemperature.CELSIUS, unit)
     )
     assert entity.max_temp == pytest.approx(
-        TemperatureConverter.convert(DEFAULT_MAX_TEMP, UnitOfTemperature.CELSIUS, unit)
+        TemperatureConverter.convert(30.0, UnitOfTemperature.CELSIUS, unit)
     )
     # No profile range and no clamp: the stored device value is reported.
     assert entity.native_target_temperature == pytest.approx(
@@ -1329,23 +1339,26 @@ async def test_boost_preset(hass, smartbox_stack, mock_smartbox):
     runtime, fake = smartbox_stack
     assert DOMAIN in hass.config.components
 
-    # Device 2 node 1 starts with boost OFF, so this is a real write: a node
-    # that already had boost on would make it a value-equal no-op, and the
-    # preset assertion below would then pass without any write taking effect.
+    # Device 1 node 1 (Helki storage) starts with boost OFF, so this is a real
+    # write: a node that already had boost on would make it a value-equal
+    # no-op, and the preset assertion below would then pass without any write
+    # taking effect.
     state, status = await _preset_write(
-        hass, runtime, fake, mock_smartbox, 1, 1, PRESET_BOOST
+        hass, runtime, fake, mock_smartbox, 0, 1, PRESET_BOOST
     )
-    assert ("POST", "devs/device_2/htr_mod/1/status", {"boost": True}) in fake.requests
+    assert ("POST", "devs/device_1/acm/1/boost") in {
+        (method, path) for method, path, _body in fake.requests
+    }
     state = await _refresh(hass, state.entity_id)
     assert state.attributes[ATTR_PRESET_MODE] == PRESET_BOOST
-    assert status["mode"] == "manual"  # the boost preset writes no mode
+    assert status["boost"] is True
 
 
 # --- property-mapping unit tests (engine store as the state source) ---
 
 
 def _entity_with_world(
-    status, *, away=False, node_type="other", setup=None
+    status, *, away=False, node_type="other", setup=None, pid="pid", version=None
 ) -> SmartboxHeater:
     """Build a SmartboxHeater over a hand-built engine world (no HA harness).
 
@@ -1360,14 +1373,20 @@ def _entity_with_world(
     device = DeviceState(
         dev_id=DEV,
         away={"away": away, "enabled": away, "forced": away},
-        node_states={key: NodeState(status=dict(status), setup=dict(setup or {}))},
+        node_states={
+            key: NodeState(
+                status=dict(status),
+                setup=dict(setup or {}),
+                version=dict(version) if version else None,
+            )
+        },
     )
     object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
-    return _heater_over_engine(engine, node_type)
+    return _heater_over_engine(engine, node_type, pid=pid)
 
 
 def _heater_over_engine(
-    engine: SmartboxEngine, node_type: str = "other"
+    engine: SmartboxEngine, node_type: str = "other", *, pid: str = "pid"
 ) -> SmartboxHeater:
     """Build a SmartboxHeater over an engine whose world is already installed."""
     node = MagicMock()
@@ -1378,7 +1397,7 @@ def _heater_over_engine(
     node.dev_id = DEV
     node.reseller = SimpleNamespace(web_url="https://web_url/", name="Test API name")
     node.home_id = "home_1"
-    node.pid = "pid"
+    node.pid = pid
     node.hw_version = "hw"
     return SmartboxHeater(
         node, MagicMock(), SimpleNamespace(engine=engine), _NoopFanout()
@@ -1763,17 +1782,16 @@ async def test_max_temp_clamped_by_device_limit(hass, smartbox_stack, mock_smart
         hass, convert_temp(hass, units, max_limit_value(units, 27.0))
     )
 
-    # Nodes without the field keep HA's default maximum (35 C), regardless
-    # of the device's scale.
+    # An ACM without the field uses the HelkiStorage profile's 30 C maximum.
     acm_node_info = (await mock_smartbox.session.get_nodes(mock_device["dev_id"]))[1]
     acm_state = hass.states.get(get_climate_entity_id(acm_node_info))
-    assert acm_state.attributes["max_temp"] == pytest.approx(35.0)
+    assert acm_state.attributes["max_temp"] == pytest.approx(30.0)
 
 
 # --- boost/runback/advanced-slot UI mapping (vendor-app frames) ---
 
 
-def _full_boost_entity(status: dict, *, setup=None) -> SmartboxHeater:
+def _full_boost_entity(status: dict, *, setup=None, pid="0134") -> SmartboxHeater:
     """HTR entity with a FULL boost config and a hand-built world."""
     return _entity_with_world(
         status,
@@ -1781,7 +1799,20 @@ def _full_boost_entity(status: dict, *, setup=None) -> SmartboxHeater:
             "factory_options": {"boost_config": 3},
             **(setup or {}),
         },
+        pid=pid,
     )
+
+
+def _prefs_for(entity, **values) -> SmartboxHeater:
+    """Attach a fixed boost-preference record to the hand-built runtime."""
+    node = NodeBoostPrefs(**values)
+
+    class _Prefs:
+        def get(self, _node_id: str) -> NodeBoostPrefs:
+            return node
+
+    entity._runtime.boost_prefs = _Prefs()
+    return entity
 
 
 def test_runback_frame_drives_preset_and_attributes():
@@ -1868,7 +1899,7 @@ async def test_active_boost_temperature_edits_via_boost_mode():
         },
     )
     object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
-    entity = _heater_over_engine(engine, SmartboxNodeType.HTR)
+    entity = _heater_over_engine(engine, SmartboxNodeType.HTR, pid="01340000")
 
     await entity.async_set_temperature(**{ATTR_TEMPERATURE: 20.5})
     assert host.posts == [
@@ -1895,7 +1926,7 @@ async def test_entity_boost_mode_entry_point_posts_the_app_body():
         },
     )
     object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
-    entity = _heater_over_engine(engine, SmartboxNodeType.HTR)
+    entity = _heater_over_engine(engine, SmartboxNodeType.HTR, pid="01340000")
 
     await entity.async_set_boost_mode(
         active=True, mode="runback", temperature=21.0, time_minutes=60
@@ -2003,7 +2034,9 @@ async def test_non_full_nodes_refuse_the_full_boost_modes():
 
 async def test_full_boost_entity_rejects_an_unknown_mode():
     """The entity-level mode check is translated like the service check."""
-    entity = _full_boost_entity({"boost": False, "mode": "manual", "units": "C"})
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "manual", "units": "C"}, pid="0134"
+    )
     with pytest.raises(ServiceValidationError) as err:
         await entity.async_set_boost_mode(
             active=True, mode="nope", temperature=None, time_minutes=None
@@ -2092,10 +2125,69 @@ def test_runback_min_prefers_the_setback_temperature():
     assert entity.min_temp == 9.0
 
 
+async def test_set_boost_mode_service_excludes_nodes_without_boost(
+    hass, mock_smartbox, config_entry
+):
+    """A config-3 base heater that never offers BOOST refuses the service."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "04020000"
+    setup = mock_smartbox._node_setup["device_1"][0]
+    setup["factory_options"] = {
+        **setup.get("factory_options", {}),
+        "boost_config": 3,
+    }
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await seed_stack(hass, mock_smartbox)
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[0]
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_BOOST_MODE,
+            {ATTR_ENTITY_ID: [get_climate_entity_id(node)], "mode": "runback"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "boost_mode_unsupported"
+
+
+async def test_set_boost_mode_service_excludes_storage_and_triac(
+    hass, mock_smartbox, config_entry
+):
+    """Config 3 on storage or triac never exposes the /boost_mode service."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "011A0000"
+    mock_smartbox._node_info["device_1"][1]["product_id"] = "081C0000"
+    for index in (0, 1):
+        setup = mock_smartbox._node_setup["device_1"][index]
+        setup["factory_options"] = {
+            **setup.get("factory_options", {}),
+            "boost_config": 3,
+        }
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await seed_stack(hass, mock_smartbox)
+    device = (await mock_smartbox.session.get_devices())[0]
+    for index in (0, 1):
+        node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[index]
+        with pytest.raises(HomeAssistantError) as err:
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_SET_BOOST_MODE,
+                {
+                    ATTR_ENTITY_ID: [get_climate_entity_id(node)],
+                    "mode": "runback",
+                },
+                blocking=True,
+            )
+        assert err.value.translation_key == "boost_mode_unsupported"
+
+
 async def test_set_boost_mode_service_maps_a_write_failure(
     hass, mock_smartbox, config_entry
 ):
     """A failed boost-mode write is a translated error naming the entity."""
+    mock_smartbox._node_info["device_1"][0]["product_id"] = "01340000"
     mock_smartbox._node_setup["device_1"][0]["factory_options"]["boost_config"] = 3
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -2119,3 +2211,416 @@ async def test_set_boost_mode_service_maps_a_write_failure(
         )
     assert err.value.translation_key == "boost_mode_write_failed"
     assert err.value.translation_placeholders["entity_id"] == entity_id
+
+
+@pytest.mark.asyncio
+async def test_home_preset_clears_boost_and_easy_runback():
+    """HOME mirrors the app's deactivateCurrentMode before applying a mode."""
+    entity = _full_boost_entity(
+        {
+            "boost": True,
+            "boost_mode": "runback",
+            "stemp": "19.0",
+            "mode": "manual",
+            "units": "C",
+            "runback": True,
+            "easy": True,
+        },
+        setup={
+            "extra_options": {"version": 2},
+            "factory_options": {"boost_config": 2},
+        },
+        pid="0134",
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost", AsyncMock()) as set_boost,
+        patch.object(engine, "set_runback", AsyncMock()) as set_runback,
+        patch.object(engine, "set_easy", AsyncMock()) as set_easy,
+    ):
+        await entity.async_set_preset_mode(PRESET_HOME)
+    set_boost.assert_awaited_once_with(DEV, entity._ref, on=False, legacy=False)
+    set_runback.assert_awaited_once_with(DEV, entity._ref, enabled=False)
+    set_easy.assert_awaited_once_with(DEV, entity._ref, enabled=False)
+
+
+def test_controller_limits_fall_back_when_the_version_is_partial():
+    """A partial live version keeps the discovery PID for controller limits."""
+    entity = _entity_with_world(
+        {"mode": "manual", "stemp": "20.0", "units": "C", "sync_status": "ok"},
+        node_type="htr",
+        pid="04020000",
+        version={"fw_version": "1.9"},
+        setup={},
+    )
+    limits = entity._controller_limits()
+    assert (limits.min_c, limits.max_c) == (0.0, 30.0)
+
+
+def test_late_pid_drives_the_acm_storage_mode_list():
+    """A version frame that supplies the PID updates runtime storage decisions."""
+    entity = _entity_with_world(
+        {"mode": "off", "stemp": "20.0", "units": "C", "sync_status": "ok"},
+        node_type="acm",
+        pid=None,
+        version={"pid": "081C0000", "fw_version": "1.8.0"},
+        setup={},
+    )
+    assert entity._live_pid == "081C0000"
+    assert entity.hvac_modes == [HVACMode.HEAT, HVACMode.OFF]
+
+
+async def test_triac_full_boost_uses_the_legacy_dispatch():
+    """Tevolve triac overrides FULL boost to the setup+status path."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C", "stemp": "20.0"},
+        setup={"factory_options": {"boost_config": 3}},
+        pid="011A",
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost", AsyncMock()) as set_boost:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    args, kwargs = set_boost.await_args
+    assert args == (DEV, entity._ref)
+    assert kwargs["on"] is True
+    assert kwargs["legacy"] is True
+    assert kwargs["temperature"] is not None
+    assert kwargs["time_minutes"] is not None
+    assert entity.supports_boost_mode is False
+    assert PRESET_RUNBACK not in entity.preset_modes
+    assert PRESET_ADVANCED_SLOT not in entity.preset_modes
+
+    with patch.object(engine, "set_boost", AsyncMock()) as set_boost:
+        await entity._async_deactivate_boost(engine)
+    assert set_boost.await_args.kwargs["legacy"] is True
+
+
+async def test_haverland_fixed_time_full_config_uses_the_boost_mode_endpoint():
+    """Haverland WiFi's config 3 enters /boost_mode with the fixed-time mode."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C", "stemp": "20.0"},
+        setup={"factory_options": {"boost_config": 3}},
+        pid="011D",
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    args, kwargs = set_boost_mode.await_args
+    assert args == (DEV, entity._ref)
+    assert kwargs == {
+        "active": True,
+        "mode": "max_temp_fixed_time",
+        "temperature": None,
+        "time_minutes": None,
+    }
+    assert entity.supports_boost_mode is True
+    assert PRESET_RUNBACK not in entity.preset_modes
+
+
+async def test_full_boost_wifi_activation_carries_the_stored_parameters():
+    """A config-3 WiFi node's one-click boost still sends temp/time."""
+    entity = _full_boost_entity(
+        {
+            "boost": False,
+            "mode": "off",
+            "units": "C",
+            "stemp": "20.0",
+            "boost_modes_available": ["temp_and_time"],
+        },
+        setup={
+            "factory_options": {"boost_config": 3},
+            "extra_options": {"boost_temp": "21.0", "boost_time": 60},
+        },
+        pid="0134",
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    _args, kwargs = set_boost_mode.await_args
+    assert kwargs["active"] is True
+    assert kwargs["mode"] == "temp_and_time"
+    assert kwargs["temperature"] == 21.0
+    assert kwargs["time_minutes"] == 60
+    assert entity.supports_boost_mode is True
+
+
+async def test_full_boost_ui_parameters_override_the_device_defaults():
+    """The sliders win over the device's stored boost defaults."""
+    entity = _prefs_for(
+        _full_boost_entity(
+            {
+                "boost": False,
+                "mode": "off",
+                "units": "C",
+                "stemp": "20.0",
+                "boost_modes_available": ["temp_and_time"],
+            },
+            setup={
+                "factory_options": {"boost_config": 3},
+                "extra_options": {"boost_temp": "21.0", "boost_time": 60},
+            },
+            pid="0134",
+        ),
+        boost_temp_c=23.0,
+        boost_time=120,
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    _args, kwargs = set_boost_mode.await_args
+    assert kwargs["mode"] == "temp_and_time"
+    assert kwargs["temperature"] == 23.0
+    assert kwargs["time_minutes"] == 120
+
+
+async def test_full_fixed_boost_posts_no_parameters():
+    """A fixed-only endpoint gets the style and nothing else."""
+    entity = _prefs_for(
+        _full_boost_entity(
+            {
+                "boost": False,
+                "mode": "off",
+                "units": "C",
+                "stemp": "20.0",
+                "boost_modes_available": ["max_temp_fixed_time"],
+            },
+            pid="0134",
+        ),
+        boost_temp_c=23.0,
+        boost_time=120,
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    _args, kwargs = set_boost_mode.await_args
+    assert kwargs["mode"] == "max_temp_fixed_time"
+    assert kwargs["temperature"] is None
+    assert kwargs["time_minutes"] is None
+
+
+async def test_full_boost_without_an_advertised_mode_is_refused():
+    """An empty capability list refuses instead of sending a guessed style."""
+    entity = _prefs_for(
+        _full_boost_entity(
+            {
+                "boost": False,
+                "mode": "off",
+                "units": "C",
+                "stemp": "20.0",
+                "boost_modes_available": [],
+            },
+            pid="0134",
+        ),
+        boost_temp_c=23.0,
+        boost_time=120,
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode,
+        pytest.raises(ServiceValidationError),
+    ):
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    set_boost_mode.assert_not_awaited()
+
+
+async def test_full_runback_uses_the_runback_preferences():
+    """Runback reads its own temperature and duration."""
+    entity = _prefs_for(
+        _full_boost_entity(
+            {
+                "boost": False,
+                "mode": "off",
+                "units": "C",
+                "stemp": "20.0",
+                "boost_modes_available": ["temp_and_time", "runback"],
+            },
+            pid="0134",
+        ),
+        runback_temp_c=18.0,
+        runback_time=60,
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_RUNBACK)
+    _args, kwargs = set_boost_mode.await_args
+    assert kwargs["mode"] == "runback"
+    assert kwargs["temperature"] == 18.0
+    assert kwargs["time_minutes"] == 60
+
+
+async def test_runback_duration_must_be_on_the_30_minute_grid():
+    """An off-grid runback duration is refused before any write."""
+    entity = _prefs_for(
+        _full_boost_entity(
+            {
+                "boost": False,
+                "mode": "off",
+                "units": "C",
+                "stemp": "20.0",
+                "boost_modes_available": ["temp_and_time", "runback"],
+            },
+            pid="0134",
+        ),
+        runback_temp_c=18.0,
+        runback_time=45,
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode,
+        pytest.raises(ServiceValidationError),
+    ):
+        await entity.async_set_preset_mode(PRESET_RUNBACK)
+    set_boost_mode.assert_not_awaited()
+
+
+async def test_triac_full_boost_temperature_does_not_post_boost_mode():
+    """A config-3 triac edits its target through the normal setpoint path."""
+    entity = _full_boost_entity(
+        {
+            "boost": True,
+            "boost_mode": "temp_and_time",
+            "mode": "off",
+            "units": "C",
+            "stemp": "20.0",
+        },
+        setup={"factory_options": {"boost_config": 3}},
+        pid="011A",
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode,
+        patch.object(engine, "set_setpoint", AsyncMock()) as set_setpoint,
+    ):
+        await entity.async_set_temperature(temperature=21.0)
+    set_boost_mode.assert_not_awaited()
+    set_setpoint.assert_awaited_once()
+
+
+@pytest.mark.parametrize("pid", ["04020000", "01320000"])
+async def test_direct_boost_preset_without_boost_is_refused(pid):
+    """A direct preset call cannot activate boost on a node without BOOST."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C"},
+        setup={"factory_options": {"boost_config": 3}},
+        pid=pid,
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost", AsyncMock()) as set_boost,
+        pytest.raises(HomeAssistantError) as err,
+    ):
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    assert err.value.translation_key == "boost_unsupported"
+    set_boost.assert_not_awaited()
+
+
+def test_config_three_without_boost_support_has_no_boost_mode_surface():
+    """A controller that never offers BOOST cannot expose /boost_mode."""
+    for pid in ("04020000", "01320000"):
+        entity = _full_boost_entity(
+            {"boost": False, "mode": "off", "units": "C"},
+            setup={"factory_options": {"boost_config": 3}},
+            pid=pid,
+        )
+        assert entity._boost_available is False
+        assert entity.supports_boost_mode is False
+        assert PRESET_RUNBACK not in entity.preset_modes
+        assert PRESET_ADVANCED_SLOT not in entity.preset_modes
+
+
+def test_lhz_relay_config_three_keeps_the_boost_mode_surface():
+    """LhzRelay 36 adds BOOST unconditionally, so config 3 is usable."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C"},
+        setup={"factory_options": {"boost_config": 3}},
+        pid="01360000",
+    )
+    assert entity._boost_available is True
+    assert entity.supports_boost_mode is True
+
+
+def test_storage_config_three_has_no_full_boost_surface():
+    """Storage's config 3 still uses /boost, so /boost_mode stays hidden."""
+    entity = _entity_with_world(
+        {"boost": True, "boost_mode": "temp_and_time", "units": "C"},
+        node_type="acm",
+        pid="081C0000",
+        setup={"factory_options": {"boost_config": 3}},
+    )
+    assert entity.supports_boost_mode is False
+    assert PRESET_RUNBACK not in entity.preset_modes
+    assert PRESET_ADVANCED_SLOT not in entity.preset_modes
+
+
+def test_thm_28_no_probes_hides_target_temperature():
+    """The Tevolve floor thermostat removes temperature control with no probes."""
+    entity = _entity_with_world(
+        {"mode": "manual", "stemp": "20.0", "units": "C", "sync_status": "ok"},
+        node_type="thm",
+        pid="0128",
+        setup={"extra_options": {"sensor_mode": 3}},
+    )
+    assert not entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+
+
+async def test_thm_28_no_probes_rejects_a_direct_temperature_write():
+    """A direct service call cannot bypass the hidden temperature surface."""
+    entity = _entity_with_world(
+        {"mode": "manual", "stemp": "20.0", "units": "C", "sync_status": "ok"},
+        node_type="thm",
+        pid="0128",
+        setup={"extra_options": {"sensor_mode": 3}},
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        await entity.async_set_temperature(temperature=21.0)
+    assert err.value.translation_key == "temperature_control_unsupported"
+
+
+def test_htr_mod_manual_off_profile_reports_off_not_heating():
+    """A manual htr_mod with selected_temp off is OFF, even if active is stale."""
+    entity = _entity_with_world(
+        {
+            "mode": "manual",
+            "on": True,
+            "selected_temp": "off",
+            "units": "C",
+            "stemp": "19.0",
+            "mtemp": "18.0",
+            "active": True,
+            "locked": False,
+        },
+        node_type="htr_mod",
+    )
+    entity._node.pid = "010A"
+    entity._node.get_model_code = lambda *_args: "0A"
+    assert entity.hvac_mode == HVACMode.OFF
+    assert entity.hvac_action == HVACAction.OFF
+    assert entity.native_target_temperature is None
+    assert entity.min_temp == 10.0
+
+
+async def test_classic_accumulator_turn_on_uses_heat():
+    """A classic accumulator has no AUTO; the power button uses HEAT."""
+    entity = _entity_with_world(
+        {"mode": "off", "target_charge_per": 0, "mtemp": "18.0"},
+        node_type="acm",
+        setup={"factory_options": {"ui_mode": 2}},
+    )
+    entity._node.pid = "0814"
+    entity.async_set_hvac_mode = AsyncMock()
+    assert HVACMode.AUTO not in entity.hvac_modes
+    await entity.async_turn_on()
+    entity.async_set_hvac_mode.assert_awaited_once_with(HVACMode.HEAT)
+
+
+async def test_classic_accumulator_hides_temperature_surface():
+    """No target feature and no setpoint write in the classic UI mode."""
+    entity = _entity_with_world(
+        {"mode": "manual", "target_charge_per": 50, "mtemp": "18.0"},
+        node_type="acm",
+        setup={"factory_options": {"ui_mode": 2}},
+    )
+    entity._node.pid = "0814"
+    assert not entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+    with pytest.raises(HomeAssistantError):
+        await entity.async_set_temperature(**{ATTR_TEMPERATURE: 20.0})

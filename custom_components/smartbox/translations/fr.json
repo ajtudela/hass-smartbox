@@ -132,6 +132,9 @@
       "rtc_drift": {
         "name": "Décalage d'horloge"
       },
+      "thermostat_schedule": {
+        "name": "Programme du thermostat"
+      },
       "schedule": {
         "name": "Planning",
         "state": {
@@ -168,6 +171,12 @@
       },
       "prog_comfort_temperature": {
         "name": "Confort"
+      },
+      "config_runback_temperature": {
+        "name": "Runback Temperature"
+      },
+      "config_runback_duration": {
+        "name": "Runback Duration"
       }
     },
     "switch": {
@@ -263,6 +272,34 @@
           "description": "Créneaux par jour, p. ex. jour \"0\" : [0, 0, 1, 1, ...], avec 24 entrées par jour (48 là où le radiateur gère des créneaux de 30 minutes)."
         }
       }
+    },
+    "set_charging_schedule": {
+      "name": "Programmer le programme de charge de l'accumulateur",
+      "description": "Définit les jours de charge et les plages creuses de l'accumulateur. Les champs omis conservent leur valeur actuelle.",
+      "fields": {
+        "active_days": {
+          "name": "Jours actifs",
+          "description": "Sept valeurs booléennes, dimanche en premier."
+        },
+        "slot_1": {
+          "name": "Plage creuse 1",
+          "description": "Minute de début/fin de la journée ; 0/0 désactive la plage."
+        },
+        "slot_2": {
+          "name": "Plage creuse 2",
+          "description": "Minute de début/fin de la journée ; 0/0 désactive la plage."
+        }
+      }
+    },
+    "set_thermostat_schedule": {
+      "name": "Programmer le programme du thermostat",
+      "description": "Définit le programme quotidien en minutes/température du thermostat. m est la minute de fin du segment (0..1440) ; t est la température dans l'unité du nœud.",
+      "fields": {
+        "schedule": {
+          "name": "Programme",
+          "description": "Les sept clés de jour ; chaque valeur est une liste de segments minute/température, par ex. jour 0 avec m=360, t=19.0."
+        }
+      }
     }
   },
   "exceptions": {
@@ -289,6 +326,9 @@
     },
     "boost_mode_unsupported": {
       "message": "Ce nœud ne prend pas en charge le point de terminaison /boost_mode"
+    },
+    "boost_unsupported": {
+      "message": "Ce nœud ne prend pas en charge le mode boost"
     },
     "boost_mode_invalid": {
       "message": "mode doit être l'un de {modes} lorsque active est vrai"
@@ -317,6 +357,9 @@
     "advanced_slot_requires_full_boost": {
       "message": "Le boost advanced-slot est disponible uniquement sur les nœuds full boost"
     },
+    "storage_ui_mode_unsupported": {
+      "message": "Le mode d'interface du ballon n'est disponible que sur les radiateurs à accumulation Elnur"
+    },
     "schedule_invalid": {
       "message": "Programme invalide pour {entity_id} : {error}"
     },
@@ -332,6 +375,42 @@
     "schedule_wrong_target": {
       "message": "{service} ne cible aucun capteur de programme ; les entités demandées ne sont pas des capteurs de programme Smartbox ou leurs entrées ne sont pas chargées"
     },
+    "charging_schedule_invalid": {
+      "message": "Programme de charge invalide pour {entity_id} : {error}"
+    },
+    "charging_schedule_write_failed": {
+      "message": "Erreur lors de l'écriture du programme de charge pour {entity_id} : {error}"
+    },
+    "charging_schedule_wrong_target": {
+      "message": "{service} ne cible aucun capteur de charge cible de l'accumulateur ; les entités demandées ne sont pas des capteurs Smartbox de l'accumulateur ou leurs entrées ne sont pas chargées"
+    },
+    "thermostat_schedule_invalid": {
+      "message": "Programme du thermostat invalide pour {entity_id} : {error}"
+    },
+    "thermostat_schedule_write_failed": {
+      "message": "Erreur lors de l'écriture du programme du thermostat pour {entity_id} : {error}"
+    },
+    "thermostat_schedule_wrong_target": {
+      "message": "{service} ne cible aucun capteur de programme du thermostat ; les entités demandées ne sont pas des programmes Smartbox du thermostat ou leurs entrées ne sont pas chargées"
+    },
+    "hvac_mode_unsupported": {
+      "message": "Cet appareil de chauffage ne prend pas en charge le mode HVAC demandé."
+    },
+    "charging_schedule_auth_failed": {
+      "message": "L'authentification a échoué lors de l'écriture du programme de charge pour {entity_id} : {error}"
+    },
+    "charging_schedule_api_unavailable": {
+      "message": "L'API Smartbox était indisponible lors de l'écriture du programme de charge pour {entity_id} : {error}"
+    },
+    "thermostat_schedule_auth_failed": {
+      "message": "L'authentification a échoué lors de l'écriture du programme du thermostat pour {entity_id} : {error}"
+    },
+    "thermostat_schedule_api_unavailable": {
+      "message": "L'API Smartbox était indisponible lors de l'écriture du programme du thermostat pour {entity_id} : {error}"
+    },
+    "temperature_control_unsupported": {
+      "message": "This heater does not expose temperature control in its current storage UI mode."
+    },
     "box_power_limit_not_known": {
       "message": "Aucune limite de puissance n'est encore connue pour ce boîtier, il n'y a donc rien à restaurer. Définissez d'abord une valeur sur l'entité numérique de limite de puissance (0 y signifie aucune limite)."
     },
@@ -340,6 +419,27 @@
     },
     "action_failed": {
       "message": "Erreur de communication avec l'API Smartbox pour {entity_id} : {error}"
+    },
+    "boost_parameters_required": {
+      "message": "Boost needs a temperature and duration; set the boost number entities or pass them in the service call"
+    },
+    "boost_duration_step": {
+      "message": "Boost duration must be a multiple of {step} minutes"
+    },
+    "boost_mode_unavailable": {
+      "message": "This heater advertises no boost style Home Assistant can use"
+    },
+    "runback_parameters_required": {
+      "message": "Runback needs a temperature and duration; set the runback number entities"
+    },
+    "runback_temperature_out_of_range": {
+      "message": "Runback temperature must be between {min} and {max} {unit}"
+    },
+    "runback_duration_out_of_range": {
+      "message": "Runback duration must be between {min} and {max} {unit}"
+    },
+    "runback_duration_step": {
+      "message": "Runback duration must be a multiple of {step} minutes"
     }
   },
   "issues": {

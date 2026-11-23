@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -42,7 +43,12 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 from smartbox.core.state import NodeState
-from smartbox.protocol import AuthError, SmartboxError, TransportUnavailableError
+from smartbox.protocol import (
+    AuthError,
+    NodeRef,
+    SmartboxError,
+    TransportUnavailableError,
+)
 from smartbox.protocol.client import SmartboxClient
 from smartbox.protocol.events import SocketClosed
 
@@ -52,6 +58,7 @@ from custom_components.smartbox.const import (
     DOMAIN,
     FIELD_SCHEDULE,
     PROG_PROFILE_NAMES,
+    SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_SCHEDULE,
     HistoryConsumptionStatus,
     SmartboxNodeType,
@@ -62,8 +69,11 @@ from custom_components.smartbox.mapping import rtc_time_to_datetime
 from custom_components.smartbox.sensor import (
     BoostEndTimeSensor,
     ChargeLevelSensor,
+    DutyCycleSensor,
     PowerSensor,
+    ScheduleSensor,
     SmartboxNodeSensorEntity,
+    TemperatureSensor,
     TotalConsumptionSensor,
     _usable_sample_rows,
 )
@@ -162,7 +172,7 @@ async def test_basic_temp(hass, mock_smartbox, config_entry, caplog):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -242,7 +252,7 @@ async def test_basic_power(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -279,12 +289,18 @@ async def test_basic_power(hass, mock_smartbox, config_entry):
             assert state.attributes[ATTR_LOCKED] is bool(mock_node_status["locked"])
             assert float(state.state) == pytest.approx(float(mock_node_status["power"]))
 
-            # make sure it's inactive/not charging
+            # Storage controllers keep reporting status.power while idle;
+            # ElectricHeater reports 0 unless active.
             await _push_active(
                 hass, mock_smartbox, mock_device, mock_node, active=False
             )
             state = hass.states.get(entity_id)
-            assert float(state.state) == 0
+            if mock_node["type"] == SmartboxNodeType.ACM:
+                assert float(state.state) == pytest.approx(
+                    float(mock_node_status["power"])
+                )
+            else:
+                assert float(state.state) == 0
 
             # test unavailable
             await push_status(
@@ -337,7 +353,7 @@ async def test_unavailable(hass, mock_smartbox_unavailable):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox_unavailable)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -365,7 +381,7 @@ async def test_basic_charge_level(hass, mock_smartbox, config_entry):
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     await seed_stack(hass, mock_smartbox)
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 37
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 33
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
@@ -458,6 +474,12 @@ def test_charge_level_sensor_model_1c():
     sensor._node_state = lambda: NodeState(status={"charge_level": 3})
     assert sensor.native_value is None
 
+    sensor._node.get_model_code.return_value = "2E"
+    sensor._node_state = lambda: NodeState(
+        status={"current_charge_per": 75, "charge_level": 3}
+    )
+    assert sensor.native_value == 75
+
     sensor._node.get_model_code.return_value = None
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": 75, "charge_level": 3}
@@ -509,6 +531,28 @@ def test_charge_level_sensor_lost_body_renders_unknown():
     assert sensor.native_value is None
 
 
+def test_schedule_profiles_follow_a_late_version_pid():
+    """A version frame supplies the PID a failed discovery read missed."""
+    sensor = object.__new__(ScheduleSensor)
+    sensor._node = SimpleNamespace(
+        node_type="acm",
+        pid=None,
+        version={},
+        setup={"operational_mode": 0},
+    )
+    sensor._node_state = lambda: NodeState(
+        status={"units": "C"},
+        setup={"operational_mode": 0},
+        version={"pid": "081C0000", "fw_version": "1.8.0"},
+    )
+    sensor._profiles = ("frost", "eco", "comfort")
+    sensor._attr_options = list(sensor._profiles)
+    sensor._unsub_boundary = None
+    sensor._refresh_profiles()
+    assert sensor._profiles == ("frost", "eco", "comfort", "off")
+    assert sensor.options == ["frost", "eco", "comfort", "off"]
+
+
 def test_power_sensor_lost_body_renders_unknown():
     """A lost body renders None (unknown), never the 0 idle fallback."""
     sensor = object.__new__(PowerSensor)
@@ -516,6 +560,20 @@ def test_power_sensor_lost_body_renders_unknown():
     sensor._node.node_type = SmartboxNodeType.HTR
     sensor._pmo_power = None
     sensor._node_state = lambda: NodeState(status={"sync_status": "lost"})
+    assert sensor.native_value is None
+
+
+def test_power_sensor_active_body_without_power_reads_zero():
+    """The app's active-path power read treats a missing field as zero."""
+    sensor = object.__new__(PowerSensor)
+    sensor._node = MagicMock()
+    sensor._node.node_type = SmartboxNodeType.HTR
+    sensor._pmo_power = None
+    sensor._node_state = lambda: NodeState(status={"sync_status": "ok", "active": True})
+    assert sensor.native_value == 0
+    sensor._node_state = lambda: NodeState(
+        status={"sync_status": "ok", "active": True, "power": "bad"}
+    )
     assert sensor.native_value is None
 
 
@@ -1034,6 +1092,17 @@ async def test_set_schedule_service_errors(hass, mock_smartbox, config_entry):
     assert err.value.translation_key == "schedule_invalid"
     assert err.value.translation_placeholders["entity_id"] == entity_id
 
+    # A profile index outside the controller catalogue is rejected client-side.
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_SCHEDULE: {"0": [3] * 24}},
+            blocking=True,
+        )
+    assert err.value.translation_key == "schedule_invalid"
+    assert "profile index out of range" in err.value.translation_placeholders["error"]
+
     # An API failure on the write reaches the caller, not the log.
     fake.fail_next(500)
     with pytest.raises(HomeAssistantError) as err:
@@ -1383,12 +1452,12 @@ async def test_native_value_boost_end_time_sensor(hass, mock_smartbox, config_en
     sensor = BoostEndTimeSensor(MagicMock(), config_entry, MagicMock(), MagicMock())
     sensor.hass = hass
 
-    # boost_end_min is the minute of the day (UTC) at which boost ends
+    # boost_end_min is the home-local minute of the day at which boost ends
     status = {"boost": True, "boost_end_min": 90}  # 1 hour and 30 minutes
     with (
         patch.object(sensor, "_node_state", return_value=NodeState(status=status)),
         patch(
-            "custom_components.smartbox.mapping.dt_util.utcnow",
+            "custom_components.smartbox.mapping.dt_util.now",
             return_value=datetime(2023, 10, 10, 1, 0, tzinfo=dt_util.UTC),
         ),
     ):
@@ -1627,7 +1696,7 @@ async def test_set_schedule_service_accepts_48_half_hourly_day(
     _runtime, fake = await seed_stack(hass, mock_smartbox)
     _dev_id, mock_node, entity_id = await _first_heater_schedule_id(mock_smartbox)
 
-    half_hourly = [7, 8] * 24
+    half_hourly = [1, 2] * 24
     await hass.services.async_call(
         DOMAIN,
         SERVICE_SET_SCHEDULE,
@@ -1823,3 +1892,104 @@ async def test_a_failing_first_import_is_not_retried_on_every_tick(hass, config_
         await sensor.update_statistics()
         assert reads.call_count == 3  # the three year ranges
     assert history.failure_count(node_key) == 0
+
+
+def test_temperature_and_duty_sensors_render_malformed_values_unknown():
+    """Malformed wire strings read as None instead of raising from a property."""
+    temp = object.__new__(TemperatureSensor)
+    temp._node_state = lambda: NodeState(status={"mtemp": "bad"})
+    assert temp.native_value is None
+
+    duty = object.__new__(DutyCycleSensor)
+    duty._node_state = lambda: NodeState(status={"duty": "bad"})
+    assert duty.native_value is None
+
+
+def test_power_sensor_renders_malformed_power_unknown():
+    """A malformed power value reads as None when the heater is active."""
+    sensor = object.__new__(PowerSensor)
+    sensor._node = MagicMock()
+    sensor._node.node_type = SmartboxNodeType.HTR
+    sensor._pmo_power = None
+    sensor._node_state = lambda: NodeState(
+        status={"sync_status": "ok", "active": True, "power": "bad"}
+    )
+    assert sensor.native_value is None
+
+
+def test_charge_level_renders_malformed_values_unknown():
+    """Both charge fields parse defensively."""
+    sensor = object.__new__(ChargeLevelSensor)
+    sensor._node = MagicMock()
+    sensor._node.get_model_code.return_value = "1C"
+    sensor._node_state = lambda: NodeState(
+        status={"current_charge_per": "bad", "charge_level": 3}
+    )
+    assert sensor.native_value is None
+
+    sensor._node.get_model_code.return_value = None
+    sensor._node_state = lambda: NodeState(status={"charge_level": "bad"})
+    assert sensor.native_value is None
+
+
+def test_htr_mod_power_uses_the_configured_rated_power():
+    """HaverlandHtrModController.getPower() returns setup.power, not status."""
+    sensor = object.__new__(PowerSensor)
+    sensor._node = MagicMock()
+    sensor._node.node_type = SmartboxNodeType.HTR_MOD
+    sensor._pmo_power = None
+    sensor._node_state = lambda: NodeState(
+        status={"active": True, "power": "1"},
+        setup={"power": "510.0"},
+    )
+    assert sensor.native_value == 510.0
+
+
+async def test_set_charging_schedule_service_writes_setup(
+    hass, mock_smartbox, config_entry
+):
+    """The storage charging service merges days and valley slots."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    _runtime, fake = await seed_stack(hass, mock_smartbox)
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[1]
+    entity_id = get_sensor_entity_id(node, "target_charge")
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_CHARGING_SCHEDULE,
+        {
+            ATTR_ENTITY_ID: [entity_id],
+            "active_days": [1, 0, 1, 0, 1, 0, 1],
+            "slot_1": {"start": 60, "end": 120},
+        },
+        blocking=True,
+    )
+    setup = await fake.get_node_setup(
+        device["dev_id"], NodeRef(node["type"], str(node["addr"]))
+    )
+    assert setup["charging_conf"]["active_days"] == [1, 0, 1, 0, 1, 0, 1]
+    assert setup["charging_conf"]["slot_1"] == {"start": 60, "end": 120}
+
+
+async def test_water_storage_target_charge_is_not_a_charging_service_target(
+    hass, mock_smartbox, config_entry
+):
+    """The water controller omits charge days/valley slots from its settings."""
+    mock_smartbox._node_info["device_1"][1]["product_id"] = "082A0000"
+    mock_smartbox._node_info["device_1"][1]["fw_version"] = "1.9"
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    await seed_stack(hass, mock_smartbox)
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[1]
+    entity_id = get_sensor_entity_id(node, "target_charge")
+    assert hass.states.get(entity_id) is not None
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_CHARGING_SCHEDULE,
+            {ATTR_ENTITY_ID: [entity_id], "active_days": [1] * 7},
+            blocking=True,
+        )
+    assert err.value.translation_key == "charging_schedule_wrong_target"

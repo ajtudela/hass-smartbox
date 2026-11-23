@@ -171,13 +171,19 @@ def rtc_time_to_datetime(rtc: dict[str, Any] | None) -> datetime | None:
         return None
 
 
-def get_boost_end_datetime(boost_end_min: int) -> datetime | None:
+def get_boost_end_datetime(
+    boost_end_min: int,
+    boost_end_day: int | None = None,
+    *,
+    now: datetime | None = None,
+) -> datetime | None:
     """Return the local datetime at which the node boost ends.
 
-    boost_end_min is the minute of the day (UTC) at which the boost ends, as
-    reported by the API status. Returns a future datetime (the next day if the
-    boost already ended earlier in the current UTC day), or None for a
-    malformed/out-of-range minute value (entity properties must not raise).
+    ``boost_end_min`` is the HOME-LOCAL minute of day, not UTC: a 60-minute
+    boost started at 13:49 CET reported ``889`` (14:49) `[live 2026-11-22]`.
+    ``boost_end_day`` is the wire day offset (0 = today, 1 = tomorrow).
+    Returns a future datetime, or None for a malformed/out-of-range minute
+    value (entity properties must not raise).
     """
     try:
         minute_of_day = int(boost_end_min)
@@ -185,13 +191,19 @@ def get_boost_end_datetime(boost_end_min: int) -> datetime | None:
         return None
     if not 0 <= minute_of_day < _PROG_DAY_MINUTES:
         return None
-    now = dt_util.utcnow()
+    current = now if now is not None else dt_util.now()
     hour, minute = divmod(minute_of_day, 60)
-    boost_end = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if boost_end <= now:
-        # Boost already ended for the current UTC day: it ends tomorrow.
+    boost_end = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    try:
+        day_offset = int(boost_end_day) if boost_end_day is not None else 0
+    except TypeError, ValueError:
+        day_offset = 0
+    if day_offset > 0:
+        boost_end += timedelta(days=day_offset)
+    if boost_end <= current:
+        # A stale or day-less marker: the next occurrence is tomorrow.
         boost_end += timedelta(days=1)
-    return dt_util.as_local(boost_end)
+    return boost_end
 
 
 def check_status_key(key: str, node_type: str, status: dict[str, Any]) -> None:
@@ -208,41 +220,75 @@ def check_status_key(key: str, node_type: str, status: dict[str, Any]) -> None:
         raise KeyError(msg)
 
 
-def get_target_temperature(node_type: str, status: dict[str, Any]) -> float | None:
+def _htr_mod_profile_temperature(status: dict[str, Any], profile: str) -> float | None:
+    """Return the htr_mod target for one programme profile."""
+    if profile == "off":
+        return None
+    if profile == "ice":
+        return parse_number_or_none(status.get("ice_temp"))
+    comfort = parse_number_or_none(status.get("comfort_temp"))
+    if profile == "eco":
+        offset = parse_number_or_none(status.get("eco_offset"))
+        if comfort is None or offset is None:
+            return None
+        return comfort - offset
+    return comfort
+
+
+def _get_htr_mod_target(status: dict[str, Any], prog: ProgDict | None) -> float | None:
+    """Return the htr_mod target without the generic off check."""
+    if status.get("mode") == "off" or status.get("on", True) is False:
+        return None
+    if status.get("mode") == "auto" and prog is not None:
+        index = get_current_prog_profile(prog, dt_util.now())
+        if index is not None:
+            names = ("off", "ice", "eco", "comfort")
+            if 0 <= index < len(names):
+                return _htr_mod_profile_temperature(status, names[index])
+    check_status_key("selected_temp", SmartboxNodeType.HTR_MOD, status)
+    selected = status["selected_temp"]
+    if selected == "off":
+        return None
+    if selected in ("comfort", "eco", "ice"):
+        return _htr_mod_profile_temperature(status, selected)
+    msg = (
+        f"Unexpected 'selected_temp' value {bounded_repr(selected)}"
+        f" found for {SmartboxNodeType.HTR_MOD} - please report to"
+        f" {GITHUB_ISSUES_URL}."
+    )
+    raise KeyError(msg)
+
+
+def get_target_temperature(
+    node_type: str,
+    status: dict[str, Any],
+    prog: ProgDict | None = None,
+) -> float | None:
     """Get the target temperature.
 
     None when the node is off, matching the official app. The wire keeps the
     stale previous-mode value, so the off check mirrors ``get_hvac_mode``
-    instead of trusting ``stemp`` / ``selected_temp``.
+    instead of trusting ``stemp`` / ``selected_temp``. htr_mod in AUTO derives
+    the target from the current programme slot, as the app's
+    ``getAutoModeTemp`` does.
     """
     if node_type == SmartboxNodeType.HTR_MOD:
-        if (
-            status.get("mode") == "off"
-            or status.get("on", True) is False
-            or status.get("selected_temp") == "off"
-        ):
+        return _get_htr_mod_target(status, prog)
+    if status.get("boost", False):
+        # The app's boost mode is a UI heating mode of its own; the wire keeps
+        # the pre-boost ``mode`` (often "off") while ``stemp`` carries the
+        # boost target. Read the target before the mode gate.
+        return parse_number_or_none(status.get("stemp"))
+    if node_type == SmartboxNodeType.ACM:
+        # Storage telemetry has no stemp on the classic/accumulator families;
+        # a storage target is the charge level, exposed separately.
+        if status.get("mode") == "off":
             return None
-        check_status_key("selected_temp", node_type, status)
-        if status["selected_temp"] == "comfort":
-            check_status_key("comfort_temp", node_type, status)
-            return float(status["comfort_temp"])
-        if status["selected_temp"] == "eco":
-            check_status_key("comfort_temp", node_type, status)
-            check_status_key("eco_offset", node_type, status)
-            return float(status["comfort_temp"]) - float(status["eco_offset"])
-        if status["selected_temp"] == "ice":
-            check_status_key("ice_temp", node_type, status)
-            return float(status["ice_temp"])
-        msg = (
-            f"Unexpected 'selected_temp' value {bounded_repr(status['selected_temp'])}"
-            f" found for {node_type} - please report to"
-            f" {GITHUB_ISSUES_URL}."
-        )
-        raise KeyError(msg)
+        return parse_number_or_none(status.get("stemp"))
     if status.get("mode") == "off":
         return None
     check_status_key("stemp", node_type, status)
-    return float(status["stemp"])
+    return parse_number_or_none(status["stemp"])
 
 
 # --- htr_mod setpoint policy (vendor-app parity) ---
@@ -263,6 +309,7 @@ class HtrModPolicy:
     comfort_c: tuple[float, float]
     eco_max_c: float
     offset_c: tuple[int, int]
+    global_min_c: float = 5.0
 
     @property
     def eco_min_c(self) -> float:
@@ -315,6 +362,8 @@ def htr_mod_setpoint_limits(
             return float(math.floor(value + 0.5))
         return value
 
+    if status.get("mode") == "auto":
+        return as_node(policy.global_min_c), as_node(policy.comfort_c[1])
     if selected in ("comfort", "eco"):
         return as_node(policy.eco_min_c), as_node(policy.comfort_c[1])
     if selected == "ice":
@@ -323,6 +372,10 @@ def htr_mod_setpoint_limits(
         except KeyError, TypeError, ValueError:
             return None
         return ice, ice
+    if selected == "off":
+        # The app enters eco/comfort on a setpoint from OFF; advertise that
+        # write range rather than the global 5 C floor it cannot accept.
+        return as_node(policy.eco_min_c), as_node(policy.comfort_c[1])
     return None
 
 
@@ -411,10 +464,10 @@ def temperature_write(
         if (
             policy is not None
             and status.get("units") == "C"
-            and status.get("selected_temp") in ("comfort", "eco")
+            and status.get("selected_temp") in ("comfort", "eco", "off")
         ):
             return _htr_mod_temperature_write(status, temp, policy)
-        if status["selected_temp"] == "comfort":
+        if status["selected_temp"] in ("comfort", "off"):
             target_temp = temp
         elif status["selected_temp"] == "eco":
             check_status_key("eco_offset", node_type, status)
@@ -434,7 +487,11 @@ def temperature_write(
             # The app's setpoint builder sends manual on every setpoint, on any
             # node scale; this pass-through keeps that part of the body.
             mode="manual",
-            selected_temp=status["selected_temp"],
+            selected_temp=(
+                "comfort"
+                if status["selected_temp"] == "off"
+                else status["selected_temp"]
+            ),
             comfort_temp=target_temp,
             eco_offset=status["eco_offset"],
             units=status["units"],
@@ -478,6 +535,12 @@ def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
         node_type == SmartboxNodeType.HTR_MOD and not status.get("on", True)
     ):
         return HVACMode.OFF
+    if (
+        node_type == SmartboxNodeType.HTR_MOD
+        and status["mode"] == "manual"
+        and status.get("selected_temp") == "off"
+    ):
+        return HVACMode.OFF
     mode = status["mode"]
     mapped = (
         {
@@ -516,9 +579,10 @@ def hvac_mode_write(
         if hvac_mode == HVACMode.HEAT:
             # The status key has to travel with the mode on these nodes
             check_status_key("selected_temp", node_type, status)
-            return HtrModWrite(
-                on=True, mode="manual", selected_temp=status["selected_temp"]
-            )
+            selected = status["selected_temp"]
+            if selected == "off":
+                selected = "comfort"
+            return HtrModWrite(on=True, mode="manual", selected_temp=selected)
         if hvac_mode == HVACMode.AUTO:
             return HtrModWrite(on=True, mode="auto")
         raise ValueError(error_msg)

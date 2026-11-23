@@ -64,12 +64,14 @@ from smartbox.protocol import (
 from smartbox.protocol.retry import backoff_delay
 
 from .adapter import EngineChangeFanOut
+from .boost_prefs import BoostPrefs, boost_prefs_for
 from .const import (
     DOMAIN,
     SMARTBOX_UNAVAILABLE_DELAY,
     SMARTBOX_WRITE_CONFIRM_TIMEOUT,
     SmartboxNodeType,
 )
+from .controller import lock_kind
 from .devices import async_ensure_box_devices
 from .entity_builder import EntityBuilder
 from .history import HistoryImport
@@ -128,6 +130,7 @@ class SmartboxRuntime:
     transport: WsUserTransport
     auth: TokenManager
     token_store: TokenStore
+    boost_prefs: BoostPrefs
     # "restored" when setup resumed the stored bundle, "granted" when it
     # minted a fresh session (first run, dead storage, or a rejected restore).
     token_origin: str
@@ -231,6 +234,35 @@ def _async_prune_thermostat_energy_entities(
             for node in identity.nodes
             if node.node_type == SmartboxNodeType.THM
             for key in ("power", "total_consumption")
+        },
+    )
+
+
+def _async_prune_integer_lock_switches(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    identity: SmartboxIdentity,
+) -> None:
+    """Remove the old boolean child-lock switch on integer-lock families.
+
+    The integer families now expose the Off/Local lock/Remote lock select
+    (``{node_id}_lock_mode``). The switch's unique id is ``{node_id}_lock``;
+    leaving it behind would show an unavailable duplicate.
+    """
+    _async_prune_registry_entities(
+        hass,
+        entry,
+        {
+            f"{node.node_id}_lock"
+            for node in identity.nodes
+            if node.heater_surface
+            and lock_kind(
+                node.node_type,
+                node.pid,
+                node.version.get("fw_version"),
+                node.setup,
+            )
+            == "int"
         },
     )
 
@@ -484,6 +516,8 @@ async def _async_build_runtime(
     websession = async_get_clientsession(hass)
     token_store = token_store_for(hass, entry.entry_id, entry.data)
     stored = await token_store.async_load()
+    boost_prefs = boost_prefs_for(hass, entry.entry_id)
+    await boost_prefs.async_load()
     client = SmartboxClient(
         config,
         session=websession,
@@ -566,6 +600,7 @@ async def _async_build_runtime(
         transport=transport,
         auth=auth,
         token_store=token_store,
+        boost_prefs=boost_prefs,
         token_origin=origin,
         identity=identity,
         # ONE fan-out (one engine subscription) per config entry, shared
@@ -656,6 +691,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         hass, entry.entry_id, runtime.identity.devices
     )
     _async_rehome_device_entities(hass, entry, box_device_ids)
+    _async_prune_integer_lock_switches(hass, entry, runtime.identity)
     _async_prune_boxless_power_limit_entities(hass, entry, runtime.identity.devices)
     _async_prune_boxless_priority_entities(hass, entry, runtime.identity)
     _async_prune_thermostat_energy_entities(hass, entry, runtime.identity)
@@ -747,10 +783,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:
-    """Drop the entry's repair issues and its stored tokens."""
+    """Drop the entry's repair issues, stored tokens and boost preferences."""
     ir.async_delete_issue(hass, DOMAIN, ws_user_flapping_issue_id(entry))
     clear_node_added_issue(hass, entry)
     await token_store_for(hass, entry.entry_id, entry.data).async_clear()
+    await boost_prefs_for(hass, entry.entry_id).async_clear()
 
 
 async def update_listener(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:

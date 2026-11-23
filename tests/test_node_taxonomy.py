@@ -56,7 +56,9 @@ def test_thermostat_has_no_power_or_consumption_sensors() -> None:
     node.status = {}
     node.reseller = SimpleNamespace(web_url="https://web_url/", name="Test")
 
-    runtime = SimpleNamespace(services=SimpleNamespace(schedule=[]))
+    runtime = SimpleNamespace(
+        services=SimpleNamespace(schedule=[], thermostat_schedule=[])
+    )
     groups = _build_node_sensors(node, MagicMock(), runtime, MagicMock())
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
 

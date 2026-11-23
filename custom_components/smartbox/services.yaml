@@ -96,7 +96,7 @@ set_boost_params:
       selector:
         number:
           min: 60
-          max: 240
+          max: 1440
           step: 60
           unit_of_measurement: "min"
 
@@ -117,6 +117,50 @@ set_schedule:
       description: >-
         Day-keyed profile slots, e.g. day "0": [0, 0, 1, 1, ...], with 24
         entries per day (48 where the heater supports half-hourly slots).
+      required: true
+      selector:
+        object:
+
+set_charging_schedule:
+  name: Set storage charging schedule
+  description: >-
+    Sets the storage heater's charging days and valley slots. Omitted fields
+    keep their current values.
+  target:
+    entity:
+      integration: smartbox
+      domain: sensor
+  fields:
+    active_days:
+      name: Active days
+      description: Seven booleans, Sunday-first.
+      selector:
+        object:
+    slot_1:
+      name: Valley 1
+      description: Start/end minute of day; 0/0 disables the slot.
+      selector:
+        object:
+    slot_2:
+      name: Valley 2
+      description: Start/end minute of day; 0/0 disables the slot.
+      selector:
+        object:
+
+set_thermostat_schedule:
+  name: Set thermostat schedule
+  description: >-
+    Sets the thermostat's day-keyed minute/temperature programme. m is the
+    segment end minute (0..1440); t is the temperature in the node's unit.
+  target:
+    entity:
+      integration: smartbox
+      domain: sensor
+  fields:
+    schedule:
+      name: Schedule
+      description: >-
+        All seven day keys; each value is a list of minute/temperature segments, e.g. day 0 with m=360, t=19.0.
       required: true
       selector:
         object:

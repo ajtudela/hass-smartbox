@@ -149,7 +149,7 @@ Heater node types (`htr`, `acm` and `htr_mod`) are modelled as Home Assistant Cl
   * Supported modes: 'manual', 'auto', 'self_learn' and 'presence'
   * Supported presets: 'comfort', 'eco', 'frost', 'schedule', 'self_learn' and 'activity'
 
-Every heater also exposes the 'away' and 'boost' presets (boost where the device supports it) and the `OFF` HVAC mode. The modes and presets for `htr_mod` heaters are mapped as follows:
+Every heater also exposes the 'away' and 'boost' presets (boost where the device supports it) and the `OFF` HVAC mode. Selecting **home** clears an active away, boost, Tevolve EASY or RUNBACK state, mirroring the app's mode switch; the HVAC mode itself is left unchanged. The modes and presets for `htr_mod` heaters are mapped as follows:
 
 | htr\_mod mode | htr\_mod selected_temp | HA HVAC mode | HA preset   |
 |---------------|------------------------|--------------|-------------|
@@ -176,11 +176,21 @@ temperature service with `minTempCelsius: 7` and the `ThermostatController`'s
 global maximum is 35 °C), the step is 0.5 °C / 1 °F, and setting a
 temperature sends the app's plain `{stemp, units}` body to
 `/thm/<addr>/status` (the controller strips `modified_auto`). A thermostat
+also exposes a schedule sensor (day-keyed `{m, t}` segments), the
+`smartbox.set_thermostat_schedule` service and, where the setup carries
+`anti_grippage`, an **Anti-grippage** switch. A thermostat
 has no heater presets. The climate attributes carry the load type and
-control mode; low battery is a diagnostic binary. The vendor app does not expose a
+control mode; low battery is a diagnostic binary. Product code `28` is a THM
+floor thermostat whose controller extends the Tevolve triac heater: it gets
+the heater surface (heater schedule, boost, EASY/RUNBACK and programme
+temperatures) instead of the `{m, t}` thermostat schedule; with
+`extra_options.sensor_mode == 3` (NO_PROBES) the app's timer surface hides
+temperature control, boost, EASY/RUNBACK, the probe settings and the frost/eco/
+comfort numbers, and the integration withholds those entities and the generic
+heater schedule. The vendor app does not expose a
 battery percentage or a presence status for thermostats. A thermostat has no
-power or consumption sensors, and its temperature-schedule entity is not
-implemented yet; only the temperature sensor is created for it.
+power or consumption sensors; its schedule entity and service are described
+below.
 
 The target temperature step is 0.5 °C / 1.0 °F on `htr` and `acm` nodes. On `htr_mod` nodes the vendor app's setpoint contract applies: a 1 °C step, the comfort and eco ranges of 18–28 °C and 10–18 °C, and the ice profile fixed to the device's own `ice_temp`. A target at or below 18 °C selects the `eco` profile and moves `comfort_temp`/`eco_offset` the way the app does - the stored comfort stays unless the 4–8 °C gap cannot reach the target - snapping an off-grid stored comfort to a whole degree; above 18 °C it selects `comfort` and keeps the stored offset. While comfort or eco is active the advertised range is their union (10–28 °C), so the slider and service calls can cross 18 °C without a preset change; `ice` keeps its fixed value. Every htr_mod setpoint write carries `mode: manual`, as the app's builder does, so setting a temperature leaves the programme it was running. These bounds come from the app's htr_mod controller, in whole degrees on Fahrenheit nodes too, and are applied to the Haverland product codes it dispatches on (`pid[2:4]` = `0A` or `FF`), plus nodes whose version has not been read yet. Other htr_mod hardware keeps the previous temperature arithmetic and the generic grid; the `mode: manual` key is sent on every htr_mod setpoint. On the fw-1.9 `htr` family, the maximum target temperature is clamped to the node's `max_stemp_limit` when the device advertises one.
 
@@ -188,7 +198,7 @@ If a heater or box is paired to the account after the integration has set up, th
 
 When the account no longer lists a heater or box, the integration confirms the absence with a fresh full account read after a short grace period, then removes the device and its entities. Recorder history and long-term statistics are kept, and pairing the heater again restores the same device and entity IDs (with their area, name and history). A member the integration cannot confirm, for example while the vendor API is unreachable, can still be deleted from its device page.
 
-**Boost:** the Boost switch/preset follows the vendor app's `boost_config` dispatch. Configuration `1` and `2` use the status/setup path; configuration `3` (full) posts `/boost_mode` (`{active, mode, temp?, time?}`). The full path is app-evidenced; live acceptance on a full-boost unit is still pending.
+**Boost:** the Boost switch/preset follows the vendor app's controller dispatch. Configuration `1` and `2` use the status/setup path; configuration `3` (full) posts `/boost_mode` (`{active, mode, temp?, time?}`) on the controllers that implement the endpoint. Storage always uses `/boost`, the Tevolve triac/towel-rail/thermostat and Haverland fixed-time families always use the legacy status path (even at config 3), and Haverland WiFi offers BOOST unless `boost_config` is the fixed-time value `1`. The full path is app-evidenced; live acceptance on a full-boost unit is still pending.
 
 On a full-boost node, **Runback** and **Advanced boost** (boost until the next schedule change) appear as climate presets when the node's status advertises them. Runback uses its own lower/upper temperature limits while active. The boost/runback temperature and duration number entities are **defaults** used at activation; while a mode is running, the climate target is its active temperature, and the climate entity's `boost_mode`, `boost_end_time`, and `boost_remaining_minutes` attributes show the active mode and time left. Use `smartbox.set_boost_mode` to edit a running mode's duration or to select advanced-slot/runback explicitly.
 
@@ -214,7 +224,7 @@ The card presents the week as a seven-column grid — days across, time slots do
 
 The card preview merges equal neighbouring slots into continuous bands, marks 00, 06, 12 and 18 in a 30px left gutter, and draws rules across the plot at 06, 12 and 18. The editor uses the same header, flush gutter and hour guides, and renders the full week inside the dialog; when the chart does not fit, the dialog body scrolls, so there is at most one scrollbar. On phone widths the grid lines thicken and gain contrast so they stay visible on high-density screens. The band colors mix with the card surface to follow the active theme; override `--smartbox-frost-color`, `--smartbox-eco-color` or `--smartbox-comfort-color` to replace a fill.
 
-The card reads the schedule sensor's `schedule` attribute. The legend's temperatures come from the corresponding number entities; tapping one opens its more-info dialog. Hide the legend to leave only the chart. See [Services](#services) for the underlying write call.
+The card reads the schedule sensor's `schedule` attribute and its `options` list, so it renders the controller's actual profile catalogue, including the `off` slot where the controller has one. The legend's temperatures come from the corresponding number entities; tapping one opens its more-info dialog. Hide the legend to leave only the chart. See [Services](#services) for the underlying write call.
 
 ## Use cases
 
@@ -273,11 +283,11 @@ These are the boundaries of what the integration can do; the linked sections exp
 
 ## Services
 
-The integration registers three domain services, also available under **Developer tools → Actions**.
+The integration registers five domain services, also available under **Developer tools → Actions**.
 
 ### `smartbox.set_schedule`
 
-Target a schedule sensor (entity, device, or area). The `schedule` field is a day-keyed object (`"0"`..`"6"`, Sunday..Saturday); each value is that day's list of profile slots (`0` = frost, `1` = eco, `2` = comfort). Omitted days keep their current programme.
+Target a schedule sensor (entity, device, or area). The `schedule` field is a day-keyed object (`"0"`..`"6"`, Sunday..Saturday); each value is that day's list of profile slots (`0` = frost, `1` = eco, `2` = comfort, `3` = off where the controller exposes an OFF slot); indices outside the target controller's catalogue are rejected. A day may carry 24 hourly or 48 half-hourly slots; the integration keeps the shape it is given. Omitted days keep their current programme.
 
 ```yaml
 action: smartbox.set_schedule
@@ -288,6 +298,14 @@ data:
     "0": [0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0,
           0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0]
 ```
+
+### `smartbox.set_charging_schedule`
+
+Target a storage target-charge sensor. Sets `active_days` (seven booleans, Sunday-first) and/or the two valley slots (`{"start": minute, "end": minute}`). Omitted fields keep their current values.
+
+### `smartbox.set_thermostat_schedule`
+
+Target a thermostat schedule sensor. The `schedule` field must contain all seven day keys; each value is a list of `{m, t}` segments where `m` is the segment end minute and `t` the temperature.
 
 ### `smartbox.set_boost_mode`
 
@@ -325,7 +343,7 @@ Heaters the box reports as unreachable (node-level `sync_status: "lost"`) show a
 * Duty cycle (`htr` nodes; disabled by default)
 * Total consumption (energy, with recorder statistics import - see [Consumption](#consumption); heater and PMO nodes only)
 * Charge level (`acm` nodes; the Elnur stepped storage controller's 0–5 `charge_level` is scaled to 0–100)
-* Target charge (`acm` nodes; the charging slot times and active days are attributes)
+* Target charge (`acm` nodes); classic accumulators expose ON/OFF through `target_charge_per` 100/0.
 * Boost end time (timestamp)
 * Schedule (enum, per heater node): the state is the profile the programme asks for now; the `schedule` attribute holds the full week
 * RTC clock drift (box-level, refreshed every 5 minutes; disabled by default)
@@ -345,15 +363,17 @@ A newly created flag reports unknown until its field arrives.
 
 ### Switches
 * Box level: away mode; "no power limit" only on devices that support a box power limit
-* Per node: window mode, true radiant, boost, child lock (keypad lockout), maximum temperature limit (remembers the last non-zero limit across Home Assistant restarts), "no node power limit" (on the PMO nodes whose setup carries the key)
+* Per node: window mode, true radiant, boost (where the controller advertises it), child lock (a switch on boolean-lock controllers, an Off/Local lock/Remote lock select on the integer enum families), maximum temperature limit where the controller supports it (remembers the last non-zero limit across Home Assistant restarts), "no node power limit" (on the PMO nodes whose setup carries the key)
+* Per node on Tevolve controllers: Easy mode and Runback switches, mapping the app's `status.easy` / `status.runback` settings
 
 ### Numbers
 * Box power limit on devices that support it (0 = no limit, max 60000)
-* Per node: node power limit (PMO nodes whose setup carries the key), boost temperature, boost duration, away offset, maximum temperature, and programme temperatures (frost / eco / comfort, where the device reports them)
+* Per node: node power limit (PMO nodes whose setup carries the key), boost temperature and boost duration (products that accept `extra_options`), away offset, maximum temperature, and programme temperatures (frost / eco / comfort, where the device reports them)
 
 ### Selects
 * Per node: radiator priority (low / medium / high, fw-1.9 family on devices paired with a Smartbox) — the device takes it into account itself when enforcing the box power limit
 * Per heater: power limit factor (Off / LST / Baby Care) — a percentage cap on the heater's duty, built from the node's own preset percentages and offered only where the setup carries the factor and the presets and the heater reports a rated power; the heater applies the selection at its next start, and a stored value outside the presets reads as unknown
+* Per `acm` node: storage UI mode where the product lists it and the unit is already in a classic mode. The choices follow the controller: `14` offers Classic combined/Classic accumulator, `20`/`25` offer Ecombi/Classic combined, and water storage `2A` has no such setting.
 * Per heater: control mode from the decoded vendor-app catalogue — the htr family (triac/relay UI lists, including the relay `sensor_mode == 2` hysteresis-only list) and storage `1C`/`2E` (OFF-first wire map). The `0402` relay map is live-confirmed; the `04`/`09`/`0F` thermostat family is withheld because the vendor app's UI list and wire array disagree on `pid_60`. A code-28 THM floor thermostat keeps the select because its controller uses the htr arrays; other THM codes are withheld by integration choice. The Elnur water-storage (`2A`) and classic-UI `14`/`20`/`25` products get no select, matching the app. A stored index outside the product's UI list reads as unknown while the select keeps the app's choices.
 
 Boxless heaters (heaters not paired with a Smartbox controller) keep the parent device, away mode, connectivity and their other node entities, but do not get the box power-limit number, the no-limit switch or the radiator priority select.
