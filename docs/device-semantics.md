@@ -198,9 +198,17 @@ with the profile, and keep the entity-surface matrix in the adapter.
   the temporary `tests/test_profile_equivalence.py` compares the old helpers
   to the library resolver across 51 codes × 4 firmware branches × 2 setup
   shapes. Behaviour is unchanged.
-- Slices 2-4 (control modes, lock/boost/storage, thermostat/setting gates)
-  remain. The adapter keeps boost activation, preferences and the FULL
-  attribute visibility throughout.
+- **Slice 2 (control modes) landed.** `smartbox.device.control_modes` owns
+  the decoded family/actuation maps, UI/wire arrays, labels and availability.
+  The integration's `control_mode.py` re-exports it; the entity keeps the HA
+  select shape.
+- Slices 3-4 (lock/boost/storage, thermostat/setting gates) remain. The
+  adapter keeps boost activation, preferences and the FULL attribute
+  visibility throughout.
+- The migration branch imports `smartbox.device`, which is not in the
+  published 3.2.1 wheel. Develop against the sibling editable checkout and do
+  not merge or release until a library minor with these modules is published
+  and the integration pin is raised (slice 5).
 
 ## Migration slices
 

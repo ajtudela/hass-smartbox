@@ -180,7 +180,8 @@ def test_ui_mode_missing_from_wire_returns_none() -> None:
 
 def test_choices_none_path_in_control_mode_choices(monkeypatch) -> None:
     monkeypatch.setattr(
-        control_mode, "_ui_for_actuation", lambda _actuation, _sensor: ("OFF",)
+        "smartbox.device.control_modes._ui_for_actuation",
+        lambda _actuation, _sensor: ("OFF",),
     )
     assert control_mode_choices(PID, "htr", {"control_mode": 0}, "C") is None
 

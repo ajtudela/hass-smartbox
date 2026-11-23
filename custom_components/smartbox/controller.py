@@ -29,6 +29,7 @@ from smartbox.device.profile import (
     climate_bounds,
     controller_limits,
     firmware_at_least,
+    has_no_probes,
     is_helki_heater_family,
     is_htr_mod_controller,
     is_lhz_family,
@@ -277,18 +278,6 @@ def supports_runback(
 # Code 28 is TevolveThermostatController, which extends the triac heater and
 # uses the heater int-slot programme instead of the thermostat {m,t} shape.
 _HEATER_SURFACE_THM_CODES = frozenset({"28"})
-SENSOR_MODE_NO_PROBES = 3
-
-
-def has_no_probes(setup: Mapping[str, object] | None) -> bool:
-    """Return True when the node's extra options select NO_PROBES."""
-    if not isinstance(setup, Mapping):
-        return False
-    extra = setup.get("extra_options")
-    if not isinstance(extra, Mapping):
-        return False
-    value = extra.get("sensor_mode")
-    return not isinstance(value, bool) and value == SENSOR_MODE_NO_PROBES
 
 
 def is_heater_surface(node_type: str, pid: str | None) -> bool:
