@@ -20,6 +20,7 @@ async def test_preferences_round_trip_and_clear(hass):
         runback_time=60,
     )
     assert prefs.get("dev_htr_0").boost_temp_c == 21.5
+    await prefs.async_flush()
 
     restored = boost_prefs_for(hass, "entry_1")
     await restored.async_load()

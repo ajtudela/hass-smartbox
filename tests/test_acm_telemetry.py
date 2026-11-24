@@ -5,8 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.device.storage import WATER_STORAGE_CODE
 
 from custom_components.smartbox.binary_sensor import (
     Charging,
@@ -15,17 +14,14 @@ from custom_components.smartbox.binary_sensor import (
     WindowDetection,
     _build_node_binary_sensors,
 )
-from custom_components.smartbox.const import (
-    ENERGY_NODE_TYPES,
-    PRODUCT_CODE_WATER_STORAGE,
-    SmartboxNodeType,
-)
+from custom_components.smartbox.const import ENERGY_NODE_TYPES, SmartboxNodeType
 from custom_components.smartbox.sensor import (
     TargetChargeSensor,
     _build_node_sensors,
     _format_charging_days,
     _format_charging_slot,
 )
+from tests.stack import NoopFanout, engine_with_node
 
 DEV = "device_1"
 ADDR = 1
@@ -47,13 +43,6 @@ SETUP = {
         "active_days": [True, True, False, True, False, False, True],
     }
 }
-
-
-class _NoopFanout:
-    """Fan-out double for property tests (no engine subscription)."""
-
-    def register_node(self, *_args):
-        return lambda: None
 
 
 def _node(node_type: str = "acm") -> MagicMock:
@@ -79,18 +68,15 @@ def _node(node_type: str = "acm") -> MagicMock:
 
 def _entity(cls, status=None, setup=None, *, node_type="acm"):
     """Build one node entity over a hand-built engine world."""
-    status = dict(STATUS if status is None else status)
-    setup = dict(SETUP if setup is None else setup)
-    engine = SmartboxEngine()
-    key = node_key(node_type, ADDR)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
-        away={},
-        node_states={key: NodeState(status=status, setup=setup)},
+        node_type=node_type,
+        addr=ADDR,
+        status=STATUS if status is None else status,
+        setup=SETUP if setup is None else setup,
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     return cls(
-        _node(node_type), MagicMock(), SimpleNamespace(engine=engine), _NoopFanout()
+        _node(node_type), MagicMock(), SimpleNamespace(engine=engine), NoopFanout()
     )
 
 
@@ -154,7 +140,7 @@ def test_live_flags_use_the_apps_strict_true_comparison() -> None:
 def test_unknown_wire_type_gets_no_binary_sensors() -> None:
     node = _node("towel_rail_heater")
     assert (
-        _build_node_binary_sensors(node, MagicMock(), _runtime_for(node), _NoopFanout())
+        _build_node_binary_sensors(node, MagicMock(), _runtime_for(node), NoopFanout())
         == []
     )
 
@@ -186,7 +172,7 @@ def test_thermostat_gets_temperature_and_its_own_schedule_but_no_energy() -> Non
     runtime = SimpleNamespace(
         services=SimpleNamespace(schedule=[], thermostat_schedule=[])
     )
-    groups = _build_node_sensors(_node("thm"), MagicMock(), runtime, _NoopFanout())
+    groups = _build_node_sensors(_node("thm"), MagicMock(), runtime, NoopFanout())
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert classes == {"TemperatureSensor", "ThermostatScheduleSensor"}
     assert runtime.services.schedule == []
@@ -202,7 +188,7 @@ def test_thm_28_gets_the_heater_schedule_not_the_thermostat_one() -> None:
     runtime = SimpleNamespace(
         services=SimpleNamespace(schedule=[], thermostat_schedule=[])
     )
-    groups = _build_node_sensors(node, MagicMock(), runtime, _NoopFanout())
+    groups = _build_node_sensors(node, MagicMock(), runtime, NoopFanout())
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert classes == {"TemperatureSensor", "ScheduleSensor"}
     assert len(runtime.services.schedule) == 1
@@ -218,7 +204,7 @@ def test_water_storage_has_no_generic_heater_schedule() -> None:
             schedule=[], thermostat_schedule=[], charging=[], boost=[]
         )
     )
-    groups = _build_node_sensors(node, MagicMock(), runtime, _NoopFanout())
+    groups = _build_node_sensors(node, MagicMock(), runtime, NoopFanout())
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert "ScheduleSensor" not in classes
     assert runtime.services.schedule == []
@@ -230,7 +216,7 @@ def test_unknown_wire_type_gets_no_sensors() -> None:
     )
     assert (
         _build_node_sensors(
-            _node("towel_rail_heater"), MagicMock(), runtime, _NoopFanout()
+            _node("towel_rail_heater"), MagicMock(), runtime, NoopFanout()
         )
         == []
     )
@@ -245,14 +231,13 @@ def test_energy_node_types_exclude_thermostats() -> None:
 
 def _runtime_for(node: MagicMock) -> SimpleNamespace:
     """Build a runtime whose engine world holds this node's status."""
-    engine = SmartboxEngine()
-    key = node_key(node.node_type, ADDR)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
-        away={},
-        node_states={key: NodeState(status=dict(node.status), setup=dict(node.setup))},
+        node_type=node.node_type,
+        addr=ADDR,
+        status=node.status,
+        setup=node.setup,
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     return SimpleNamespace(engine=engine)
 
 
@@ -268,7 +253,7 @@ def test_thermostat_binary_sensor_gating() -> None:
     }
     node.setup = {}
     groups = _build_node_binary_sensors(
-        node, MagicMock(), _runtime_for(node), _NoopFanout()
+        node, MagicMock(), _runtime_for(node), NoopFanout()
     )
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert classes == {"LowBattery"}
@@ -279,7 +264,7 @@ def test_storage_heater_binary_sensor_gating() -> None:
     node.status = {"french_rule_pir_state": False, "charging": True}
     node.setup = {"extra_options": {"pir_enabled": True}}
     groups = _build_node_binary_sensors(
-        node, MagicMock(), _runtime_for(node), _NoopFanout()
+        node, MagicMock(), _runtime_for(node), NoopFanout()
     )
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert classes == {"WindowDetection", "PirPresence", "Charging"}
@@ -287,12 +272,12 @@ def test_storage_heater_binary_sensor_gating() -> None:
 
 def test_water_storage_gets_level_binaries_instead_of_charging() -> None:
     node = _node("acm")
-    node.get_model_code.return_value = PRODUCT_CODE_WATER_STORAGE
+    node.pid = f"08{WATER_STORAGE_CODE}0000"
     node.setup = {}
 
     node.status = {"charging": True, "charge_level": 50}
     groups = _build_node_binary_sensors(
-        node, MagicMock(), _runtime_for(node), _NoopFanout()
+        node, MagicMock(), _runtime_for(node), NoopFanout()
     )
     entities = {
         type(entity).__name__: entity for entities, _ in groups for entity in entities
@@ -303,7 +288,7 @@ def test_water_storage_gets_level_binaries_instead_of_charging() -> None:
 
     node.status = {"charging": False, "charge_level": 100}
     groups = _build_node_binary_sensors(
-        node, MagicMock(), _runtime_for(node), _NoopFanout()
+        node, MagicMock(), _runtime_for(node), NoopFanout()
     )
     entities = {
         type(entity).__name__: entity for entities, _ in groups for entity in entities
@@ -315,7 +300,7 @@ def test_water_storage_gets_level_binaries_instead_of_charging() -> None:
     for status in ({}, {"charging": False}):
         node.status = status
         groups = _build_node_binary_sensors(
-            node, MagicMock(), _runtime_for(node), _NoopFanout()
+            node, MagicMock(), _runtime_for(node), NoopFanout()
         )
         entities = {
             type(entity).__name__: entity
@@ -331,7 +316,7 @@ def test_pir_presence_needs_the_setup_gate() -> None:
     node.status = {"french_rule_pir_state": True}
     node.setup = {"extra_options": {"pir_enabled": False}}
     groups = _build_node_binary_sensors(
-        node, MagicMock(), _runtime_for(node), _NoopFanout()
+        node, MagicMock(), _runtime_for(node), NoopFanout()
     )
     classes = {type(entity).__name__ for entities, _ in groups for entity in entities}
     assert "PirPresence" not in classes

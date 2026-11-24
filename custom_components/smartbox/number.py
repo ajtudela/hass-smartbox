@@ -22,6 +22,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.codes import accepts_extra_options
 from smartbox.protocol.errors import SmartboxError
 from smartbox.protocol.values import (
     celsius_to_node_units,
@@ -29,7 +30,6 @@ from smartbox.protocol.values import (
     parse_number,
     parse_number_or_none,
 )
-from smartbox.protocol.writes import WriteApi
 
 from .adapter import (
     SmartboxBoxAdapterEntity,
@@ -59,7 +59,6 @@ from .controller import (
     controller_limits,
     max_limit_bounds,
     profile_bounds,
-    prog_bounds_c,
 )
 from .entity_builder import EntityBuilder
 from .exceptions import validation_error
@@ -172,14 +171,7 @@ class SmartboxNodeNumberEntity(SmartboxNodeAdapterEntity, NumberEntity):
 
     def _controller_limits(self) -> ControllerLimits:
         """Return the decoded controller limits for this node."""
-        state = self._node_state()
-        setup = state.setup if state is not None else self._node.setup
-        return controller_limits(
-            self._node.node_type,
-            self._live_pid,
-            self._live_fw_version,
-            setup,
-        )
+        return self._controller_profile().limits
 
 
 def _build_device_entities(
@@ -253,7 +245,7 @@ def _build_node_numbers(
         and boost_params_available(node)
         and (
             not boost_params_editable(node.node_type, node.pid, node.setup)
-            or WriteApi.supports_extra_options(node.pid)
+            or accepts_extra_options(node.pid)
         )
     ):
         boost_entities: list[ConfigBoostDuration | ConfigBoostTemperature] = [
@@ -711,14 +703,14 @@ class MaxTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the maximum target temperature."""
-        limits = self._controller_limits()
+        profile = self._controller_profile(max_limit_c=value)
         await self._runtime.engine.set_max_stemp_limit(
             self._dev_id,
             self._ref,
             value,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits, max_limit_c=value),
-            offset_c=limits.profile_offset_c,
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
 
@@ -737,7 +729,6 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     _attr_mode = NumberMode.SLIDER
     _attr_device_class = NumberDeviceClass.TEMPERATURE
     status_key: str
-    profile: str
 
     _C_SCALE_BOUNDS = (5.0, 30.0, 0.5)
     _F_SCALE_BOUNDS = (41.0, 86.0, 1.0)
@@ -746,11 +737,8 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     def _device_scale_bounds(self) -> tuple[float, float, float]:
         """Return the controller's bounds for this programme profile."""
         state = self._node_state()
-        bounds = profile_bounds(
-            self._controller_limits(),
-            self.profile,
-            max_limit_c=node_max_stemp_limit_c(state),
-        )
+        profile = self._controller_profile(max_limit_c=node_max_stemp_limit_c(state))
+        bounds = (profile.prog_bounds or {}).get(self.status_key)
         if bounds is None:
             return super()._device_scale_bounds
         return self._bounds_from_celsius(bounds[0], bounds[1], 0.5, 1.0)
@@ -785,7 +773,7 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
         state = self._node_state()
         setup_units = state.setup.get("units") if state is not None else None
         units = status.get("units") or setup_units or "C"
-        limits = self._controller_limits()
+        profile = self._controller_profile(max_limit_c=node_max_stemp_limit_c(state))
         await self._runtime.engine.set_prog_temps(
             self._dev_id,
             self._ref,
@@ -794,8 +782,8 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
             comf_temp=current["comf_temp"],
             units=units,
             changed=self.status_key,
-            bounds_c=prog_bounds_c(limits, max_limit_c=node_max_stemp_limit_c(state)),
-            offset_c=limits.profile_offset_c,
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
 
@@ -803,18 +791,15 @@ class ProgFrostTemperature(ProgTemperatureBase):
     """Smartbox frost (ice) programme temperature control."""
 
     status_key = "ice_temp"
-    profile = "frost"
 
 
 class ProgEcoTemperature(ProgTemperatureBase):
     """Smartbox eco programme temperature control."""
 
     status_key = "eco_temp"
-    profile = "eco"
 
 
 class ProgComfortTemperature(ProgTemperatureBase):
     """Smartbox comfort programme temperature control."""
 
     status_key = "comf_temp"
-    profile = "comfort"

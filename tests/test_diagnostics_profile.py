@@ -50,3 +50,11 @@ def test_non_heater_programme_kinds() -> None:
     assert thermostat["prog_bounds"] is None
     assert water["programme_kind"] == "on_off_auto"
     assert water["prog_bounds"] is None
+
+
+def test_disabled_max_limit_keeps_the_controller_profile() -> None:
+    """The documented `0.0` sentinel must not produce inverted bounds."""
+    profile = _node_profile("htr/0", _node("04020000", {"max_stemp_limit": "0.0"}))
+    assert profile is not None
+    assert profile["climate_bounds"] == (1.0, 30.0)
+    assert profile["prog_bounds"]["comf_temp"] == (1.0, 30.0)

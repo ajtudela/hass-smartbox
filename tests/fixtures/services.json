@@ -1,17 +1,113 @@
 {
   "set_boost_mode": {
-    "supports_response": "none"
+    "fields": {
+      "active": {
+        "required": false,
+        "selector": {
+          "boolean": null
+        }
+      },
+      "duration": {
+        "required": false,
+        "selector": {
+          "number": {
+            "max": 1440,
+            "min": 1,
+            "step": 1,
+            "unit_of_measurement": "min"
+          }
+        }
+      },
+      "mode": {
+        "required": false,
+        "selector": {
+          "select": {
+            "options": [
+              "temp_and_time",
+              "max_temp_fixed_time",
+              "advanced_slot",
+              "runback"
+            ]
+          }
+        }
+      },
+      "temperature": {
+        "required": false,
+        "selector": {
+          "number": {
+            "max": 86,
+            "min": 5,
+            "step": 0.5
+          }
+        }
+      }
+    }
   },
   "set_boost_params": {
-    "supports_response": "none"
+    "fields": {
+      "duration": {
+        "required": false,
+        "selector": {
+          "number": {
+            "max": 1440,
+            "min": 60,
+            "step": 60,
+            "unit_of_measurement": "min"
+          }
+        }
+      },
+      "temperature": {
+        "required": false,
+        "selector": {
+          "number": {
+            "max": 86,
+            "min": 5,
+            "step": 0.5
+          }
+        }
+      }
+    }
   },
   "set_charging_schedule": {
-    "supports_response": "none"
+    "fields": {
+      "active_days": {
+        "required": false,
+        "selector": {
+          "object": null
+        }
+      },
+      "slot_1": {
+        "required": false,
+        "selector": {
+          "object": null
+        }
+      },
+      "slot_2": {
+        "required": false,
+        "selector": {
+          "object": null
+        }
+      }
+    }
   },
   "set_schedule": {
-    "supports_response": "none"
+    "fields": {
+      "schedule": {
+        "required": true,
+        "selector": {
+          "object": null
+        }
+      }
+    }
   },
   "set_thermostat_schedule": {
-    "supports_response": "none"
+    "fields": {
+      "schedule": {
+        "required": true,
+        "selector": {
+          "object": null
+        }
+      }
+    }
   }
 }

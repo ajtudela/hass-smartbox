@@ -6,11 +6,11 @@ How the integration is put together, and why it is shaped this way. It is writte
 
 A Home Assistant custom integration (domain `smartbox`) for Smartbox electric heaters. It talks to the vendor's cloud directly: REST calls for reads and writes, plus one `ws_user` websocket per account for pushed updates. A "box" (the site gateway) carries several heater nodes; both become Home Assistant devices.
 
-Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`). `manifest.json` requires `smartbox>=3.2.1,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`); this branch adds the neutral controller facts as `smartbox.device` (see “Device semantics” below). `manifest.json` requires `smartbox>=3.2.1,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 ## The three layers
 
-The split keeps two kinds of churn apart: the vendor's cloud (endpoints, frame shapes, timing quirks) and Home Assistant (entity model, lifecycle, APIs). Wire knowledge lives in one package, Home Assistant knowledge lives in one package, and the state between them is plain Python, testable without either. The import directions are enforced by the library's layering test (an import scan over `smartbox.protocol` and `smartbox.core`), so the rule is checked, not aspirational.
+The split keeps two kinds of churn apart: the vendor's cloud (endpoints, frame shapes, timing quirks) and Home Assistant (entity model, lifecycle, APIs). Wire knowledge lives in one package, Home Assistant knowledge lives in one package, and the state between them is plain Python, testable without either. The import directions are enforced by the library's layering test (an import scan over `smartbox.protocol`, `smartbox.core` and `smartbox.device`), so the rule is checked, not aspirational.
 
 The shape, in one picture (imports point downward; pushed frames and store changes travel upward):
 
@@ -116,9 +116,11 @@ custom_components/smartbox/   the integration
 ├── exceptions.py             translated user-facing error constructors
 ├── compat.py                 probatio/voluptuous selection for the HA range
 ├── identity.py               discovery results; capability gates
-├── product.py                product labels from the version PID
-├── control_mode.py           vendor-app control-mode catalogue and gates
+├── product.py                product labels from the version PID (table in the library)
 ├── mapping.py                schedule/RTC/boost decoding
+├── controller.py             compatibility re-exports + adapter boost helpers
+├── storage.py                storage intent → HVACMode mapping
+├── boost_activation.py, boost_prefs.py  adapter boost activation/preferences
 ├── config_flow.py            setup, reauth and reconfigure
 ├── climate.py, sensor.py, number.py, switch.py,
 │   select.py, binary_sensor.py   the six entity platforms
@@ -227,14 +229,16 @@ Three documents, three roles: `docs/api-contract.md` settles wire acceptance —
 
 ## The `smartbox` library
 
-`smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to a tagged tarball. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
+`smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to the PyPI version range `smartbox>=3.2.1,<3.3`. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
 
 ### Device semantics (migration in progress)
 
-The neutral device facts live in `smartbox.device` (`profile`, `control_modes`,
-`modes`, `storage`, `settings`): setpoint/programme ranges, control-mode
-catalogues, lock/boost policy, storage intents and setting gates. The
-integration re-exports or maps them; entity construction, boost activation
+The neutral device facts live in `smartbox.device` (`codes`, `capabilities`,
+`profile`, `control_modes`, `modes`, `storage`, `settings`): the reviewed
+product-code table, operation-eligibility checks, setpoint/programme ranges,
+control-mode catalogues, lock/boost policy, storage intents and setting gates. Entity code imports those modules directly;
+`controller.py` keeps only the adapter-local boost helpers and the re-exports
+other adapter modules still import. Entity construction, boost activation
 planning, preferences and services stay in the adapter. The design, slice
 status and acceptance tests are in [device-semantics.md](device-semantics.md).
 The library minor and the pin are deferred; the branch needs the sibling

@@ -7,8 +7,6 @@ from unittest.mock import MagicMock
 
 from homeassistant.exceptions import ServiceValidationError
 import pytest
-from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
 
 from custom_components.smartbox.boost_prefs import NodeBoostPrefs
 from custom_components.smartbox.number import (
@@ -17,6 +15,7 @@ from custom_components.smartbox.number import (
     ConfigRunbackDuration,
     ConfigRunbackTemperature,
 )
+from tests.stack import NoopFanout, engine_with_node
 from tests.test_entity_surface_matrix import _node
 
 FULL = {
@@ -48,20 +47,14 @@ class _Prefs:
 def _entity(cls, node=None, prefs=None):
     node = node or _node("htr", "01340000", "1.9", FULL, STATUS)
     prefs = prefs or _Prefs()
-    engine = SmartboxEngine()
-    key = node_key(node.node_type, node.addr)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=node.dev_id,
-        away={},
-        node_states={
-            key: NodeState(
-                status=dict(node.status),
-                setup=dict(node.setup),
-                version=dict(node.version),
-            )
-        },
+        node_type=node.node_type,
+        addr=node.addr,
+        status=node.status,
+        setup=node.setup,
+        version=node.version,
     )
-    object.__setattr__(engine, "_world", WorldState(devices={node.dev_id: device}))
     runtime = SimpleNamespace(
         engine=engine,
         boost_prefs=prefs,
@@ -71,7 +64,7 @@ def _entity(cls, node=None, prefs=None):
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     entity = cls(node, entry, runtime, fanout, f"config_{cls.__name__.lower()}")
     return entity, prefs
 

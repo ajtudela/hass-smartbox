@@ -51,6 +51,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
+from smartbox.device.storage import is_elnur_stepped_storage, is_helki_storage
 from smartbox.protocol import timing
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.errors import SmartboxError
@@ -67,7 +68,6 @@ from .const import (
     DEFAULT_TIMEDELTA_POWER,
     ENERGY_NODE_TYPES,
     FIELD_SCHEDULE,
-    PRODUCT_CODE_ELNUR_STEPPED_STORAGE,
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
@@ -816,17 +816,12 @@ class ChargeLevelSensor(SmartboxNodeSensorEntity):
         if self._lost or not status:
             # lost/absent body: unknown, never a stale 0 (climate-round rule)
             return None
-        # Charge level is 'current_charge_per' on model 1C (storage heaters),
-        # 'charge_level' on the rest. Prefer the live version slot; the
-        # discovery payload covers the window before the first snapshot.
-        state = self._node_state()
-        model_code = self._node.get_model_code(
-            state.version if state is not None else None
-        )
-        if model_code in ("1C", "2E"):
+        # Charge level is 'current_charge_per' on the Helki storage
+        # controllers (1C/2E), 'charge_level' on the rest.
+        if is_helki_storage(self._live_pid):
             value = parse_number_or_none(status.get("current_charge_per"))
             return int(value) if value is not None else None
-        if model_code == PRODUCT_CODE_ELNUR_STEPPED_STORAGE:
+        if is_elnur_stepped_storage(self._live_pid):
             # Elnur's storage controller reports charge_level in 0..5 steps
             # and multiplies by 20 (docs/api-contract.md §3.4).
             level = parse_number_or_none(status.get("charge_level"))

@@ -1,15 +1,17 @@
 # Controller profile audit
 
-Source of truth: vendor mobile **2.54.2** (`new_vendors.decoded.js`, shared by the
-SmartControl/Lucht LHZ APK). Method references below are the decoded controller
-methods; the integration values are pinned by `tests/test_product_code_parity.py`
-and the library's device-profile test.
+Source of truth: vendor mobile **2.54.2** (`new_vendors.decoded.js`, shared by
+the SmartControl/Lucht LHZ APK; sha256
+`f4687447d9cff9bd9c04c4651d320501bb3e28020091b463ac177e153797ea96`,
+5,856,496 bytes). The canonical wire record is `docs/api-contract.md` §1.9, §5.7 and §7 item 16; this page is the formula/audit summary. Values are pinned by the shared fixture and the library device tests.
 
 ## The max-stemp rule
 
 `ElectricHeaterController.getUserDefinedTempLimits()` replaces `maxCTemp` with
 `getMaxStempLimitInCelsius()` when that is non-zero, and
-`getProgTempProperties()` then derives every profile from those limits:
+`getProgTempProperties()` then derives every profile from those limits
+`[app mobile 2.54.2 new_vendors.decoded.js@3627000]`; the Haverland override
+has its own fixed frost range `[app mobile 2.54.2 new_vendors.decoded.js@5338169]`:
 
 | Profile | Floor | Ceiling |
 |---|---|---|
@@ -81,3 +83,17 @@ uv run smartbox profile --pid 0402 --node-type htr --fw-version 1.9 --max-limit-
 
 The `prog_bounds` block should read `ice_temp [0,22]`, `eco_temp [0.5,22.5]`,
 `comf_temp [1,23]`.
+
+
+## Where each fact lives
+
+| App source | Library owner | Adapter consumer |
+|---|---|---|
+| `EProductCodeValue` enum | `device/codes.py: PRODUCT_CODES` (family, limits family, surface, label, flags) | `product.label`, `control_modes`, profile sets |
+| controller factory switch | `device/codes.py` family column | `control_modes`, `profile` |
+| `getActuationType` | `device/codes.py` actuation column | `control_modes` UI array |
+| `getUserDefinedTempLimits`/`getProgTempProperties` | `device/profile.py` limits/bounds | climate, programme numbers, max-limit correction |
+| `getUIHeatingControlModes`/wire arrays | `device/control_modes.py` | control-mode select |
+| storage `getUIHeatingModes`/`write*` | `device/storage.py` | climate/select adapter |
+| `getSettings`/capability gates | `device/settings.py` | entity builders |
+| lock/boost methods | `device/modes.py` | lock/boost entities |

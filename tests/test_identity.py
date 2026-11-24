@@ -12,11 +12,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from smartbox.device.control_modes import control_mode_available
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig
 
 from custom_components.smartbox.const import SmartboxNodeType
-from custom_components.smartbox.control_mode import control_mode_available
 from custom_components.smartbox.identity import (
     SmartboxDeviceInfo,
     SmartboxNodeInfo,

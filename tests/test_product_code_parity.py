@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
+from smartbox.device.codes import PRODUCT_CODE_LABELS
 
 from custom_components.smartbox.controller import (
     boost_params_editable,
@@ -109,7 +112,7 @@ class Expectation:
     boost_params: frozenset[int]
     duty_options: tuple[tuple[str, int], ...]
     max_limit: bool
-    storage_ui: bool
+    elnur_storage: bool
     surface: str  # "heater" | "thermostat" | "power"
     ice_editable: bool = True
     water: bool = False
@@ -133,7 +136,7 @@ BASE_ROW = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 HELKI_HEATER = Expectation(
@@ -153,7 +156,7 @@ HELKI_HEATER = Expectation(
     boost_params=frozenset({2}),
     duty_options=HELKI_DUTY,
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 LHZ_WIFI = Expectation(
@@ -173,7 +176,7 @@ LHZ_WIFI = Expectation(
     boost_params=frozenset({2}),
     duty_options=LHZ_DUTY,
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 LHZ_RELAY = Expectation(
@@ -193,7 +196,7 @@ LHZ_RELAY = Expectation(
     boost_params=frozenset({2}),
     duty_options=LHZ_DUTY,
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 TEVOLVE_TRIAC = Expectation(
@@ -213,7 +216,7 @@ TEVOLVE_TRIAC = Expectation(
     boost_params=frozenset({2, 3}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 TEVOLVE_WIFI = Expectation(
@@ -233,7 +236,7 @@ TEVOLVE_WIFI = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 TEVOLVE_ATC = Expectation(
@@ -253,7 +256,7 @@ TEVOLVE_ATC = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 HAVERLAND = Expectation(
@@ -273,7 +276,7 @@ HAVERLAND = Expectation(
     boost_params=frozenset(),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 HAVERLAND_WIFI = Expectation(
@@ -293,7 +296,7 @@ HAVERLAND_WIFI = Expectation(
     boost_params=frozenset(),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 HAVERLAND_WIFI_B = Expectation(
@@ -313,7 +316,7 @@ HAVERLAND_WIFI_B = Expectation(
     boost_params=frozenset(),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 HTR_MOD_ROW = Expectation(
@@ -333,7 +336,7 @@ HTR_MOD_ROW = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
     ice_editable=False,
 )
@@ -354,7 +357,7 @@ STORAGE_HELKI = Expectation(
     boost_params=ALL_CONFIGS,
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 STORAGE_ELNUR = Expectation(
@@ -374,7 +377,7 @@ STORAGE_ELNUR = Expectation(
     boost_params=frozenset(),
     duty_options=(),
     max_limit=False,
-    storage_ui=True,
+    elnur_storage=True,
     surface="heater",
 )
 # Water storage's app catalogue is ON/OFF_AUTO; the integration does not model
@@ -396,7 +399,7 @@ WATER = Expectation(
     boost_params=frozenset(),
     duty_options=(),
     max_limit=False,
-    storage_ui=True,
+    elnur_storage=True,
     surface="heater",
     water=True,
 )
@@ -417,7 +420,7 @@ THERMOSTAT = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="thermostat",
 )
 THM_28 = Expectation(
@@ -437,7 +440,7 @@ THM_28 = Expectation(
     boost_params=frozenset({2, 3}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 POWER = Expectation(
@@ -457,7 +460,7 @@ POWER = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=False,
-    storage_ui=False,
+    elnur_storage=False,
     surface="power",
 )
 CLIMASTAR_WIFI = Expectation(
@@ -477,7 +480,7 @@ CLIMASTAR_WIFI = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 TEVOLVE_RELAY = Expectation(
@@ -497,7 +500,7 @@ TEVOLVE_RELAY = Expectation(
     boost_params=frozenset({2}),
     duty_options=(),
     max_limit=True,
-    storage_ui=False,
+    elnur_storage=False,
     surface="heater",
 )
 
@@ -553,7 +556,7 @@ CODES: dict[str, Expectation] = {
         boost_params=frozenset({2}),
         duty_options=(),
         max_limit=False,
-        storage_ui=False,
+        elnur_storage=False,
         surface="heater",
         ice_editable=False,
     ),
@@ -674,7 +677,7 @@ def test_product_code_parity_row(code: str) -> None:
     assert is_heater_surface(row.node_type, pid) is (row.surface == "heater")
     assert is_thermostat_surface(row.node_type, pid) is (row.surface == "thermostat")
     assert is_water_storage(pid) is row.water
-    assert is_elnur_storage(pid) is row.storage_ui
+    assert is_elnur_storage(pid) is row.elnur_storage
 
     if row.profiles is not None:
         # Helki storage reads its bounds from the node's setup; an empty setup
@@ -838,7 +841,11 @@ def test_no_probes_gate_reads_only_the_sensor_mode_enum(
     assert has_no_probes(setup) is expected
 
 
-FIXTURE = Path(__file__).parent / "fixtures" / "product_codes.json"
+LIBRARY = Path(
+    os.environ.get("SMARTBOX_LIB", Path(__file__).resolve().parents[2] / "smartbox")
+)
+FIXTURE = LIBRARY / "tests" / "fixtures" / "product_codes.json"
+API_CONTRACT = Path(__file__).resolve().parents[1] / "docs" / "api-contract.md"
 
 
 def _jsonify(value: object) -> object:
@@ -852,10 +859,16 @@ def _jsonify(value: object) -> object:
     return value
 
 
-def test_exported_fixture_matches_the_reviewed_table() -> None:
-    """The portable product-code fixture is the reviewed table, not a re-derivation."""
+def test_library_fixture_matches_the_reviewed_table() -> None:
+    """The library's canonical fixture matches this reviewed expectation table.
+
+    The fixture lives in the sibling checkout so both repositories read one
+    copy; set ``SMARTBOX_LIB`` when it is not at ``../smartbox``.
+    """
+    if not FIXTURE.is_file():
+        pytest.skip(f"library fixture not found at {FIXTURE}; set SMARTBOX_LIB")
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    assert data["schema"] == 1
+    assert data["schema"] == 2
     assert set(data["codes"]) == set(CODES)
     for code, row in CODES.items():
         expected = {
@@ -863,4 +876,17 @@ def test_exported_fixture_matches_the_reviewed_table() -> None:
             for field in row.__dataclass_fields__.values()
             if field.name != "extra"
         }
-        assert data["codes"][code] == expected, code
+        assert expected.items() <= data["codes"][code].items(), code
+
+
+def test_wire_record_product_table_matches_the_code_table() -> None:
+    """The wire record's `docs/api-contract.md` §3.1 table must match the library."""
+    text = API_CONTRACT.read_text(encoding="utf-8")
+    section = text.split("### 3.1 ", 1)[1].split("\n### ", 1)[0]
+    rows = {}
+    for line in section.splitlines():
+        match = re.match(r"\| `([0-9A-F]{2})` \| `[A-Z0-9_]+` \| ([^|]+) \|", line)
+        if match:
+            rows[match.group(1)] = match.group(2).strip()
+    assert len(rows) == 51
+    assert rows == {**PRODUCT_CODE_LABELS, "00": "—"}

@@ -33,10 +33,8 @@ from .boost_activation import plan_boost
 from .controller import (
     ControllerLimits,
     boost_uses_legacy_path,
-    controller_limits,
     lock_kind,
     max_limit_bounds,
-    prog_bounds_c,
     supports_easy,
     supports_runback,
 )
@@ -541,14 +539,7 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
 
     def _controller_limits(self) -> ControllerLimits:
         """Return the decoded controller limits for this node."""
-        state = self._node_state()
-        setup = state.setup if state is not None else self._node.setup
-        return controller_limits(
-            self._node.node_type,
-            self._live_pid,
-            self._live_fw_version,
-            setup,
-        )
+        return self._controller_profile().limits
 
     def _default_limit(self) -> float:
         """Return the device's default ceiling in the NODE's unit."""
@@ -619,26 +610,26 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
             if self._last_max_stemp_limit is not None
             else self._default_limit()
         )
-        limits = self._controller_limits()
+        profile = self._controller_profile(max_limit_c=limit)
         await self._runtime.engine.set_max_stemp_limit(
             self._dev_id,
             self._ref,
             limit,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits, max_limit_c=limit),
-            offset_c=limits.profile_offset_c,
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
     async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
         """Disable the maximum temperature limit."""
-        limits = self._controller_limits()
+        profile = self._controller_profile(max_limit_c=None)
         await self._runtime.engine.set_max_stemp_limit(
             self._dev_id,
             self._ref,
             None,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits, max_limit_c=None),
-            offset_c=limits.profile_offset_c,
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
     @property

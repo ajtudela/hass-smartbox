@@ -1,8 +1,10 @@
-"""Compatibility re-exports for the neutral device profile.
+"""Compatibility re-exports and adapter-local boost helpers.
 
 Limits/profiles/surface predicates live in ``smartbox.device.profile``; lock
-and boost policy in ``smartbox.device.modes``. Entity code keeps importing
-from this module while the extraction lands.
+and boost policy in ``smartbox.device.modes``. New imports go to
+``smartbox.device.*`` directly; this module keeps the adapter-local
+status-reading boost helpers and the re-exports the remaining adapter modules
+still import.
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ from typing import TYPE_CHECKING
 from smartbox.core.merging import boost_config
 from smartbox.device.modes import (
     boost_activation_takes_parameters,
-    boost_is_fixed_time,
     boost_params_editable,
     boost_uses_legacy_path,
     lock_kind,
@@ -21,26 +22,14 @@ from smartbox.device.modes import (
 )
 from smartbox.device.profile import (
     HAVERLAND_FIXED_TIME_CODES,
-    PROFILES_BASE,
-    PROFILES_HTR_MOD,
-    PROFILES_WITH_OFF,
     TEVOLVE_ATC_CODES,
     TEVOLVE_WIFI_CODES,
-    UI_MIN_TEMP_C,
     ControllerLimits,
     boost_temperature_bounds,
     climate_bounds,
     controller_limits,
-    firmware_at_least,
     has_no_probes,
     is_heater_surface,
-    is_helki_heater_family,
-    is_htr_mod_controller,
-    is_lhz_family,
-    is_lhz_relay,
-    is_tevolve_atc_family,
-    is_tevolve_triac_family,
-    is_tevolve_wifi_family,
     is_thermostat_surface,
     max_limit_bounds,
     product_code,
@@ -51,11 +40,6 @@ from smartbox.protocol.values import BoostConfig
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-_product_code = product_code
-_HAVERLAND_FIXED_TIME_CODES = HAVERLAND_FIXED_TIME_CODES
-_TEVOLVE_WIFI_CODES = TEVOLVE_WIFI_CODES
-_TEVOLVE_ATC_CODES = TEVOLVE_ATC_CODES
 
 
 def boost_modes_available(
@@ -76,10 +60,10 @@ def boost_activation_mode(
     """Return the ``/boost_mode`` style a FULL controller should use."""
     if boost_config(setup or {}) != BoostConfig.FULL:
         return None
-    code = _product_code(pid)
-    if code in _HAVERLAND_FIXED_TIME_CODES:
+    code = product_code(pid)
+    if code in HAVERLAND_FIXED_TIME_CODES:
         return "max_temp_fixed_time"
-    if code in _TEVOLVE_WIFI_CODES or code in _TEVOLVE_ATC_CODES:
+    if code in TEVOLVE_WIFI_CODES or code in TEVOLVE_ATC_CODES:
         modes = boost_modes_available(status)
         if "temp_and_time" in modes:
             return "temp_and_time"
@@ -108,21 +92,16 @@ def runback_params_configurable(
     """Whether HA should expose runback temperature/duration controls."""
     if boost_config(setup or {}) != BoostConfig.FULL:
         return False
-    code = _product_code(pid)
-    if code not in _TEVOLVE_WIFI_CODES and code not in _TEVOLVE_ATC_CODES:
+    code = product_code(pid)
+    if code not in TEVOLVE_WIFI_CODES and code not in TEVOLVE_ATC_CODES:
         return False
     return "runback" in boost_modes_available(status)
 
 
 __all__ = [
-    "PROFILES_BASE",
-    "PROFILES_HTR_MOD",
-    "PROFILES_WITH_OFF",
-    "UI_MIN_TEMP_C",
     "ControllerLimits",
     "boost_activation_mode",
     "boost_activation_takes_parameters",
-    "boost_is_fixed_time",
     "boost_modes_available",
     "boost_params_configurable",
     "boost_params_editable",
@@ -130,16 +109,8 @@ __all__ = [
     "boost_uses_legacy_path",
     "climate_bounds",
     "controller_limits",
-    "firmware_at_least",
     "has_no_probes",
     "is_heater_surface",
-    "is_helki_heater_family",
-    "is_htr_mod_controller",
-    "is_lhz_family",
-    "is_lhz_relay",
-    "is_tevolve_atc_family",
-    "is_tevolve_triac_family",
-    "is_tevolve_wifi_family",
     "is_thermostat_surface",
     "lock_kind",
     "max_limit_bounds",

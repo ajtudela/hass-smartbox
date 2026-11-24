@@ -142,7 +142,9 @@ def test_every_citation_resolves_to_a_real_section() -> None:
     citation that names no document is checked against the ambiguity the
     two documents actually have - they number their sections
     independently (§2, §4, §5 and §7 exist in both), so an unnamed one
-    must be unambiguous by number alone.
+    must be unambiguous by number alone. Inside a record document an
+    unnamed citation resolves to that document; unnamed citations in any
+    other document are rejected, so the record must be named there.
 
     Not checked: whether the cited section is the RIGHT one for the claim.
     A legitimate citation need not echo its section's title (the record's
@@ -156,8 +158,9 @@ def test_every_citation_resolves_to_a_real_section() -> None:
     }
     problems: list[str] = []
     for path in _scanned_files():
-        # Inside a document, an unnamed citation means that document; anywhere
-        # else it means "resolve by number, or fail as ambiguous".
+        # Inside a record document an unnamed citation means that document.
+        # Code comments may resolve one by number when a single record has it;
+        # any other document must name the record beside the citation.
         containing = path.stem if path.parent == REPO_ROOT / "docs" else None
         for line, section, named in _citation_sites(path.read_text(encoding="utf-8")):
             doc = named or containing
@@ -170,6 +173,11 @@ def test_every_citation_resolves_to_a_real_section() -> None:
                         f"{path.relative_to(REPO_ROOT)}:{line} cites §{section} without "
                         f"naming a document, and it exists in {holders or 'neither'}"
                     )
+            elif doc not in sections:
+                problems.append(
+                    f"{path.relative_to(REPO_ROOT)}:{line} cites §{section} of "
+                    f"{doc}, which is not a registered record document"
+                )
             elif section not in sections[doc]:
                 problems.append(
                     f"{path.relative_to(REPO_ROOT)}:{line} cites §{section} of {doc}, "
@@ -192,6 +200,11 @@ def test_the_citation_gate_resolves_a_citation_to_its_document() -> None:
     assert _citation_sites("per webapi-spec §4.2 and docs/api-contract.md §5.1") == [
         (1, "4.2", "webapi-spec"),
         (1, "5.1", "api-contract"),
+    ]
+    assert _citation_sites("see docs/api-contract.md §1.9, §5.2 and §7") == [
+        (1, "1.9", "api-contract"),
+        (1, "5.2", "api-contract"),
+        (1, "7", "api-contract"),
     ]
     assert _citation_sites("see §9") == [(1, "9", None)]
 

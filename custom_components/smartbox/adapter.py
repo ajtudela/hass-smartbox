@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
+from smartbox.core.merging import max_stemp_limit_node, parse_max_stemp_limit
 from smartbox.core.state import (
     Change,
     DeviceRemoved,
@@ -35,6 +36,7 @@ from smartbox.core.state import (
     NodeState,
     node_key,
 )
+from smartbox.device.profile import ControllerProfile, resolve_profile
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.errors import SmartboxError
 from smartbox.protocol.values import (
@@ -365,6 +367,25 @@ class SmartboxNodeAdapterEntity(SmartboxAdapterEntity):
                 return fw_version
         return self._node.version.get("fw_version")
 
+    def _controller_profile(
+        self, max_limit_c: float | None = None
+    ) -> ControllerProfile:
+        """Resolve the neutral controller profile from live identity facts.
+
+        ``max_limit_c`` overrides the programme ceiling; the default keeps the
+        controller catalogue. Callers that want the stored setup limit pass
+        ``node_max_stemp_limit_c(state)``.
+        """
+        state = self._node_state()
+        setup = state.setup if state is not None and state.setup else self._node.setup
+        return resolve_profile(
+            self._node.node_type,
+            self._live_pid,
+            self._live_fw_version,
+            setup,
+            max_limit_c=max_limit_c,
+        )
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return the node device info, linked to its box device."""
@@ -492,13 +513,7 @@ def node_max_stemp_limit(state: NodeState | None) -> float | None:
     The memory of the last non-zero limit lives with the limit switch
     (``RestoreEntity``), not here.
     """
-    limit = node_setup_float(state, "max_stemp_limit")
-    if limit is None or limit <= 0:
-        return None
-    units = state.status.get("units") if state is not None else None
-    if not isinstance(units, str) or units not in ("C", "F"):
-        return limit  # no usable unit: leave the value in the wire's scale
-    return celsius_to_node_units(limit, units)
+    return max_stemp_limit_node(state)
 
 
 def node_max_stemp_limit_c(state: NodeState | None) -> float | None:
@@ -508,10 +523,9 @@ def node_max_stemp_limit_c(state: NodeState | None) -> float | None:
     node's display unit. Programme ranges are computed in Celsius and need
     the raw value. ``0.0`` is the disabled sentinel.
     """
-    limit = node_setup_float(state, "max_stemp_limit")
-    if limit is None or limit <= 0:
+    if state is None:
         return None
-    return limit
+    return parse_max_stemp_limit(state.setup.get("max_stemp_limit"))
 
 
 def node_power_limit(state: NodeState | None) -> int | None:

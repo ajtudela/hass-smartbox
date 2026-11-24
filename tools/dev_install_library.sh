@@ -22,4 +22,4 @@ if [[ ! -d "$library/src/smartbox" ]]; then
 fi
 
 uv pip install --python "$python" -e "$library"
-"$python" -c 'import smartbox.device.profile, smartbox.device.control_modes, smartbox.device.modes, smartbox.device.storage, smartbox.device.settings; print("smartbox.device OK")'
+"$python" -c 'import smartbox.device.capabilities, smartbox.device.codes, smartbox.device.profile, smartbox.device.control_modes, smartbox.device.modes, smartbox.device.storage, smartbox.device.settings; print("smartbox.device OK")'

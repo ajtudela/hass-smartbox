@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.core.state import DeviceState, WorldState
 
 from custom_components.smartbox.binary_sensor import (
     _build_device_binary_sensors,
@@ -37,6 +37,7 @@ from custom_components.smartbox.switch import (
     _build_device_switches,
     _build_node_switches,
 )
+from tests.stack import NoopFanout, engine_with_node
 
 RESELLER = SimpleNamespace(web_url="https://example/", name="Test")
 PLATFORMS = (
@@ -97,21 +98,18 @@ def _node(node_type, pid, fw, setup, status, box=True) -> SmartboxNodeInfo:
 
 def _runtime(node: SmartboxNodeInfo | None = None) -> SimpleNamespace:
     """Build a runtime whose engine sees the node's discovery setup/status."""
-    engine = SmartboxEngine()
-    if node is not None:
-        key = node_key(node.node_type, node.addr)
-        device = DeviceState(
+    if node is None:
+        engine = SmartboxEngine()
+    else:
+        engine = engine_with_node(
             dev_id=node.dev_id,
+            node_type=node.node_type,
+            addr=node.addr,
+            status=node.status,
+            setup=node.setup,
+            version=node.version,
             away={"away": False, "enabled": False, "forced": False},
-            node_states={
-                key: NodeState(
-                    status=dict(node.status),
-                    setup=dict(node.setup),
-                    version=dict(node.version),
-                )
-            },
         )
-        object.__setattr__(engine, "_world", WorldState(devices={node.dev_id: device}))
     return SimpleNamespace(
         engine=engine,
         services=ServiceTargets(),
@@ -153,7 +151,7 @@ def _surface(node: SmartboxNodeInfo) -> dict[str, list[str]]:
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     surface: dict[str, list[str]] = {}
     for domain, builder in PLATFORMS:
         keys = [
@@ -171,7 +169,7 @@ def _device_surface(device: SmartboxDeviceInfo) -> dict[str, list[str]]:
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     surface: dict[str, list[str]] = {}
     for domain, builder in PLATFORMS_DEVICE:
         keys = [
@@ -296,7 +294,7 @@ def _attributes(node: SmartboxNodeInfo) -> dict[str, dict[str, object]]:
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     snapshot: dict[str, dict[str, object]] = {}
     for domain, builder in PLATFORMS:
         for entities, _ in builder(node, entry, runtime, fanout):
@@ -314,7 +312,7 @@ def _device_attributes(
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     snapshot: dict[str, dict[str, object]] = {}
     for domain, builder in PLATFORMS_DEVICE:
         for entities, _ in builder(device, entry, runtime, fanout):
@@ -330,7 +328,7 @@ def _states(node: SmartboxNodeInfo) -> dict[str, object]:
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     states: dict[str, object] = {}
     for domain, builder in PLATFORMS:
         for entities, _ in builder(node, entry, runtime, fanout):

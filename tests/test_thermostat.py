@@ -13,8 +13,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.unit_conversion import TemperatureConverter
 import pytest
-from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.core.state import NodeState
 from smartbox.protocol import NodeRef
 
 from custom_components.smartbox.climate import (
@@ -25,7 +24,7 @@ from custom_components.smartbox.climate import (
 from custom_components.smartbox.sensor import ThermostatScheduleSensor
 from custom_components.smartbox.switch import AntiGrippageSwitch
 from tests.mocks import get_entity_id_from_unique_id
-from tests.stack import seed_stack
+from tests.stack import NoopFanout, engine_with_node, seed_stack
 
 DEV = "device_1"
 ADDR = 0
@@ -47,13 +46,6 @@ SETUP = {
     "units": "C",
     "away_offset": "0.0",
 }
-
-
-class _NoopFanout:
-    """Fan-out double for property tests (no engine subscription)."""
-
-    def register_node(self, *_args):
-        return lambda: None
 
 
 class _Host:
@@ -98,25 +90,25 @@ def _thermostat(status=None, setup=None, *, host=None) -> SmartboxThermostat:
     """Build a thermostat over a hand-built engine world."""
     status = dict(STATUS if status is None else status)
     setup = dict(SETUP if setup is None else setup)
-    engine = SmartboxEngine(host or _Host())
-    key = node_key("thm", ADDR)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
-        away={},
-        node_states={key: NodeState(status=status, setup=setup)},
+        node_type="thm",
+        addr=ADDR,
+        status=status,
+        setup=setup,
+        host=host or _Host(),
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     node = _node()
     node.setup = setup
     return SmartboxThermostat(
-        node, MagicMock(), SimpleNamespace(engine=engine), _NoopFanout()
+        node, MagicMock(), SimpleNamespace(engine=engine), NoopFanout()
     )
 
 
 def test_climate_platform_builds_a_thermostat() -> None:
     """The climate platform chooses SmartboxThermostat for a thm node."""
     runtime = SimpleNamespace(services=SimpleNamespace(climate=[]))
-    groups = _build_node_climate(_node(), MagicMock(), runtime, _NoopFanout())
+    groups = _build_node_climate(_node(), MagicMock(), runtime, NoopFanout())
     entity = groups[0][0][0]
     assert isinstance(entity, SmartboxThermostat)
     assert runtime.services.climate == [entity]
@@ -130,7 +122,7 @@ def test_climate_platform_builds_a_heater_for_thm_28() -> None:
     node.heater_surface = True
     node.boost_available = False
     runtime = SimpleNamespace(services=SimpleNamespace(climate=[]))
-    groups = _build_node_climate(node, MagicMock(), runtime, _NoopFanout())
+    groups = _build_node_climate(node, MagicMock(), runtime, NoopFanout())
     entity = groups[0][0][0]
     assert isinstance(entity, SmartboxHeater)
     assert not isinstance(entity, SmartboxThermostat)

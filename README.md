@@ -56,7 +56,7 @@ If **Smartbox** does not appear yet, the catalog may still be updating. HACS use
 1. Open your Home Assistant configuration directory (where `configuration.yaml` lives).
 1. Create `custom_components/` if it does not exist.
 1. Copy the **whole** `custom_components/smartbox/` directory from this repository (or the release archive) into it, preserving `brand/`, `translations/`, `frontend/`, and the JSON/YAML files. The `frontend/` directory carries the bundled program card; the integration serves it automatically, so there is no separate Lovelace resource or HACS plugin to install.
-1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.2.1,<3.3"`. HACS/HA installs this requirement automatically; manual installs need it explicitly.
+1. Install the matching `smartbox` library in the Home Assistant Python environment: `pip install "smartbox>=3.2.1,<3.3"`. HACS/HA installs this requirement automatically; manual installs need it explicitly. The device-semantics branch imports the unreleased 3.3 device package, so it needs the sibling checkout described under Development until 3.3.0 ships.
 1. Restart Home Assistant
 1. Hard-refresh the browser (`Ctrl+Shift+R` / `Cmd+Shift+R`) after the restart or an upgrade, so the new frontend module is loaded.
 
@@ -471,13 +471,12 @@ See the [Home Assistant logger docs] for how to view the actual logs. Please fil
 
 > [!IMPORTANT]
 > The device-semantics branch imports the sibling `smartbox` checkout because
-> its `smartbox.device` modules are not in the published wheel yet. Run
-> `uv sync --all-extras --dev` first, then `tools/dev_install_library.sh`
-> (which installs `../smartbox` editable; override with `SMARTBOX_LIB=/path`).
-> Re-run the script after any `uv sync`. The tox environments install the same
-> sibling path via `SMARTBOX_LIB`; CI must check out both repositories at
-> matching branches until the library minor is released.
-
+> its `smartbox.device` modules are not in the published 3.2.1 wheel. The
+> dependency is PyPI-only again, so a fresh `uv sync --all-extras --dev`
+> installs 3.2.1 and the branch will not import. For local development, run
+> `tools/dev_install_library.sh` after syncing (it installs `../smartbox`
+> editable; override with `SMARTBOX_LIB=/path`). The branch cannot be tested
+> on a real Home Assistant instance until a 3.3.0 delivery method is approved.
 
 For wire investigation against the real hosts (without a live HA deploy), `tools/live_probe.py` drives the installed `smartbox.protocol` layer from the CLI. It needs YOUR OWN `.env` file at the repo root (gitignored) with:
 

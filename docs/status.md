@@ -2,7 +2,7 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-22. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-24. Keep this a 90-second read and prune entries as they close.*
 
 ## Device-semantics migration (in progress)
 
@@ -12,7 +12,7 @@
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
   request-shape matrix, and per-surface attribute/state snapshots.
-  Integration suite: 1687 passed, 6 skipped; library: 718 passed.
+  Integration suite: 1692 passed, 6 skipped; library: 776 passed.
 - Slice 1 landed: `smartbox.device.profile` owns limits/profiles/bounds and
   `resolve_profile`; slice 2 moved the control-mode catalogue to
   `smartbox.device.control_modes`; slice 3 moved lock/boost policy to
@@ -22,13 +22,15 @@
   integration re-exports/maps them. Slice 5 is in progress: `smartbox profile`
   and diagnostics profile data landed; version/pin/release are deferred.
   `docs/vendor-deviations.md` lists the behaviour the extraction must keep.
-  The branch installs the sibling library editable
-  (`tools/dev_install_library.sh`, tox `-e ../smartbox`) and must not be merged
-  before a library minor is published and the pin raised.
+  The path override was removed; the integration dependency is PyPI-only at
+  the published `>=3.2.1,<3.3`. The branch imports `smartbox.device`, so it is
+  not installable until an approved 3.3.0 delivery method is chosen. Do not
+  merge before that decision; a fresh `uv sync` installs 3.2.1, so run
+  `tools/dev_install_library.sh` immediately afterwards.
 
 ## State of 3.2.1
 
-- Library `3.2.1` and integration `3.2.1` are the current stable releases. The integration pins `smartbox>=3.2.1,<3.3`; the upper bound keeps a future minor from installing before the integration is re-pinned.
+- Library `3.2.1` and integration `3.2.1` are the current stable releases. The migration branch has library 3.3.0 code but the integration dependency is PyPI-only at `>=3.2.1,<3.3`; a fresh install cannot import `smartbox.device` until the 3.3.0 delivery method is approved.
 - Working tree after 3.2.1 (unreleased):
   - Per-controller setpoint and programme ranges from the decoded 2.54.2 table (`controller.py`), applied to climate, programme numbers, max-limit and boost numbers, and the programme sanitizer. The Tevolve WiFi/towel-rail rows, Ferroli 4D, factory-default 0D/18/24/43 and the unknown-acm HelkiStorage fallback now match the factory.
   - Controller-specific schedule catalogues: base three-profile, Helki/Haverland four-profile with OFF, and htr_mod off-first. The schedule sensor and program card accept a 24- or 48-slot day and render/edit the OFF slot; 48-slot storage is live-confirmed. THM code 28 gets the heater catalogue and surface; 04/09/0F keep the thermostat `{m,t}` shape.
@@ -40,7 +42,7 @@
   - Water storage in the combined extra-energy modes resolves ON to AUTO (AUTO/OFF); EXTRA_ENERGY_USAGE keeps HEAT/OFF. ATC 4C/4D use the WiFi integer lock. THM 28 with NO_PROBES hides temperature control, profile numbers, boost/EASY/RUNBACK, away/control-mode/window/true-radiant settings and the generic heater schedule, and rejects direct temperature writes. Fixed-time boost has no parameter numbers on Haverland 17/1D/47; config-less storage/LhzRelay/Tevolve triac keep them.
   - Elnur storage UI-mode choices follow the product (`14`: classic combined/accumulator; `20/25`: Ecombi/classic combined; water `2A`: no setting), and the setting is hidden while the unit is in ECOMBI. Haverland WiFi `1D/47` BOOST is present whenever `boost_config` is not the fixed-time value 1, and at config 3 its activation uses `/boost_mode` with the fixed-time mode.
   - Schedule writes reject profile indexes outside the controller catalogue; malformed temperature/duty/power/charge values read as unknown; legacy PIDs omit `extra_options` from setup POSTs; invited accounts work in the CLI.
-  - Coverage: `test_product_code_parity.py` pins all 51 decoded product codes and their family/bounds (climate, programme, max-limit, boost)/profiles/boost-mode policy/duty presets/EASY/RUNBACK/lock/firmware gates; `test_entity_surface_matrix.py` pins the domains and unique keys per representative family and variant (capability flags, boost config 0, NO_PROBES, fw-1.6 lock, PIR, FULL temp/fixed/empty mode lists), snapshots options, bounds and current states for 15 representative families, and covers the box-level entities.
+  - Coverage: `test_product_code_parity.py` pins all 51 decoded product codes and their family/bounds (climate, programme, max-limit, boost)/profiles/boost-mode policy/duty presets/EASY/RUNBACK/lock/firmware gates; `test_entity_surface_matrix.py` pins the domains and unique keys per representative family and variant (capability flags, boost config 0, NO_PROBES, fw-1.6 lock, PIR, FULL temp/fixed/empty mode lists), snapshots options, bounds and current states for 15 representative families, and covers the box-level entities. `test_services_snapshot.py` now also checks every `services.yaml` field and selector against the registered `vol` schema.
 - Live-confirmed in this cycle: HJM `0132` schedule OFF index and 48-slot day, 0402/HJM controller ranges, child-lock `1`/`2`/`0` and the ignored boolean, setpoint while OFF, boost config 2 app path, and the lost-at-discovery/reload symptom on `Spálňa`.
 - No soak was run for the working tree; the prepared soak bundle was scrapped because it required an unpublished library. Most library changes are additive; the new `set_extra_options` omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
 
@@ -77,9 +79,8 @@ Record results in `docs/api-contract.md` §7 as they are worked.
 ## Pending decisions
 
 - Device-semantics extraction: the design and migration plan are recorded in
-  `docs/device-semantics.md`; the trigger is visible (duplicated PID/family
-  facts and the CLI/diagnostics second consumer), but it starts only after the
-  current feature batch is released and behavior is frozen.
+  `docs/device-semantics.md`; it runs on `migration/device-semantics` while the
+  current feature batch is released from the stable branches.
 
 - Minimum Home Assistant: 2026.5.0 is the supported floor; `tox -e min` (CI job `minimum-home-assistant`) pins the harness that exercises it.
 - Marketplace/HACS metadata: the 2026.11 release replaces HACS with Marketplace. The repository metadata and HACS Action are unchanged at the 2026.5 baseline; revisit when 2026.11 becomes the minimum.

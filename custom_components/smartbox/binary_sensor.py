@@ -16,6 +16,7 @@ from homeassistant.components.binary_sensor import (  # type: ignore[attr-define
     BinarySensorEntity,
 )
 from homeassistant.const import EntityCategory
+from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import parse_number_or_none
 
 from .adapter import (
@@ -23,12 +24,7 @@ from .adapter import (
     SmartboxBoxAdapterEntity,
     SmartboxNodeAdapterEntity,
 )
-from .const import (
-    PRODUCT_CODE_WATER_STORAGE,
-    WATER_FULLY_READY_LEVEL,
-    WATER_READY_LEVEL,
-    SmartboxNodeType,
-)
+from .const import WATER_FULLY_READY_LEVEL, WATER_READY_LEVEL, SmartboxNodeType
 from .entity_builder import EntityBuilder
 
 if TYPE_CHECKING:
@@ -110,7 +106,7 @@ def _build_node_binary_sensors(
             entities.append(PirPresence(node, entry, runtime, fanout))
     if node.node_type == SmartboxNodeType.ACM:
         # Water storage replaces CHARGING with active/water-ready states.
-        if node.get_model_code() == PRODUCT_CODE_WATER_STORAGE:
+        if is_water_storage(node.pid):
             entities.append(WaterReady(node, entry, runtime, fanout))
             entities.append(WaterFullyReady(node, entry, runtime, fanout))
         else:

@@ -55,7 +55,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 import pytest
 from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.core.state import NodeState, node_key
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.events import Snapshot, Update
 from smartbox.protocol.writes import VALID_BOOST_MODES
@@ -83,7 +83,14 @@ from tests.mocks import (
     get_object_id,
     is_heater_node,
 )
-from tests.stack import confirm_write, push_status, ref, seed_stack
+from tests.stack import (
+    NoopFanout,
+    confirm_write,
+    engine_with_node,
+    push_status,
+    ref,
+    seed_stack,
+)
 from tests.test_utils import (
     armed_deadlines,
     assert_no_log_errors,
@@ -1362,26 +1369,17 @@ def _entity_with_world(
 ) -> SmartboxHeater:
     """Build a SmartboxHeater over a hand-built engine world (no HA harness).
 
-    The ``object.__setattr__(engine, "_world", ...)`` below is the
-    DELIBERATE harness-free seam: one private poke to install a complete
-    hand-built world, in exchange for no hass/config-entry machinery in
-    these property-only tests. Everything else goes through public
-    construction paths.
+    The world is installed through ``engine_with_node``; everything else uses
+    the public construction paths.
     """
-    engine = SmartboxEngine()
-    key = node_key(node_type, 0)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
+        node_type=node_type,
+        status=status,
+        setup=setup or {},
+        version=version,
         away={"away": away, "enabled": away, "forced": away},
-        node_states={
-            key: NodeState(
-                status=dict(status),
-                setup=dict(setup or {}),
-                version=dict(version) if version else None,
-            )
-        },
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     return _heater_over_engine(engine, node_type, pid=pid)
 
 
@@ -1400,7 +1398,7 @@ def _heater_over_engine(
     node.pid = pid
     node.hw_version = "hw"
     return SmartboxHeater(
-        node, MagicMock(), SimpleNamespace(engine=engine), _NoopFanout()
+        node, MagicMock(), SimpleNamespace(engine=engine), NoopFanout()
     )
 
 
@@ -1517,13 +1515,6 @@ def test_selected_temp_attribute_requires_a_non_empty_string(value):
         node_type=SmartboxNodeType.HTR_MOD,
     )
     assert "selected_temp" not in entity.extra_state_attributes
-
-
-class _NoopFanout:
-    """Fan-out double for property tests (no engine subscription)."""
-
-    def register_node(self, *_args):
-        return lambda: None
 
 
 @pytest.mark.parametrize(
@@ -1732,15 +1723,15 @@ def test_water_storage_action_is_idle_at_the_water_ready_level():
     heater = _entity_with_world(
         {"mode": "auto", "charging": True, "charge_level": 50, "units": "C"},
         node_type=SmartboxNodeType.ACM,
+        pid="082A0000",
     )
-    heater._model_code = lambda: "2A"
     assert heater.hvac_action == HVACAction.IDLE
 
     heater = _entity_with_world(
         {"mode": "auto", "charging": True, "charge_level": 40, "units": "C"},
         node_type=SmartboxNodeType.ACM,
+        pid="082A0000",
     )
-    heater._model_code = lambda: "2A"
     assert heater.hvac_action == HVACAction.HEATING
 
 
@@ -1880,25 +1871,20 @@ def test_status_boost_modes_available_gates_the_presets():
 async def test_active_boost_temperature_edits_via_boost_mode():
     """While runback runs, the climate target re-posts /boost_mode."""
     host = _WriteHostDouble()
-    engine = SmartboxEngine(host)
-    key = node_key(SmartboxNodeType.HTR, 0)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
-        away={"away": False, "enabled": False, "forced": False},
-        node_states={
-            key: NodeState(
-                status={
-                    "boost": True,
-                    "boost_mode": "runback",
-                    "stemp": "19.0",
-                    "mode": "manual",
-                    "units": "C",
-                },
-                setup={"factory_options": {"boost_config": 3}},
-            )
+        node_type=SmartboxNodeType.HTR,
+        host=host,
+        status={
+            "boost": True,
+            "boost_mode": "runback",
+            "stemp": "19.0",
+            "mode": "manual",
+            "units": "C",
         },
+        setup={"factory_options": {"boost_config": 3}},
+        away={"away": False, "enabled": False, "forced": False},
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     entity = _heater_over_engine(engine, SmartboxNodeType.HTR, pid="01340000")
 
     await entity.async_set_temperature(**{ATTR_TEMPERATURE: 20.5})
@@ -1913,19 +1899,14 @@ async def test_active_boost_temperature_edits_via_boost_mode():
 
 async def test_entity_boost_mode_entry_point_posts_the_app_body():
     host = _WriteHostDouble()
-    engine = SmartboxEngine(host)
-    key = node_key(SmartboxNodeType.HTR, 0)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
+        node_type=SmartboxNodeType.HTR,
+        host=host,
+        status={"mode": "manual", "units": "C"},
+        setup={"factory_options": {"boost_config": 3}},
         away={"away": False, "enabled": False, "forced": False},
-        node_states={
-            key: NodeState(
-                status={"mode": "manual", "units": "C"},
-                setup={"factory_options": {"boost_config": 3}},
-            )
-        },
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     entity = _heater_over_engine(engine, SmartboxNodeType.HTR, pid="01340000")
 
     await entity.async_set_boost_mode(
@@ -2253,7 +2234,7 @@ def test_controller_limits_fall_back_when_the_version_is_partial():
         version={"fw_version": "1.9"},
         setup={},
     )
-    limits = entity._controller_limits()
+    limits = entity._controller_profile().limits
     assert (limits.min_c, limits.max_c) == (0.0, 30.0)
 
 

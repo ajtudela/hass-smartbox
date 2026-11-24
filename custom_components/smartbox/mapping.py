@@ -37,6 +37,8 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.profile import HtrModPolicy, htr_mod_policy
+from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import bounded_repr, parse_number_or_none
 
 from .const import (
@@ -44,7 +46,6 @@ from .const import (
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
-    PRODUCT_CODE_WATER_STORAGE,
     WATER_READY_LEVEL,
     SmartboxNodeType,
 )
@@ -297,49 +298,6 @@ def get_target_temperature(
 # form (docs/api-contract.md §1.9, §7 item 7).
 
 
-@dataclass(frozen=True)
-class HtrModPolicy:
-    """Setpoint grid and profile bounds for one htr_mod hardware policy.
-
-    ``step_c`` is the controller's setpoint step in Celsius. The eco offset
-    ladder is integral, so the offset search walks comfort in 1 C steps.
-    """
-
-    step_c: float
-    comfort_c: tuple[float, float]
-    eco_max_c: float
-    offset_c: tuple[int, int]
-    global_min_c: float = 5.0
-
-    @property
-    def eco_min_c(self) -> float:
-        """Return the eco floor: the comfort floor less the largest offset."""
-        return self.comfort_c[0] - self.offset_c[1]
-
-
-# HaverlandHtrModController: the only htr_mod controller in the 2.54.2 bundles.
-_HAVERLAND_HTR_MOD = HtrModPolicy(
-    step_c=1.0,
-    comfort_c=(18.0, 28.0),
-    eco_max_c=18.0,
-    offset_c=(4, 8),
-)
-_HTR_MOD_POLICIES = {"0a": _HAVERLAND_HTR_MOD, "ff": _HAVERLAND_HTR_MOD}
-
-
-def htr_mod_policy(model_code: str | None) -> HtrModPolicy | None:
-    """Return the htr_mod setpoint policy for a product code, if any.
-
-    "0A" (heater module) and "FF" (legacy heater) are the codes the vendor
-    app's factory routes to its htr_mod controller. An unread version returns
-    the Haverland policy, because every htr_mod controller in the 2.54.2
-    bundles is that one; other codes keep the plain pass-through.
-    """
-    if model_code is None:
-        return _HAVERLAND_HTR_MOD
-    return _HTR_MOD_POLICIES.get(model_code.lower())
-
-
 def htr_mod_setpoint_limits(
     status: dict[str, Any], policy: HtrModPolicy
 ) -> tuple[float, float] | None:
@@ -512,7 +470,7 @@ def temperature_write(
     return SetpointWrite(units=status["units"])
 
 
-def acm_active(status: Mapping[str, Any], model_code: str | None) -> bool:
+def acm_active(status: Mapping[str, Any], pid: str | None) -> bool:
     """Whether a storage heater is actively heating.
 
     Water storage (product code ``2A``) replaces the CHARGING indicator with
@@ -521,7 +479,7 @@ def acm_active(status: Mapping[str, Any], model_code: str | None) -> bool:
     """
     if status.get("charging") is not True:
         return False
-    if model_code == PRODUCT_CODE_WATER_STORAGE:
+    if is_water_storage(pid):
         return parse_number_or_none(status.get("charge_level")) != WATER_READY_LEVEL
     return True
 

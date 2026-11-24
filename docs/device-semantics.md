@@ -26,17 +26,16 @@ The adapter keeps Home Assistant presentation: entity creation, units, labels,
 
 The extraction is justified when any of these becomes true:
 
-1. A second consumer needs the device model. The `smartbox` CLI and
-   diagnostics currently see the wire and the store but not the controller
-   profile.
-2. Duplicated device facts cause a bug. The same PID→family facts currently
-   live in several adapter modules; a missing explicit family entry or a
-   charge-level dispatch mistake has already produced user-visible bugs.
+1. A second consumer needs the device model. At design time the `smartbox`
+   CLI and diagnostics saw the wire and the store but not the controller
+   profile; slice 5 has since landed both.
+2. At design time, duplicated device facts caused a bug: the same PID→family
+   facts lived in several adapter modules; a missing explicit family entry or
+   a charge-level dispatch mistake has already produced user-visible bugs.
 3. A new product family needs the same logic in two or more places.
 
-The trigger is visible now. The release gate is not: a behavior-preserving
-extraction is much easier to review and to trust once the current feature batch
-is released and its entity behavior is fixed.
+The trigger is visible now. The release gate was the current feature batch;
+what remains is the 3.3.0 delivery method before the branch can install.
 
 ## Current duplication (pre-extraction inventory)
 
@@ -45,7 +44,7 @@ have moved the listed facts into `smartbox.device`; the integration keeps only
 thin re-exports/adapters. Use the table as the migration checklist, not as a
 current duplication map.
 
-| Fact | Current homes |
+| Fact | Pre-extraction homes |
 |---|---|
 | Product code and label | `product.py`, `controller.py`, `control_mode.py`, `storage.py`, `mapping.py` (`htr_mod_policy` codes), library `boost_config` |
 | Controller family | `controller.py` code sets, `control_mode.EXPLICIT_FAMILY`, `storage.is_helki_storage/is_elnur_storage`, `mapping.htr_mod_policy`, `identity` gates |
@@ -60,83 +59,51 @@ current duplication map.
 | Duty presets / Lhz filter | `identity.duty_limit_options` + `controller.is_lhz_family` |
 | Feature gates | `identity` booleans built from setup keys + controller facts |
 
-`storage.py` currently imports Home Assistant's `HVACMode`. That is a boundary
-violation to remove as part of the storage slice, not something to move into the
-library as-is.
+The pre-extraction `storage.py` imported Home Assistant's `HVACMode`; slice 3
+replaced that with the neutral `StorageIntent`.
 
 ## Target architecture
 
-Library:
+Shipped library layout:
 
 ```
-smartbox/
-  device/
-    codes.py         product code -> label, manufacturer, family defaults
-    profiles.py      ControllerProfile, resolve_profile(...)
-    temperatures.py  climate/programme/max-limit bounds
-    control_modes.py catalogue + wire index mapping
-    storage.py       storage mode resolution and write intent (neutral)
-    thermostat.py    thermostat capabilities and schedule shape
-    settings.py      per-profile setting availability and option sets
+smartbox/device/
+  codes.py          reviewed product-code table (family/actuation/limits/surface/label)
+  capabilities.py   operation eligibility checks over NodeFacts (storage UI-mode shared with the adapter; the rest back the CLI)
+  profile.py        ControllerLimits/_CODE_LIMITS, bounds, resolve_profile and resolve_stored_profile
+  control_modes.py  catalogue, wire index mapping and availability
+  modes.py          identity-only lock/boost policy
+  storage.py        StorageIntent/StorageWrite and storage semantics
+  settings.py       entity-setting gates and option sets
 ```
 
 Integration:
 
 ```
 adapter/entity platforms
-  -> profile = resolve_profile(pid, node_type, fw_version, setup)
+  -> profile = resolve_profile(node_type, pid, fw_version, setup)
   -> HA presentation: HVACMode, units, labels, entity gates, services
 ```
 
-Boundary rules:
-
-- `smartbox.device` imports no Home Assistant modules.
-- No vendor-controller class hierarchy is reproduced. Profiles plus a small
-  number of strategies encode only the behaviour the integration and CLI use.
-- Wire write bodies stay in `smartbox.protocol.writes`; device semantics decide
-  which operation and which fields, not how HTTP is posted.
-- HA-specific values (`HVACMode.HEAT`, `UnitOfTemperature`, translated labels,
-  entity categories) stay in the adapter.
-
-## ControllerProfile
-
-One frozen dataclass per resolved controller. Proposed fields, grouped:
-
-- Identity: `code`, `label`, `family`, `actuation`, `source` (explicit PID,
-  node-type default, unknown).
-- Climate: `min_c`, `max_c`, `ice_min_c`, `ice_max_c`, `profile_offset_c`,
-  `programme_profiles` (ordered neutral names), htr_mod policy fields.
-- Limits: `max_limit_min_c`, `max_limit_max_c`, `boost_max_c`,
-  `boost_max_minutes`, programme defaults.
-- Programme model: `programme_kind` (`profiles`, `htr_mod`, `thresholds`,
-  `on_off_auto`, `none`). Thermostats report thresholds and water storage
-  ON/OFF_AUTO; neither carries programme ranges.
-- Modes: `control_mode_catalogue`, `storage_ui_modes`, `operational_mode`,
-  `supports_easy`, `supports_runback`, `supports_setback`.
-- Boost: `boost_kind` (`status`, `legacy_endpoint`, `boost_mode`, `none`),
-  `boost_supported`, `boost_attribute_kind` (`device` for legacy
-  `extra_options`, `ha_prefs` for FULL `/boost_mode`, `none`), and the
-  runback-endpoint flag. The attribute values themselves live on the device
-  for legacy controllers and in the entry's `.storage` boost-preference record
-  for FULL ones.
-- Lock: `lock_kind` (`bool`, `int_status`, `int_endpoint`).
-- Thermostat: `load_types`, `schedule_available`, `anti_grippage_available`,
-  `manual_mode_extra` (the documented integration extension).
-- Options: `duty_presets` (Off plus fixed/factory values), `away_offset`,
-  `max_limit`, `prog_temps`.
-
-Names are neutral strings or enums, for example `"acm_helki"`,
-`"acm_elnur"`, `"htr_mod"`, `"thm"`; the adapter maps them to HA types.
+Names are neutral strings or enums, for example `"htr_mod"`, `"thresholds"`,
+`"on_off_auto"`; the adapter maps them to HA types.
 
 ### Resolution inputs
 
-`resolve_profile(pid, node_type, fw_version, setup)`:
+`resolve_profile(node_type, pid, fw_version, setup, max_limit_c=<override>)`
+resolves against identity and setup:
 
 - `pid` is the live/discovery `version.pid`; the code is `pid[2:4].upper()`.
 - `node_type` is the wire type.
 - `fw_version` gates Helki storage profiles, lock payloads and similar.
 - `setup` supplies `factory_options.ui_mode`, `operational_mode`,
-  `boost_config`, `min_stemp`/`max_stemp`, `extra_options` and model fields.
+  `boost_config`, `min_stemp`/`max_stemp`, `max_stemp_limit`,
+  `extra_options` and model fields.
+- `max_limit_c` is an explicit override: `None` keeps the controller
+  catalogue, a positive value previews a proposed limit. Use
+  `resolve_stored_profile(node_type, pid, fw_version, setup)` to apply the
+  setup's stored `max_stemp_limit` (`<= 0` means disabled); diagnostics and
+  the CLI use that when no override is given.
 - Live `status` is **not** an input for entity presence. A lost node at
   discovery must still resolve the same profile; reading transient status keys
   to build entities has already produced a permanent-missing-entity bug. The
@@ -148,10 +115,14 @@ Names are neutral strings or enums, for example `"acm_helki"`,
 Fallbacks:
 
 - Unlisted htr/htr_mod PID → ElectricHeater defaults.
-- Unlisted acm PID → HelkiStorage defaults (off-first wire, relay actuation).
-- Unlisted thm PID → withheld/unknown profile; no control-mode select.
-- Missing PID → conservative unknown profile: no mode catalogue, HA default
-  climate bounds, no storage/thermostat assumptions.
+- Unlisted acm PID → HelkiStorage defaults (off-first wire, relay actuation);
+  the same default covers the `00` UNKNOWN and `03`/`22` power-meter codes on
+  an acm node, because the app's heating switch has no case for them.
+- Unlisted thm PID → thermostat surface with the thermostat 7-35 limits; the
+  control-mode select stays withheld.
+- Missing PID → base ElectricHeater for htr, HelkiStorage for acm and the
+  thermostat 7-35 limits for thm; auth/version failures leave the resolved
+  profile absent until a PID is seen.
 
 ### Coverage in place
 
@@ -192,7 +163,8 @@ with the profile, and keep the entity-surface matrix in the adapter.
   `RestoreEntity`.
 - Entity lifecycle, registry identity, unique IDs and stale-entity pruning.
 - Services, service schemas, target resolution and translated errors.
-- Write confirmation and optimistic merges (library engine).
+- Entity-facing confirmation presentation; the confirmation and optimistic
+  merge themselves are library (`smartbox.core`).
 - Card assets and frontend behaviour.
 
 ## Migration progress
@@ -204,29 +176,31 @@ with the profile, and keep the entity-surface matrix in the adapter.
   against the reviewed fixture. Behaviour is unchanged.
 - **Slice 2 (control modes) landed.** `smartbox.device.control_modes` owns
   the decoded family/actuation maps, UI/wire arrays, labels and availability.
-  The integration's `control_mode.py` re-exports it; the entity keeps the HA
-  select shape.
+  The integration imports it directly (the `control_mode.py` shim was
+  deleted); the entity keeps the HA select shape.
 - **Slice 3 complete.** `smartbox.device.modes` owns the identity-only
   lock/boost policy; the status-reading boost mode helpers stay in the
   adapter's `controller.py`, and
   `smartbox.device.storage` owns the storage semantics with a neutral
   `StorageIntent`; the integration's `storage.py` maps intents to `HVACMode`.
   No Home Assistant type remains in the moved storage logic.
-- **Slice 4 complete.** `smartbox.device.settings` owns the entity-setting
-  gates (window mode, true radiant, away offset, max-temperature limit, node
-  power limit, duty presets, priority, programme temperatures, boost
-  availability). The integration's `identity.py` keeps thin wrappers over the
-  frozen node object.
+- **Slice 4 complete for the setting gates.** `smartbox.device.settings`
+  owns window mode, true radiant, away offset, max-temperature limit, node
+  power limit, duty presets, priority, programme temperatures and boost
+  availability. The integration's `identity.py` keeps thin wrappers over the
+  frozen node object. Thermostat schedule and anti-grippage remain
+  adapter-side by design.
 - **Slice 5 is in progress.** `smartbox profile` is the library's second
   consumer, diagnostics carry the resolved profile per node, and the migration
   branch installs the sibling checkout via `tools/dev_install_library.sh` and
   the tox `-e ../smartbox` dependency. The version bump, pin and release
   remain deferred. The adapter keeps boost activation, preferences and the
   FULL attribute visibility throughout.
-- The migration branch imports `smartbox.device`, which is not in the
-  published 3.2.1 wheel. Develop against the sibling editable checkout and do
-  not merge or release until a library minor with these modules is published
-  and the integration pin is raised (slice 5).
+- The library is bumped to **3.3.0** in its own repo, but the integration's
+  dependency is PyPI-only at the published `>=3.2.1,<3.3` after the temporary
+  path override was removed. The branch imports `smartbox.device`, so a fresh
+  install will fail until an approved 3.3.0 delivery method is chosen. The pin
+  must move with that release.
 
 ## Migration slices
 
@@ -251,17 +225,42 @@ same change, and has a golden comparison.
 5. **Second consumer.** Add `smartbox profile` to the CLI and profile data to
    diagnostics. This proves the extraction and closes the trigger.
 
+## Changing a controller fact
+
+1. Edit `smartbox/device/codes.py` (code row) and/or the owning module
+   (`profile.py` limits, `control_modes.py` arrays, `modes.py` lock/boost
+   policy, `storage.py` intents, `settings.py` gates).
+2. Update the reviewed row in `tests/test_product_code_parity.py` (the
+   integration's `Expectation` table) and mirror it into
+   `smartbox/tests/fixtures/product_codes.json`; the parity test compares the
+   two and reads the library copy from the sibling checkout (set
+   `SMARTBOX_LIB` or keep `../smartbox`). Add the code row's
+   `family`/`actuation`/`limits_family`/`surface`/`label`/
+   `supports_extra_options`/`lhz_duty`/`thm_heater`/`fixed_time_boost`/`water`/
+   `stepped_charge` columns and the stored profile facts. The same file carries the reviewed
+   control-mode wire/UI arrays, labels and the storage UI-mode options, so a
+   catalogue change updates its top-level `control_modes` block or the
+   affected row. Bump `schema` only when the fixture shape itself changes.
+3. Run the library tests, then the integration parity/attribute/registry/
+   diagnostics tests. For a deliberate surface change, regenerate a JSON
+   golden with `UPDATE_SNAPSHOTS=1 pytest <test>` and review the diff; the
+   attribute matrix's `SNAPSHOTS` is a literal dictionary in
+   `tests/test_entity_surface_matrix.py`, so edit that entry directly.
+4. Update `docs/api-contract.md` (with the decoded class/offset), `profile-audit.md`
+   and, if the difference is deliberate, `vendor-deviations.md`.
+5. Re-run item 13 of the `docs/api-ws-user.md` checklist and update its
+   status/evidence when the app adds a class or enum entry.
+
 ## Golden tests
 
 See [profile-audit.md](profile-audit.md) for the decoded profile formulas,
 the per-family table and the max-stemp programme rule.
 
-- One table-driven library test, independent of Home Assistant, covering the
-  current product codes and setup branches. `tests/test_product_code_parity.py`
-  is the seed: 51 codes, 20 behaviour rows, limits, programmes, boosts, lock
-  (including `super_lock_available`), duty presets, PIR's 3.5 °C gap and
-  read-only ICE slot, and the firmware gates. Port it to the library profile
-  and delete the integration's controller imports from that test.
+- One reviewed product-code table (`smartbox/device/codes.py`) and one shared
+  fixture (`smartbox/tests/fixtures/product_codes.json`, consumed by the
+  integration parity test). The library device-code test asserts the table,
+  the derived sets/maps and the control-mode catalogue against that fixture;
+  the library profile/control-mode/storage tests assert the per-code facts.
 - One integration snapshot test asserting entity domains, unique keys,
   options, bounds and current states versus the pre-extraction baseline.
   `tests/test_entity_surface_matrix.py` now does this for every surface case
@@ -290,7 +289,7 @@ Until the library minor is released, the integration imports
 - Check the library out next to this repo (``../smartbox``) or set
   ``SMARTBOX_LIB=/path/to/smartbox``.
 - Run ``tools/dev_install_library.sh`` (it installs the sibling editable and
-  verifies the five device modules import).
+  verifies the seven device modules import).
 - The tox environments install ``-e {toxinidir}/../smartbox`` instead of the
   PyPI pin; CI must check out both repositories at matching branches for the
   migration run. The release pin is a separate, later change.
@@ -309,8 +308,6 @@ Until the library minor is released, the integration imports
 
 ## Risks and open questions
 
-- **Neutral mode types.** `storage.py`'s `HVACMode` dependency must become a
-  neutral intent enum. The adapter mapping needs tests for every mode.
 - **Capability data.** The app has per-serial/runtime capability flags; the
   first slice uses profile plus setup only. If a gate needs a capability flag,
   add it as an explicit optional input rather than reading live status.
@@ -321,9 +318,6 @@ Until the library minor is released, the integration imports
 - **Deferred features.** PMO reverse/generation, E2/water settings and SETBACK
   stay out of the extraction. Add profile fields only when those are decoded
   and tested.
-- **Label ownership.** Product labels are device metadata; translated
-  descriptions belong to the adapter. Decide whether the library carries the
-  stable English label or only the code.
 
 ## Definition of done
 

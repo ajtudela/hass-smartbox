@@ -33,6 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
 FIELDS = ("boost_temp_c", "boost_time", "runback_temp_c", "runback_time")
+SAVE_DELAY = 1.0
 
 
 @dataclass
@@ -122,6 +123,14 @@ class BoostPrefs:
                 _LOGGER.warning(
                     "Not persisting boost preferences: the stored record is unreadable"
                 )
+                return
+            # Coalesce rapid slider changes; async_flush() persists on unload.
+            self._store.async_delay_save(lambda: {"nodes": self._nodes}, SAVE_DELAY)
+
+    async def async_flush(self) -> None:
+        """Persist the current record immediately (entry unload/tests)."""
+        async with self._lock:
+            if self._load_failed:
                 return
             try:
                 await self._store.async_save({"nodes": self._nodes})

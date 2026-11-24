@@ -761,6 +761,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
     try:
         unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
         if unloaded and runtime is not None:
+            await runtime.boost_prefs.async_flush()
             # Await the bounded teardown so the entry never finishes unloading
             # while its transport is still tearing down. (HA itself clears
             # entry.runtime_data once the platforms unloaded.)

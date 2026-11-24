@@ -5,15 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
-
 from custom_components.smartbox.number import (
     MaxTemperature,
     ProgComfortTemperature,
     ProgEcoTemperature,
     ProgFrostTemperature,
 )
+from tests.stack import NoopFanout, engine_with_node
 from tests.test_entity_surface_matrix import _node
 
 SETUP = {"units": "C", "max_stemp_limit": "23.0"}
@@ -28,27 +26,21 @@ STATUS = {
 
 def _entity(cls):
     node = _node("htr", "04020000", "1.9", SETUP, STATUS)
-    engine = SmartboxEngine()
-    key = node_key(node.node_type, node.addr)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=node.dev_id,
-        away={},
-        node_states={
-            key: NodeState(
-                status=dict(node.status),
-                setup=dict(node.setup),
-                version=dict(node.version),
-            )
-        },
+        node_type=node.node_type,
+        addr=node.addr,
+        status=node.status,
+        setup=node.setup,
+        version=node.version,
     )
-    object.__setattr__(engine, "_world", WorldState(devices={node.dev_id: device}))
     runtime = SimpleNamespace(
         engine=engine, boost_prefs=None, services=None, client=None
     )
     entry = MagicMock()
     entry.entry_id = "entry"
     entry.options = {}
-    fanout = SimpleNamespace(register_node=lambda *_args: lambda: None)
+    fanout = NoopFanout()
     return cls(node, entry, runtime, fanout, f"prog_{cls.__name__.lower()}")
 
 

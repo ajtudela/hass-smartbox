@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 from homeassistant.components.select import ATTR_OPTION, DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 import pytest
 
@@ -534,3 +535,41 @@ async def test_real_storage_pid_builds_the_storage_controls(
     await confirm_write(hass, runtime, fake, device["dev_id"], node)
     status = await fake.get_node_status(device["dev_id"], ref(node))
     assert status["locked"] == 2
+
+
+async def test_storage_ui_mode_write_refuses_when_the_mode_hides_it(
+    hass, mock_smartbox, config_entry
+):
+    """A live frame moving the unit out of a classic mode blocks the write."""
+    mock_smartbox._node_info["device_1"][1]["product_id"] = "08140000"
+    mock_smartbox._node_info["device_1"][1]["fw_version"] = "1.8.0"
+    setup = mock_smartbox._node_setup["device_1"][1]
+    setup["factory_options"] = {**setup.get("factory_options", {}), "ui_mode": 1}
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+    device = (await mock_smartbox.session.get_devices())[0]
+    node = (await mock_smartbox.session.get_nodes(device["dev_id"]))[1]
+    ui_id = get_entity_id_from_unique_id(
+        hass, SELECT_DOMAIN, get_node_unique_id(device, node, "storage_ui_mode")
+    )
+    assert ui_id is not None
+
+    await push_setup_update(
+        hass,
+        runtime,
+        fake,
+        device["dev_id"],
+        node,
+        {"factory_options": {**setup["factory_options"], "ui_mode": 0}},
+    )
+    with pytest.raises(HomeAssistantError, match="Elnur storage heaters"):
+        await hass.services.async_call(
+            SELECT_DOMAIN,
+            "select_option",
+            {ATTR_ENTITY_ID: ui_id, ATTR_OPTION: "Classic accumulator"},
+            blocking=True,
+        )
+    stored_setup = await fake.get_node_setup(device["dev_id"], ref(node))
+    assert stored_setup["factory_options"]["ui_mode"] == 1

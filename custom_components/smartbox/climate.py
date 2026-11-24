@@ -34,6 +34,7 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.profile import HtrModPolicy, htr_mod_policy
 from smartbox.protocol.values import (
     BoostConfig,
     is_lost,
@@ -58,10 +59,7 @@ from .const import (
     SmartboxNodeType,
 )
 from .controller import (
-    ControllerLimits,
     boost_uses_legacy_path,
-    climate_bounds,
-    controller_limits,
     has_no_probes,
     supports_easy,
     supports_runback,
@@ -71,7 +69,6 @@ from .exceptions import user_error, validation_error
 from .identity import boost_available, boost_config
 from .mapping import (
     AutoOverrideWrite,
-    HtrModPolicy,
     HtrModWrite,
     acm_active,
     check_status_key,
@@ -80,7 +77,6 @@ from .mapping import (
     get_next_prog_change,
     get_target_temperature,
     get_temperature_unit,
-    htr_mod_policy,
     htr_mod_setpoint_limits,
     hvac_mode_write,
     preset_mode_write,
@@ -198,17 +194,6 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
     ) -> None:
         """Initialize the climate entity."""
         super().__init__(node, entry, runtime, fanout, "thermostat")
-
-    def _controller_limits(self) -> ControllerLimits:
-        """Return the decoded controller limits for this node."""
-        state = self._node_state()
-        setup = state.setup if state is not None else self._node.setup
-        return controller_limits(
-            self._node.node_type,
-            self._live_pid,
-            self._live_fw_version,
-            setup,
-        )
 
     @property
     def _lost(self) -> bool:
@@ -425,7 +410,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             min_runback, _max_runback = node_runback_limits(self._node_state())
             if min_runback is not None:
                 return min_runback
-        min_c, _max_c = climate_bounds(self._controller_limits(), None)
+        min_c, _max_c = self._controller_profile().climate_bounds
         return TemperatureConverter.convert(
             min_c,
             UnitOfTemperature.CELSIUS,
@@ -444,13 +429,15 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         if htr_mod_limits is not None:
             return htr_mod_limits[1]
         state = self._node_state()
-        limit = node_max_stemp_limit(state)
-        _min_c, max_c = climate_bounds(self._controller_limits(), None)
+        # The controller catalogue is unclamped here; the stored limit is
+        # applied in the node's own unit below.
+        _min_c, max_c = self._controller_profile().climate_bounds
         max_temp = TemperatureConverter.convert(
             max_c,
             UnitOfTemperature.CELSIUS,
             self.native_temperature_unit,
         )
+        limit = node_max_stemp_limit(state)
         if limit is not None:
             max_temp = min(max_temp, limit)
         if self.preset_mode == PRESET_RUNBACK:
@@ -520,7 +507,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         if self._lost or self._status_blank:
             return None
         if node_type == SmartboxNodeType.ACM:
-            if acm_active(status, self._model_code()):
+            if acm_active(status, self._live_pid):
                 return HVACAction.HEATING
         elif (
             node_type == SmartboxNodeType.HTR_MOD

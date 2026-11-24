@@ -51,13 +51,9 @@ For how the code is structured — the layer rules, the repository map and the t
 
 ```
 uv sync --all-extras --dev
-# device-semantics branch only: the new smartbox.device modules are not in the
-# published wheel yet, so install the sibling checkout after syncing.
+# The device-semantics branch imports smartbox.device, which is not in the
+# published 3.2.1 wheel; install the sibling checkout over the PyPI copy.
 tools/dev_install_library.sh
-# uv sync installs smartbox>=3.2.1,<3.3 from PyPI (same pin manifest.json gives
-# Home Assistant). To develop against local library changes instead,
-# install the sibling checkout editable over it:
-uv pip install --python .venv/bin/python -e ../smartbox
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check custom_components tests tools
 .venv/bin/ruff format --check custom_components tests tools

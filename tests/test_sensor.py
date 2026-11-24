@@ -462,10 +462,10 @@ async def test_basic_charge_level(hass, mock_smartbox, config_entry):
 
 
 def test_charge_level_sensor_model_1c():
-    """Test that model code 1C uses current_charge_per instead of charge_level."""
+    """The Helki storage controllers use current_charge_per."""
     sensor = object.__new__(ChargeLevelSensor)
     sensor._node = MagicMock()
-    sensor._node.get_model_code.return_value = "1C"
+    sensor._node.pid = "081C0000"
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": 75, "charge_level": 3}
     )
@@ -474,13 +474,13 @@ def test_charge_level_sensor_model_1c():
     sensor._node_state = lambda: NodeState(status={"charge_level": 3})
     assert sensor.native_value is None
 
-    sensor._node.get_model_code.return_value = "2E"
+    sensor._node.pid = "082E0000"
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": 75, "charge_level": 3}
     )
     assert sensor.native_value == 75
 
-    sensor._node.get_model_code.return_value = None
+    sensor._node.pid = "08990000"
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": 75, "charge_level": 3}
     )
@@ -491,7 +491,7 @@ def test_charge_level_sensor_elnur_code_14_scales_stepped_level():
     """Elnur storage code 14 reports charge_level in 0..5 steps."""
     sensor = object.__new__(ChargeLevelSensor)
     sensor._node = MagicMock()
-    sensor._node.get_model_code.return_value = "14"
+    sensor._node.pid = "08140000"
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": 75, "charge_level": 3}
     )
@@ -1921,13 +1921,13 @@ def test_charge_level_renders_malformed_values_unknown():
     """Both charge fields parse defensively."""
     sensor = object.__new__(ChargeLevelSensor)
     sensor._node = MagicMock()
-    sensor._node.get_model_code.return_value = "1C"
+    sensor._node.pid = "081C0000"
     sensor._node_state = lambda: NodeState(
         status={"current_charge_per": "bad", "charge_level": 3}
     )
     assert sensor.native_value is None
 
-    sensor._node.get_model_code.return_value = None
+    sensor._node.pid = "08990000"
     sensor._node_state = lambda: NodeState(status={"charge_level": "bad"})
     assert sensor.native_value is None
 

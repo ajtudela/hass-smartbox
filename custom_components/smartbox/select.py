@@ -14,15 +14,20 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
-from smartbox.protocol import VALID_PRIORITIES
-from smartbox.protocol.values import parse_number_or_none
-
-from .adapter import EngineChangeFanOut, SmartboxNodeAdapterEntity
-from .control_mode import (
+from smartbox.device.capabilities import (
+    NodeFacts,
+    check_storage_ui_mode,
+    check_storage_ui_mode_available,
+)
+from smartbox.device.control_modes import (
     control_mode_available,
     control_mode_choices,
     control_mode_label,
 )
+from smartbox.protocol import VALID_PRIORITIES
+from smartbox.protocol.values import parse_number_or_none
+
+from .adapter import EngineChangeFanOut, SmartboxNodeAdapterEntity
 from .controller import lock_kind
 from .entity_builder import EntityBuilder
 from .exceptions import user_error
@@ -34,10 +39,8 @@ from .identity import (
     priority_available,
 )
 from .storage import (
-    is_elnur_storage,
     lock_endpoint,
     ui_mode as storage_ui_mode,
-    ui_mode_available as storage_ui_mode_available,
     ui_mode_options as storage_ui_mode_options,
 )
 
@@ -110,7 +113,14 @@ def _build_node_selects(
         node.setup.get("units"),
     ):
         groups.append(([ControlMode(node, entry, runtime, fanout)], True))
-    if node.node_type == "acm" and storage_ui_mode_available(node.pid, node.setup):
+    if check_storage_ui_mode_available(
+        NodeFacts(
+            node_type=node.node_type,
+            pid=node.pid,
+            fw_version=node.version.get("fw_version"),
+            setup=node.setup,
+        )
+    ).ok:
         groups.append(
             ([StorageUIMode(node, entry, runtime, fanout, "storage_ui_mode")], True)
         )
@@ -362,9 +372,20 @@ class StorageUIMode(SmartboxNodeSelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Write the selected storage UI mode."""
-        if not is_elnur_storage(self._live_pid):
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        facts = NodeFacts(
+            node_type=self._node.node_type,
+            pid=self._live_pid,
+            fw_version=self._node.version.get("fw_version"),
+            setup=setup,
+        )
+        value = self._options.get(option)
+        if value is None:
             msg = "storage_ui_mode_unsupported"
             raise user_error(msg)
-        await self._runtime.engine.set_storage_ui_mode(
-            self._dev_id, self._ref, self._options[option]
-        )
+        check = check_storage_ui_mode(facts, value)
+        if not check.ok:
+            msg = "storage_ui_mode_unsupported"
+            raise user_error(msg)
+        await self._runtime.engine.set_storage_ui_mode(self._dev_id, self._ref, value)
