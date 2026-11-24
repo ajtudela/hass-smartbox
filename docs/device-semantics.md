@@ -108,6 +108,9 @@ One frozen dataclass per resolved controller. Proposed fields, grouped:
   `programme_profiles` (ordered neutral names), htr_mod policy fields.
 - Limits: `max_limit_min_c`, `max_limit_max_c`, `boost_max_c`,
   `boost_max_minutes`, programme defaults.
+- Programme model: `programme_kind` (`profiles`, `htr_mod`, `thresholds`,
+  `on_off_auto`, `none`). Thermostats report thresholds and water storage
+  ON/OFF_AUTO; neither carries programme ranges.
 - Modes: `control_mode_catalogue`, `storage_ui_modes`, `operational_mode`,
   `supports_easy`, `supports_runback`, `supports_setback`.
 - Boost: `boost_kind` (`status`, `legacy_endpoint`, `boost_mode`, `none`),

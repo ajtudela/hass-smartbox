@@ -278,6 +278,7 @@ def _node_profile(
         "climate_bounds": profile.climate_bounds,
         "max_limit_bounds": profile.max_limit_bounds,
         "boost_bounds": profile.boost_bounds,
+        "programme_kind": profile.programme_kind,
         "prog_bounds": None if prog_bounds is None else dict(prog_bounds),
     }
 

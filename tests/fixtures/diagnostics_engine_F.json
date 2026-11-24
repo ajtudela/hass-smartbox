@@ -60,7 +60,8 @@
                   5.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -327,7 +328,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -619,7 +621,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -887,7 +890,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -1156,7 +1160,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -1424,7 +1429,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -1692,7 +1698,8 @@
                   0.0,
                   29.0
                 ]
-              }
+              },
+              "programme_kind": "profiles"
             },
             "prog": {
               "prog": {
@@ -1939,20 +1946,8 @@
                 16.0,
                 30.0
               ],
-              "prog_bounds": {
-                "comf_temp": [
-                  1.0,
-                  30.0
-                ],
-                "eco_temp": [
-                  0.5,
-                  29.5
-                ],
-                "ice_temp": [
-                  0.0,
-                  29.0
-                ]
-              }
+              "prog_bounds": null,
+              "programme_kind": "none"
             },
             "prog": null,
             "setup": {

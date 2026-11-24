@@ -38,3 +38,15 @@ def test_stored_max_limit_clamps_the_reported_climate_bounds() -> None:
     profile = _node_profile("htr/0", _node("04020000", {"max_stemp_limit": "23.0"}))
     assert profile is not None
     assert profile["climate_bounds"] == (1.0, 23.0)
+
+
+def test_non_heater_programme_kinds() -> None:
+    """Thermostat and water storage are not reported as heater profiles."""
+    thermostat = _node_profile("thm/0", _node("01040000", {}))
+    water = _node_profile("acm/1", _node("082A0000", {}))
+    assert thermostat is not None
+    assert water is not None
+    assert thermostat["programme_kind"] == "thresholds"
+    assert thermostat["prog_bounds"] is None
+    assert water["programme_kind"] == "on_off_auto"
+    assert water["prog_bounds"] is None

@@ -58,10 +58,19 @@ controller itself is 0-30.
   and Climastar formulas are asserted in the library audit test; the
   programme-number entity and `set_max_stemp_limit` correction are asserted in
   the integration.
-- **Open:** the thermostat uses threshold temperatures rather than the
-  programme catalogue; the water storage ON/OFF_AUTO catalogue is not modelled;
-  storage/Tevolve families do not expose the max-stemp setting, so their
-  max-limit branch is only reachable through a manually reported setup field.
+- **Modelled:** the profile now carries a `programme_kind`: `profiles` for
+  the heater catalogue, `htr_mod`, `thresholds` for thermostats, `on_off_auto`
+  for water storage and `none` for power monitors. Thermostat threshold
+  constants are heat eco/comfort 17/20 and cold eco/comfort 27/24 °C (the
+  runtime `tempThresholds` override is 15/21.5 and 26/22.5); the integration
+  does not expose threshold entities, so the profile reports no programme
+  ranges. Water storage likewise reports `on_off_auto` with no ranges.
+- **Max-limit branch for storage/Tevolve:** the setting is not exposed on those
+  families, but the app's `getUserDefinedTempLimits` override applies whenever
+  a node reports `max_stemp_limit`. The library clamps the programme ranges
+  for those families too; tests cover storage (23 °C) and triac (30 °C) nodes.
+- **Open:** the thermostat threshold values themselves are not exposed as
+  entities; that is an intentional surface decision, not a profile gap.
 
 ## Reproduce
 
