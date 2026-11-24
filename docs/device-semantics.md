@@ -206,12 +206,13 @@ with the profile, and keep the entity-surface matrix in the adapter.
   `smartbox.device.storage` owns the storage semantics with a neutral
   `StorageIntent`; the integration's `storage.py` maps intents to `HVACMode`.
   No Home Assistant type remains in the moved storage logic.
-- **Slice 4 moved in part.** The heater/thermostat surface predicates now live
-  in `smartbox.device.profile`; the remaining thermostat/setting gates are in
-  `identity.py` and still depend on discovery data.
-- Slice 4b (thermostat/setting gates) and slice 5 (CLI profile, diagnostics,
-  pin) remain. The adapter keeps boost activation, preferences and the FULL
-  attribute visibility throughout.
+- **Slice 4 complete.** `smartbox.device.settings` owns the entity-setting
+  gates (window mode, true radiant, away offset, max-temperature limit, node
+  power limit, duty presets, priority, programme temperatures, boost
+  availability). The integration's `identity.py` keeps thin wrappers over the
+  frozen node object.
+- Slice 5 (CLI profile, diagnostics, pin) remains. The adapter keeps boost
+  activation, preferences and the FULL attribute visibility throughout.
 - The migration branch imports `smartbox.device`, which is not in the
   published 3.2.1 wheel. Develop against the sibling editable checkout and do
   not merge or release until a library minor with these modules is published
