@@ -128,6 +128,7 @@ def _runtime_for(engine, transport):
         identity=MagicMock(),
         fanout=smartbox_init.EngineChangeFanOut(engine),
         membership=MagicMock(),
+        late_pid=MagicMock(),
         entity_builder=MagicMock(),
         history=HistoryImport([], {}),
         entry_data={},
@@ -215,6 +216,20 @@ async def test_auth_config_from_entry_data(config_entry, reseller):
     assert config.username == config_entry.data["username"]
     assert config.password == config_entry.data["password"]
     assert config.referer == "https://web_url/"
+
+
+def test_auth_config_accepts_a_pre_resolved_reseller(
+    config_entry, reseller, monkeypatch
+):
+    """The runtime resolves the table once and reuses it for identity."""
+    monkeypatch.setattr(
+        smartbox_init,
+        "reseller_from_entry_data",
+        lambda _data: pytest.fail("reseller table resolved twice"),
+    )
+    row = reseller.return_value["test_api_name_1"]
+    config = auth_config_from_entry_data(config_entry.data, reseller=row)
+    assert config.api_host == "https://users-api.helki.com"
 
 
 def test_auth_config_uses_the_elnur_host():

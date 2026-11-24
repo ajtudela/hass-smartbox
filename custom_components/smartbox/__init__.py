@@ -49,6 +49,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from smartbox.core.engine import SUPERVISE_RUN_RESET_SECONDS, SmartboxEngine
+from smartbox.device.modes import lock_kind
 from smartbox.protocol import (
     AuthConfig,
     AuthError,
@@ -71,12 +72,11 @@ from .const import (
     SMARTBOX_WRITE_CONFIRM_TIMEOUT,
     SmartboxNodeType,
 )
-from .controller import lock_kind
 from .devices import async_ensure_box_devices
 from .entity_builder import EntityBuilder
 from .history import HistoryImport
 from .identity import SmartboxDeviceInfo, SmartboxIdentity, async_discover_identity
-from .membership import MembershipWatcher, clear_node_added_issue
+from .membership import LatePidWatcher, MembershipWatcher, clear_node_added_issue
 from .reseller import api_base_url, reseller_from_entry_data
 from .services import ServiceTargets, async_register_services, async_unregister_services
 from .token_store import TokenStore, token_store_for
@@ -85,6 +85,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from homeassistant.core import Event, HomeAssistant
+    from smartbox.protocol.reseller import SmartboxReseller
 
 __version__ = "3.2.1"
 
@@ -121,8 +122,9 @@ class SmartboxRuntime:
     Stored on ``entry.runtime_data`` for the entity platforms. Runtime state
     does not outlive the entry: the ws_user recovery streak lives on the
     monitor task, so a reload rebuilds it. The token-store lock table in
-    ``hass.data`` is the one cross-reload coordination object; it serializes
-    storage access and is not runtime state.
+    ``hass.data`` serializes storage access, and the PID-reload marker set
+    prevents a late-identity reload loop; both are cross-reload coordination,
+    not runtime state.
     """
 
     engine: SmartboxEngine
@@ -137,6 +139,7 @@ class SmartboxRuntime:
     identity: SmartboxIdentity
     fanout: EngineChangeFanOut
     membership: MembershipWatcher
+    late_pid: LatePidWatcher
     entity_builder: EntityBuilder
     history: HistoryImport
     # The entry data this runtime was built from. A reauth (or any data
@@ -148,7 +151,9 @@ class SmartboxRuntime:
     services: ServiceTargets = field(default_factory=ServiceTargets)
 
 
-def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
+def auth_config_from_entry_data(
+    data: Mapping[str, Any], *, reseller: SmartboxReseller | None = None
+) -> AuthConfig:
     """Build the protocol-layer AuthConfig from config-entry data.
 
     The reseller table supplies the endpoint identity: the Basic auth string
@@ -158,14 +163,14 @@ def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
     ``api_url`` is the brand key, not a host. ``RESELLER_OVERRIDES`` can
     replace the documented auth fields for manual testing.
     """
-    reseller = reseller_from_entry_data(data)
+    resolved = reseller if reseller is not None else reseller_from_entry_data(data)
     return AuthConfig(
-        api_host=api_base_url(reseller),
-        basic_auth_creds=reseller.basic_auth,
-        serial_id=str(reseller.serial_id),
+        api_host=api_base_url(resolved),
+        basic_auth_creds=resolved.basic_auth,
+        serial_id=str(resolved.serial_id),
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD],
-        referer=reseller.web_url or None,
+        referer=resolved.web_url or None,
     )
 
 
@@ -483,6 +488,7 @@ async def _async_teardown_runtime(runtime: SmartboxRuntime) -> None:
     idempotent and bounded.
     """
     runtime.membership.close()
+    runtime.late_pid.close()
     try:
         await runtime.engine.stop()
     finally:
@@ -512,9 +518,10 @@ async def _async_build_runtime(
     trouble propagates raw and retries via ``ConfigEntryNotReady``. Protocol-layer
     errors propagate raw for the caller to map.
     """
-    config = auth_config_from_entry_data(entry.data)
+    reseller = reseller_from_entry_data(entry.data)
+    config = auth_config_from_entry_data(entry.data, reseller=reseller)
     websession = async_get_clientsession(hass)
-    token_store = token_store_for(hass, entry.entry_id, entry.data)
+    token_store = token_store_for(hass, entry.entry_id, entry.data, reseller=reseller)
     stored = await token_store.async_load()
     boost_prefs = boost_prefs_for(hass, entry.entry_id)
     await boost_prefs.async_load()
@@ -562,9 +569,7 @@ async def _async_build_runtime(
         )
     else:
         _LOGGER.debug("Minted a fresh smartbox session for entry %s", entry.entry_id)
-    identity = await async_discover_identity(
-        client, reseller_from_entry_data(entry.data)
-    )
+    identity = await async_discover_identity(client, reseller)
     engine = SmartboxEngine(
         client,
         unavailable_delay=SMARTBOX_UNAVAILABLE_DELAY,
@@ -607,6 +612,7 @@ async def _async_build_runtime(
         # by every platform's entities (see adapter.py module docstring).
         fanout=EngineChangeFanOut(engine),
         membership=membership,
+        late_pid=LatePidWatcher(hass, entry, identity, engine),
         entity_builder=entity_builder,
         services=services,
         history=history,
@@ -703,6 +709,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
     # Setup discovery is a full membership list, so registry devices it no
     # longer contains start the same confirmed-removal path as live loss.
     runtime.membership.async_start()
+    # Start the identity watch only after the platforms and membership are
+    # live, so a version frame during setup cannot schedule a reload halfway
+    # through it.
+    runtime.late_pid.async_start()
 
     # Domain services are registered once, after the platforms published
     # their entities on runtime.services. Each entry adds the same cleanup
@@ -789,6 +799,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
     clear_node_added_issue(hass, entry)
     await token_store_for(hass, entry.entry_id, entry.data).async_clear()
     await boost_prefs_for(hass, entry.entry_id).async_clear()
+    LatePidWatcher.async_clear(hass, entry.entry_id)
 
 
 async def update_listener(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:

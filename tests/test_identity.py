@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from smartbox.core.merging import boost_config
 from smartbox.device.control_modes import control_mode_available
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig
@@ -24,7 +25,6 @@ from custom_components.smartbox.identity import (
     async_discover_membership,
     away_offset_available,
     boost_available,
-    boost_config,
     duty_limit_options,
     duty_limit_value,
     max_temp_limit_available,

@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from smartbox.core.merging import boost_config
+from smartbox.device.modes import (
+    boost_activation_takes_parameters,
+    boost_uses_legacy_path,
+)
+from smartbox.device.profile import boost_temperature_bounds, controller_limits
 from smartbox.protocol.values import (
     BoostConfig,
     celsius_to_node_units,
@@ -21,6 +26,7 @@ from smartbox.protocol.values import (
 )
 
 from .adapter import node_boost_params, node_runback_limits, node_runback_params
+from .boost_policy import boost_activation_mode, runback_params_configurable
 from .boost_prefs import BoostPrefs, NodeBoostPrefs
 from .const import (
     BOOST_TIME_MIN,
@@ -28,14 +34,6 @@ from .const import (
     RUNBACK_TIME_DEFAULT,
     RUNBACK_TIME_MAX,
     RUNBACK_TIME_STEP,
-)
-from .controller import (
-    boost_activation_mode,
-    boost_activation_takes_parameters,
-    boost_temperature_bounds,
-    boost_uses_legacy_path,
-    controller_limits,
-    runback_params_configurable,
 )
 from .exceptions import validation_error
 

@@ -100,7 +100,7 @@ It renders store state into entities and translates entity and service actions i
 
 Component-level setup (`async_setup`) also serves the optional bundled programme card: it registers `frontend/` as a static path and loads `smartbox-program-card.js` as an extra frontend module when the asset is present. The card reads the schedule sensor's attributes and calls `smartbox.set_schedule`; that entity/service contract is its only coupling to the Python side.
 
-Entity creation uses the discovery identity: `identity.py` freezes the REST node PID/version/setup and the platform builders decide which entities exist from that snapshot. Runtime properties use the live version and setup slots, so a late version frame updates bounds, storage modes and the schedule catalogue. A PID first seen in such a frame does not add or remove entities until the entry reloads; the `NodeAdded` membership path already requests a reload when the node set changes.
+Entity creation uses the discovery identity: `identity.py` freezes the REST node PID/version/setup and the platform builders decide which entities exist from that snapshot. Runtime properties use the live version and setup slots, so a late version frame updates bounds, storage modes and the schedule catalogue. A PID first seen in such a frame schedules one automatic entry reload so the entity surface can materialize; the `NodeAdded` membership path owns new-node additions.
 
 ## Repository map
 
@@ -112,15 +112,14 @@ custom_components/smartbox/   the integration
 ├── devices.py                box device registry entries and node links
 ├── services.py               domain service registration, schemas and handlers
 ├── entity_builder.py         per-platform builders for new membership
-├── membership.py             NodeAdded → identity refresh / reload hint
+├── membership.py             NodeAdded refresh and late-PID reload watcher
 ├── exceptions.py             translated user-facing error constructors
 ├── compat.py                 probatio/voluptuous selection for the HA range
 ├── identity.py               discovery results; capability gates
 ├── product.py                product labels from the version PID (table in the library)
 ├── mapping.py                schedule/RTC/boost decoding
-├── controller.py             compatibility re-exports + adapter boost helpers
 ├── storage.py                storage intent → HVACMode mapping
-├── boost_activation.py, boost_prefs.py  adapter boost activation/preferences
+├── boost_activation.py, boost_policy.py, boost_prefs.py  boost activation/policy/preferences
 ├── config_flow.py            setup, reauth and reconfigure
 ├── climate.py, sensor.py, number.py, switch.py,
 │   select.py, binary_sensor.py   the six entity platforms
@@ -195,7 +194,7 @@ Availability moves on evidence: a lost marker opens an unavailable window, an ok
 | Wire units | `test_client`, `test_auth`, `test_writes`, `test_values`, `test_mapping`, `test_ws_user_transport` | The wire rules: request shapes, body forms, normalization, the token lifecycle. Expected values trace to the contract record. |
 | Domain units | `test_core_engine`, `test_core_availability`, `test_core_writes`, `test_core_state` | Store merging and engine behavior, exercised with no Home Assistant involved. |
 | Platform behavior | `test_climate`, `test_sensor`, `test_number`, `test_switch`, `test_select`, `test_binary_sensor`, `test_init`, `test_availability`, `test_config_flow`, `test_diagnostics`, `test_system_health`, `test_identity`, `test_adapter`, `test_ws_user_wiring` | Real service calls and entity states. Only the wire endpoints are fakes; the engine, store and adapter under them are the real code. |
-| Device matrix | `test_product_code_parity`, `test_entity_surface_matrix`, `test_controller`, `test_storage`, `test_boost_activation_matrix`, `test_entity_registry_snapshot`, `test_diagnostics_snapshot`, `test_diagnostics_profile`, `test_services_snapshot` | Every decoded product code's facts, the exact entity domains/keys/options/bounds/states for every surface case, the box-level entities, activation request shapes, and the registry/diagnostics/service goldens. |
+| Device matrix | `test_product_code_parity`, `test_entity_surface_matrix`, `test_device_profile_parity`, `test_storage`, `test_boost_activation_matrix`, `test_entity_registry_snapshot`, `test_diagnostics_snapshot`, `test_diagnostics_profile`, `test_services_snapshot` | Every decoded product code's facts, the exact entity domains/keys/options/bounds/states for every surface case, the box-level entities, activation request shapes, and the registry/diagnostics/service goldens. |
 | Wire reality | `test_loopback` | The real client against a real local aiohttp server: pins what the transport fakes assume about handshakes, closes and timeout shapes. |
 | Chaos | `test_soak` | The whole stack against a hostile local server — kills, stalls, 5xx, lost frames — asserting structural invariants: no stuck deadline, no leaked timer, silent teardown. |
 | Gates and tooling | `test_layering`, `test_docs_references`, `test_translations`, `test_version`, `test_utils`, `test_lib_contract`, `test_payload_bounding`, `test_live_probe`, `test_fake_api`, `test_fake_transport` | Architecture, documentation and tooling rules, and the fakes' own behavior. |
@@ -234,11 +233,11 @@ Three documents, three roles: `docs/api-contract.md` settles wire acceptance —
 ### Device semantics (migration in progress)
 
 The neutral device facts live in `smartbox.device` (`codes`, `capabilities`,
-`profile`, `control_modes`, `modes`, `storage`, `settings`): the reviewed
+`setup`, `profile`, `control_modes`, `modes`, `storage`, `settings`): the reviewed
 product-code table, operation-eligibility checks, setpoint/programme ranges,
 control-mode catalogues, lock/boost policy, storage intents and setting gates. Entity code imports those modules directly;
-`controller.py` keeps only the adapter-local boost helpers and the re-exports
-other adapter modules still import. Entity construction, boost activation
+`boost_activation.py` keeps the adapter-local boost helpers, and the
+compatibility re-export modules are gone. Entity construction, boost activation
 planning, preferences and services stay in the adapter. The design, slice
 status and acceptance tests are in [device-semantics.md](device-semantics.md).
 The library minor and the pin are deferred; the branch needs the sibling

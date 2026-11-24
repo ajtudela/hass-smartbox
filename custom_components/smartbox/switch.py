@@ -17,6 +17,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from smartbox.core.state import Change, DeviceChange, NodeChange
+from smartbox.device.modes import boost_uses_legacy_path, lock_kind
+from smartbox.device.profile import ControllerLimits, max_limit_bounds
 from smartbox.protocol.values import celsius_to_node_units, node_units_to_celsius
 
 from .adapter import (
@@ -30,21 +32,15 @@ from .adapter import (
     node_units,
 )
 from .boost_activation import plan_boost
-from .controller import (
-    ControllerLimits,
-    boost_uses_legacy_path,
-    lock_kind,
-    max_limit_bounds,
-    supports_easy,
-    supports_runback,
-)
 from .entity_builder import EntityBuilder
 from .exceptions import user_error
 from .identity import (
     SmartboxDeviceInfo,
     SmartboxNodeInfo,
+    easy_available,
     max_temp_limit_available,
     node_power_limit_available,
+    runback_available,
     true_radiant_available,
     window_mode_available,
 )
@@ -150,17 +146,19 @@ def _build_node_switches(  # noqa: C901, PLR0912 - one branch per capability
     # A thm node can dispatch to an htr-derived controller whose factory
     # payload carries boost_config (Tevolve floor thermostats), but the
     # thermostat climate entity does not model boost.
+    # Storage keeps the legacy /boost switch (plan_boost routes it); the
+    # CLI-only check_boost refuses acm because it is the status-flag path.
     if node.heater_surface and node.boost_available:
         _LOGGER.debug("Creating boost switch for node %r", node.name)
         switch_entities.append(BoostSwitch(node, entry, runtime, fanout, "boost"))
     else:
         _LOGGER.info("Boost mode not available for node %r", node.name)
-    if node.heater_surface and supports_easy(node.pid, node.setup):
+    if easy_available(node):
         _LOGGER.debug("Creating EASY switch for node %r", node.name)
         switch_entities.append(
             EasyModeSwitch(node, entry, runtime, fanout, "easy_mode")
         )
-    if node.heater_surface and supports_runback(node.pid, node.setup):
+    if runback_available(node):
         _LOGGER.debug("Creating RUNBACK switch for node %r", node.name)
         switch_entities.append(
             RunbackModeSwitch(node, entry, runtime, fanout, "runback_mode")

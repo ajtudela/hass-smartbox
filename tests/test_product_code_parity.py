@@ -1,7 +1,7 @@
 """Exhaustive decoded-product-code parity table.
 
 One row per `EProductCodeValue` entry from the vendor 2.54.2 bundle. The rows
-are written out here rather than derived from `controller.py`, so a missing or
+are written out here rather than derived from the library table, so a missing or
 misgrouped production set fails this test instead of re-asserting itself.
 """
 
@@ -16,29 +16,31 @@ from types import SimpleNamespace
 
 import pytest
 from smartbox.device.codes import PRODUCT_CODE_LABELS
-
-from custom_components.smartbox.controller import (
+from smartbox.device.modes import (
     boost_params_editable,
-    boost_temperature_bounds,
     boost_uses_legacy_path,
+    lock_kind,
+    supports_easy,
+    supports_runback,
+)
+from smartbox.device.profile import (
+    boost_temperature_bounds,
     climate_bounds,
     controller_limits,
     has_no_probes,
     is_heater_surface,
     is_thermostat_surface,
-    lock_kind,
     max_limit_bounds,
     profile_bounds,
     prog_bounds_c,
-    supports_easy,
-    supports_runback,
 )
+from smartbox.device.storage import is_elnur_storage, is_water_storage
+
 from custom_components.smartbox.identity import (
     boost_available,
     duty_limit_options,
     max_temp_limit_available,
 )
-from custom_components.smartbox.storage import is_elnur_storage, is_water_storage
 
 BASE = ("frost", "eco", "comfort")
 WITH_OFF = ("frost", "eco", "comfort", "off")

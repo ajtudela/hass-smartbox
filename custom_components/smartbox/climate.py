@@ -34,13 +34,10 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
-from smartbox.device.profile import HtrModPolicy, htr_mod_policy
-from smartbox.protocol.values import (
-    BoostConfig,
-    is_lost,
-    normalize_prog,
-    parse_number_or_none,
-)
+from smartbox.device.modes import boost_uses_legacy_path
+from smartbox.device.profile import HtrModPolicy, has_no_probes, htr_mod_policy
+from smartbox.device.storage import classic_accumulator
+from smartbox.protocol.values import is_lost, normalize_prog, parse_number_or_none
 from smartbox.protocol.writes import VALID_BOOST_MODES
 
 from .adapter import (
@@ -50,6 +47,7 @@ from .adapter import (
     node_runback_limits,
 )
 from .boost_activation import ActivationPlan, plan_boost, plan_runback
+from .boost_policy import boost_modes_available
 from .const import (
     PRESET_ADVANCED_SLOT,
     PRESET_FROST,
@@ -58,15 +56,14 @@ from .const import (
     PRESET_SELF_LEARN,
     SmartboxNodeType,
 )
-from .controller import (
-    boost_uses_legacy_path,
-    has_no_probes,
-    supports_easy,
-    supports_runback,
-)
 from .entity_builder import EntityBuilder
 from .exceptions import user_error, validation_error
-from .identity import boost_available, boost_config
+from .identity import (
+    boost_available,
+    boost_mode_available,
+    easy_available,
+    runback_available,
+)
 from .mapping import (
     AutoOverrideWrite,
     HtrModWrite,
@@ -85,7 +82,6 @@ from .mapping import (
 )
 from .storage import (
     available_modes as storage_available_modes,
-    classic_accumulator,
     current_mode as storage_current_mode,
     write_for as storage_write_for,
 )
@@ -244,12 +240,6 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         )
 
     @property
-    def _boost_config_value(self) -> int:
-        """The node's vendor-app boost configuration (0 when absent)."""
-        state = self._node_state()
-        return boost_config(state.setup if state is not None else {})
-
-    @property
     def supports_boost_mode(self) -> bool:
         """Whether ``smartbox.set_boost_mode`` applies to this entity.
 
@@ -259,12 +249,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         """
         state = self._node_state()
         setup = state.setup if state is not None else self._node.setup
-        return (
-            self._node.node_type not in (SmartboxNodeType.THM, SmartboxNodeType.ACM)
-            and self._boost_available
-            and not boost_uses_legacy_path(self._live_pid, setup)
-            and self._boost_config_value == BoostConfig.FULL
-        )
+        return boost_mode_available(self._node, pid=self._live_pid, setup=setup)
 
     @property
     def _boost_mode_value(self) -> str | None:
@@ -275,10 +260,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
     @property
     def _boost_modes_available(self) -> list[str]:
         """The modes status advertises (``boost_modes_available``)."""
-        value = self._status.get("boost_modes_available")
-        if not isinstance(value, (list, tuple, set)):
-            return []
-        return [mode for mode in value if isinstance(mode, str)]
+        return list(boost_modes_available(self._status))
 
     def _active_boost_end(self) -> datetime | None:
         """Return when the running boost/runback/advanced-slot ends."""
@@ -391,8 +373,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         """
         if self.native_temperature_unit != UnitOfTemperature.CELSIUS:
             return 1.0
-        policy = self._htr_mod_policy()
-        return policy.step_c if policy is not None else 0.5
+        return self._controller_profile().limits.setpoint_step_c
 
     @property
     def min_temp(self) -> float:
@@ -806,9 +787,13 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         status = self._status
         state = self._node_state()
         setup = state.setup if state is not None else self._node.setup
-        if supports_easy(self._live_pid, setup) and status.get("easy"):
+        if easy_available(self._node, pid=self._live_pid, setup=setup) and status.get(
+            "easy"
+        ):
             await engine.set_easy(self._dev_id, self._ref, enabled=False)
-        if supports_runback(self._live_pid, setup) and status.get("runback"):
+        if runback_available(
+            self._node, pid=self._live_pid, setup=setup
+        ) and status.get("runback"):
             await engine.set_runback(self._dev_id, self._ref, enabled=False)
 
     async def _async_activate_runback(self, engine: SmartboxEngine) -> None:

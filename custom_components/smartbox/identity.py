@@ -27,25 +27,28 @@ from dataclasses import dataclass, field, replace
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from smartbox.core.merging import (
-    boost_config,
-    is_empty_slot,
-    normalize_node_addr,
-    valid_power_limit,
-)
+from smartbox.core.merging import is_empty_slot, normalize_node_addr, valid_power_limit
 from smartbox.core.state import node_device_id
 from smartbox.device import settings as _settings
+from smartbox.device.capabilities import (
+    NodeFacts,
+    check_boost_mode,
+    check_charging_schedule,
+    check_control_mode,
+    check_easy,
+    check_max_stemp_limit,
+    check_node_power_limit,
+    check_prog_temps,
+    check_runback,
+    check_storage_lock,
+)
+from smartbox.device.profile import is_heater_surface, is_thermostat_surface
 from smartbox.protocol.client import NodeRef, SmartboxClient
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import bounded_repr
 
+from .boost_policy import boost_params_configurable, runback_params_configurable
 from .const import HEATER_NODE_TYPES, WIRE_NODE_TYPES, SmartboxNodeType
-from .controller import (
-    boost_params_configurable,
-    is_heater_surface,
-    is_thermostat_surface,
-    runback_params_configurable,
-)
 from .product import product_code
 
 if TYPE_CHECKING:
@@ -60,9 +63,24 @@ __all__ = [
     "SmartboxNodeInfo",
     "async_discover_identity",
     "async_discover_membership",
+    "away_offset_available",
     "boost_available",
-    "boost_config",
+    "boost_mode_available",
+    "charging_schedule_available",
+    "control_mode_available",
+    "duty_limit_available",
+    "duty_limit_options",
+    "duty_limit_value",
+    "easy_available",
+    "max_temp_limit_available",
+    "node_facts",
     "node_power_limit_available",
+    "priority_available",
+    "prog_temps_available",
+    "runback_available",
+    "storage_lock_available",
+    "true_radiant_available",
+    "window_mode_available",
 ]
 
 
@@ -668,14 +686,80 @@ def away_offset_available(node: SmartboxNodeInfo) -> bool:
     return _settings.away_offset_available(node.node_type, node.pid, node.setup)
 
 
+def node_facts(
+    node: SmartboxNodeInfo,
+    *,
+    pid: str | None = None,
+    setup: Mapping[str, Any] | None = None,
+    fw_version: str | None = None,
+) -> NodeFacts:
+    """Build the neutral capability input from a discovery or live node."""
+    return NodeFacts(
+        node_type=node.node_type,
+        pid=pid or node.pid,
+        fw_version=fw_version or node.version.get("fw_version"),
+        setup=setup if setup is not None else node.setup,
+    )
+
+
+def easy_available(
+    node: SmartboxNodeInfo,
+    *,
+    pid: str | None = None,
+    setup: Mapping[str, Any] | None = None,
+) -> bool:
+    """Is the EASY flag exposed on this heater."""
+    return check_easy(node_facts(node, pid=pid, setup=setup)).ok
+
+
+def runback_available(
+    node: SmartboxNodeInfo,
+    *,
+    pid: str | None = None,
+    setup: Mapping[str, Any] | None = None,
+) -> bool:
+    """Is the RUNBACK flag exposed on this heater."""
+    return check_runback(node_facts(node, pid=pid, setup=setup)).ok
+
+
+def boost_mode_available(
+    node: SmartboxNodeInfo,
+    *,
+    pid: str | None = None,
+    setup: Mapping[str, Any] | None = None,
+) -> bool:
+    """Is the FULL /boost_mode path exposed on this heater."""
+    return check_boost_mode(node_facts(node, pid=pid, setup=setup)).ok
+
+
+def control_mode_available(
+    node: SmartboxNodeInfo,
+    *,
+    pid: str | None = None,
+    setup: Mapping[str, Any] | None = None,
+) -> bool:
+    """Is the control-mode setting exposed on this node."""
+    return check_control_mode(node_facts(node, pid=pid, setup=setup)).ok
+
+
+def storage_lock_available(node: SmartboxNodeInfo) -> bool:
+    """Is the integer /lock endpoint exposed on this storage node."""
+    return check_storage_lock(node_facts(node)).ok
+
+
+def charging_schedule_available(node: SmartboxNodeInfo) -> bool:
+    """Is the charging schedule writable on this storage node."""
+    return check_charging_schedule(node_facts(node)).ok
+
+
 def max_temp_limit_available(node: SmartboxNodeInfo) -> bool:
     """Is the maximum target temperature limit configurable on this node."""
-    return _settings.max_temp_limit_available(node.node_type, node.pid, node.setup)
+    return check_max_stemp_limit(node_facts(node)).ok
 
 
 def node_power_limit_available(node: SmartboxNodeInfo) -> bool:
     """Is the node's OWN power limit configurable on this node."""
-    return _settings.node_power_limit_available(node.setup)
+    return check_node_power_limit(node_facts(node)).ok
 
 
 def duty_limit_value(setup: Mapping[str, Any]) -> int | None:
@@ -705,9 +789,4 @@ def priority_available(node: SmartboxNodeInfo) -> bool:
 
 def prog_temps_available(node: SmartboxNodeInfo) -> bool:
     """Are the programme profile temps (Frost/Eco/Comfort) settable."""
-    return _settings.prog_temps_available(
-        node.node_type,
-        node.pid,
-        node.version.get("fw_version"),
-        node.setup,
-    )
+    return check_prog_temps(node_facts(node)).ok

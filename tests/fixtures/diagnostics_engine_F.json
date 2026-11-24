@@ -41,7 +41,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -309,7 +310,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -602,7 +604,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -871,7 +874,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -1141,7 +1145,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -1410,7 +1415,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -1679,7 +1685,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,
@@ -1940,7 +1947,8 @@
                   "comfort"
                 ],
                 "prog_max_c": null,
-                "prog_min_c": null
+                "prog_min_c": null,
+                "setpoint_step_c": 0.5
               },
               "max_limit_bounds": [
                 16.0,

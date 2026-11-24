@@ -677,9 +677,14 @@ def test_rtc_time_to_datetime_september_is_zero_indexed():
     )
 
 
-def test_rtc_time_to_datetime_december_unconfirmed_indexing():
-    # n=11 -> December under the 0-indexed reading; a 1-indexed 12 fails
-    # to parse and yields None (recorded Phase-4 open item)
+def test_rtc_time_to_datetime_november_live_frame():
+    # 2026-11-24 frame: n=10 -> November under the 0-indexed reading.
+    rtc = {"d": 24, "h": 22, "m": 11, "n": 10, "s": 6, "w": 2, "y": 2026}
+    assert rtc_time_to_datetime(rtc).month == 11
+
+
+def test_rtc_time_to_datetime_december_extrapolation():
+    # n=11 -> December follows the same rule; 1-indexed 12 yields None.
     rtc = {"d": 31, "h": 23, "m": 59, "n": 11, "s": 59, "w": 0, "y": 2026}
     assert rtc_time_to_datetime(rtc).month == 12
     assert rtc_time_to_datetime({**rtc, "n": 12}) is None

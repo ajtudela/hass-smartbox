@@ -51,7 +51,12 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
-from smartbox.device.storage import is_elnur_stepped_storage, is_helki_storage
+from smartbox.device.profile import controller_limits, has_no_probes
+from smartbox.device.storage import (
+    is_elnur_stepped_storage,
+    is_helki_storage,
+    is_water_storage,
+)
 from smartbox.protocol import timing
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.errors import SmartboxError
@@ -71,8 +76,8 @@ from .const import (
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
-from .controller import controller_limits, has_no_probes
 from .entity_builder import EntityBuilder
+from .identity import charging_schedule_available
 from .mapping import (
     ProgDict,
     get_boost_end_datetime,
@@ -81,7 +86,6 @@ from .mapping import (
     get_temperature_unit,
     rtc_time_to_datetime,
 )
-from .storage import is_water_storage
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -238,9 +242,8 @@ def _build_node_sensors(
     if node.heater_node and node.node_type == SmartboxNodeType.ACM:
         groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
         target = TargetChargeSensor(node, entry, runtime, fanout)
-        if not is_water_storage(node.pid):
-            # Water storage's settings list omits the charge days and valley
-            # slots, so its target-charge sensor is read-only.
+        if charging_schedule_available(node):
+            # Water storage omits the charge days and valley slots.
             runtime.services.charging.append(target)
         groups.append(([target], False))
     if node.heater_surface and node.boost_available:

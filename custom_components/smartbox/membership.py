@@ -27,9 +27,17 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Literal, cast
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
-from smartbox.core.state import DeviceRemoved, NodeAdded, NodeRemoved
+from smartbox.core.state import (
+    DeviceRemoved,
+    NodeAdded,
+    NodeChange,
+    NodeRemoved,
+    node_key,
+)
+from smartbox.device.codes import product_code
 from smartbox.protocol import timing
 from smartbox.protocol.events import Update
 
@@ -38,6 +46,8 @@ from .devices import async_ensure_box_devices
 from .identity import async_discover_identity, async_discover_membership
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from homeassistant.core import HomeAssistant
     from smartbox.core.engine import SmartboxEngine
     from smartbox.core.state import Change
@@ -66,7 +76,12 @@ _REMOVAL_RETRY_SECONDS = (5 * 60.0, 15 * 60.0, 45 * 60.0)
 # candidates stay pending (diagnostics) until the next reload re-arms them.
 _REMOVAL_MAX_FAILURES = 3
 
-__all__ = ["MembershipWatcher", "clear_node_added_issue", "node_added_issue_id"]
+__all__ = [
+    "LatePidWatcher",
+    "MembershipWatcher",
+    "clear_node_added_issue",
+    "node_added_issue_id",
+]
 
 
 @dataclass(frozen=True)
@@ -707,3 +722,121 @@ class MembershipWatcher:
         if self._removal_task is not None and not self._removal_task.done():
             self._removal_task.cancel()
         self._removal_task = None
+
+
+_PID_RELOAD_KEY = f"{DOMAIN}_pid_reloads"
+
+
+class LatePidWatcher:
+    """Reload once when a discovery PID was missing and the live one arrives.
+
+    Entity creation uses the discovery snapshot. A node whose PID was not
+    readable at discovery would otherwise keep the wrong surface until the
+    user reloads the entry; this watches the version slot and schedules one
+    reload per entry. A differing-but-present discovery PID is left alone, and
+    a discovery source that never carries the PID cannot cause a reload loop.
+
+    The watcher is seeded from the engine at start, so a version slot ingested
+    before the platforms finish setting up is not missed. Reloads are deferred
+    until the entry is LOADED and coalesced per entry.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: SmartboxConfigEntry,
+        identity: SmartboxIdentity,
+        engine: SmartboxEngine,
+    ) -> None:
+        """Capture the discovery snapshot and the engine to watch."""
+        self._hass = hass
+        self._entry = entry
+        self._engine = engine
+        self._discovered = {
+            (node.dev_id, node_key(node.node_type, node.addr)): node.version.get("pid")
+            for node in identity.nodes
+            if node.supported_wire_type
+        }
+        self._pending = False
+        self._scheduled = False
+        self._closed = False
+
+    def async_start(self) -> None:
+        """Subscribe and seed from the world already ingested at setup."""
+        self._engine.subscribe(self._on_change)
+        for key, pid in self._discovered.items():
+            if pid:
+                continue
+            dev_id, node_key_value = key
+            state = self._engine.node(dev_id, node_key_value)
+            if state is not None and state.version:
+                self._consider(dev_id, node_key_value, state.version)
+        if self._pending and not self._scheduled:
+            self._hass.async_create_task(self._schedule_when_loaded())
+
+    def close(self) -> None:
+        """Stop reacting after the entry unloads."""
+        self._closed = True
+
+    async def _on_change(self, change: object) -> None:
+        if self._closed or not isinstance(change, NodeChange):
+            return
+        if change.kind != "version":
+            return
+        self._consider(change.dev_id, change.node_key, change.node.version or {})
+
+    def _consider(self, dev_id: str, key: str, version: Mapping[str, object]) -> None:
+        """Record a late PID and request one coalesced reload."""
+        pid = version.get("pid")
+        if not isinstance(pid, str) or not pid:
+            return
+        lookup = (dev_id, key)
+        if lookup not in self._discovered or self._discovered[lookup]:
+            return
+        if product_code(pid) is None:
+            return
+        marker = (self._entry.entry_id, dev_id, key, pid)
+        seen: set[tuple[str, str, str, str]] = self._hass.data.setdefault(
+            _PID_RELOAD_KEY, set()
+        )
+        if marker in seen:
+            return
+        seen.add(marker)
+        self._pending = True
+        if self._entry.state is ConfigEntryState.LOADED:
+            self._schedule()
+        else:
+            self._hass.async_create_task(self._schedule_when_loaded())
+
+    async def _schedule_when_loaded(self) -> None:
+        while not self._closed and self._entry.state is not ConfigEntryState.LOADED:
+            if self._entry.state in {
+                ConfigEntryState.NOT_LOADED,
+                ConfigEntryState.SETUP_ERROR,
+                ConfigEntryState.MIGRATION_ERROR,
+                ConfigEntryState.SETUP_RETRY,
+                ConfigEntryState.FAILED_UNLOAD,
+                ConfigEntryState.UNLOAD_IN_PROGRESS,
+            }:
+                return
+            await asyncio.sleep(0.1)
+        if self._pending and not self._closed:
+            self._schedule()
+
+    def _schedule(self) -> None:
+        if self._scheduled or self._closed:
+            return
+        self._scheduled = True
+        _LOGGER.info(
+            "A late PID was discovered for entry %s; reloading once",
+            self._entry.entry_id,
+        )
+        self._hass.config_entries.async_schedule_reload(self._entry.entry_id)
+
+    @staticmethod
+    def async_clear(hass: HomeAssistant, entry_id: str) -> None:
+        """Drop the entry's reload markers after removal."""
+        seen = hass.data.get(_PID_RELOAD_KEY)
+        if isinstance(seen, set):
+            for marker in [item for item in seen if item[0] == entry_id]:
+                seen.discard(marker)

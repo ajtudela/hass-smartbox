@@ -16,32 +16,31 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from smartbox.device.capabilities import (
     NodeFacts,
+    OperationRefusedError,
     check_storage_ui_mode,
     check_storage_ui_mode_available,
+    require,
 )
-from smartbox.device.control_modes import (
-    control_mode_available,
-    control_mode_choices,
-    control_mode_label,
+from smartbox.device.control_modes import control_mode_choices, control_mode_label
+from smartbox.device.modes import lock_kind
+from smartbox.device.storage import (
+    ui_mode as storage_ui_mode,
+    ui_mode_options as storage_ui_mode_options,
 )
 from smartbox.protocol import VALID_PRIORITIES
 from smartbox.protocol.values import parse_number_or_none
 
 from .adapter import EngineChangeFanOut, SmartboxNodeAdapterEntity
-from .controller import lock_kind
 from .entity_builder import EntityBuilder
 from .exceptions import user_error
 from .identity import (
     SmartboxNodeInfo,
+    control_mode_available,
     duty_limit_available,
     duty_limit_options,
     duty_limit_value,
     priority_available,
-)
-from .storage import (
-    lock_endpoint,
-    ui_mode as storage_ui_mode,
-    ui_mode_options as storage_ui_mode_options,
+    storage_lock_available,
 )
 
 if TYPE_CHECKING:
@@ -106,12 +105,7 @@ def _build_node_selects(
         groups.append(([RadiatorPriority(node, entry, runtime, fanout)], True))
     if duty_limit_available(node):
         groups.append(([DutyLimit(node, entry, runtime, fanout)], True))
-    if control_mode_available(
-        node.pid,
-        node.node_type,
-        node.setup,
-        node.setup.get("units"),
-    ):
+    if control_mode_available(node):
         groups.append(([ControlMode(node, entry, runtime, fanout)], True))
     if check_storage_ui_mode_available(
         NodeFacts(
@@ -337,7 +331,7 @@ class ChildLockMode(SmartboxNodeSelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Write the selected lock state as an integer."""
         value = self._OPTION_VALUES[option]
-        if lock_endpoint(self._node.node_type):
+        if storage_lock_available(self._node):
             await self._runtime.engine.set_lock_endpoint(self._dev_id, self._ref, value)
         else:
             await self._runtime.engine.set_lock(self._dev_id, self._ref, value)
@@ -384,8 +378,9 @@ class StorageUIMode(SmartboxNodeSelectEntity):
         if value is None:
             msg = "storage_ui_mode_unsupported"
             raise user_error(msg)
-        check = check_storage_ui_mode(facts, value)
-        if not check.ok:
+        try:
+            require(check_storage_ui_mode(facts, value), "set_storage_ui_mode")
+        except OperationRefusedError as ex:
             msg = "storage_ui_mode_unsupported"
-            raise user_error(msg)
+            raise user_error(msg) from ex
         await self._runtime.engine.set_storage_ui_mode(self._dev_id, self._ref, value)

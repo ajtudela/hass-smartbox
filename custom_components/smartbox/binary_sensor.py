@@ -5,9 +5,8 @@ updates arrive via the shared ``EngineChangeFanOut``. The REST discovery
 identity is kept only for registry identity and device-info fields.
 """
 
-from collections.abc import Mapping
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 # The component root re-exports this public name without __all__; mypy
 # strict's no_implicit_reexport cannot see that re-export.
@@ -16,6 +15,7 @@ from homeassistant.components.binary_sensor import (  # type: ignore[attr-define
     BinarySensorEntity,
 )
 from homeassistant.const import EntityCategory
+from smartbox.device.settings import pir_enabled
 from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import parse_number_or_none
 
@@ -102,7 +102,7 @@ def _build_node_binary_sensors(
         entities.append(WindowDetection(node, entry, runtime, fanout))
         # PIR is a controller feature, gated on extra_options.pir_enabled in
         # the app (TevolvePIRHeaterController.getStatusIndicators).
-        if _pir_enabled(node.setup):
+        if pir_enabled(node.setup):
             entities.append(PirPresence(node, entry, runtime, fanout))
     if node.node_type == SmartboxNodeType.ACM:
         # Water storage replaces CHARGING with active/water-ready states.
@@ -116,12 +116,6 @@ def _build_node_binary_sensors(
     if node.node_type == SmartboxNodeType.THM:
         entities.append(LowBattery(node, entry, runtime, fanout))
     return [(entities, False)] if entities else []
-
-
-def _pir_enabled(setup: Mapping[str, Any]) -> bool:
-    """Whether the node's PIR presence controller is enabled in setup."""
-    extra = setup.get("extra_options")
-    return isinstance(extra, Mapping) and extra.get("pir_enabled") is True
 
 
 class Connected(SmartboxBoxAdapterEntity, BinarySensorEntity):

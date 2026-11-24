@@ -232,7 +232,7 @@ Status lines as of 2026-10-18 (this integration's alignment pass; the deliberate
 
 ## 5. Known gaps / open
 
-Live-open items (December RTC indexing, boost on capable units, PMO behavior, the `should_sync` trigger) live in `api-contract.md` §7; this list keeps the app-side gaps.
+Live-open items (boost on capable units, PMO behavior, the `should_sync` trigger) live in `api-contract.md` §7; this list keeps the app-side gaps. The December RTC check is settled there.
 
 - `should_sync` has never been observed live (trigger unknown) — the debounce behavior is code-verified only `[live 2026-10-02]`.
 - `htr_mod` version frames: the app-side regex excludes them; whether the server pushes them at all is unprobed `**[unverified]**`.

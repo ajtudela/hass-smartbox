@@ -2,24 +2,29 @@
 
 from __future__ import annotations
 
-from custom_components.smartbox.controller import (
-    boost_activation_mode,
+from smartbox.device.modes import (
     boost_activation_takes_parameters,
-    boost_params_configurable,
     boost_params_editable,
-    boost_temperature_bounds,
     boost_uses_legacy_path,
+    lock_kind,
+    supports_easy,
+    supports_runback,
+)
+from smartbox.device.profile import (
+    boost_temperature_bounds,
     climate_bounds,
     controller_limits,
     is_heater_surface,
     is_thermostat_surface,
-    lock_kind,
     max_limit_bounds,
     profile_bounds,
     prog_bounds_c,
+)
+
+from custom_components.smartbox.boost_policy import (
+    boost_activation_mode,
+    boost_params_configurable,
     runback_params_configurable,
-    supports_easy,
-    supports_runback,
 )
 
 

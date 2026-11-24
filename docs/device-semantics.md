@@ -69,7 +69,8 @@ Shipped library layout:
 ```
 smartbox/device/
   codes.py          reviewed product-code table (family/actuation/limits/surface/label)
-  capabilities.py   operation eligibility checks over NodeFacts (storage UI-mode shared with the adapter; the rest back the CLI)
+  capabilities.py   operation eligibility checks over NodeFacts (several entity gates shared with the adapter; the rest back the CLI)
+  setup.py          SetupView typed setup-mapping accessors
   profile.py        ControllerLimits/_CODE_LIMITS, bounds, resolve_profile and resolve_stored_profile
   control_modes.py  catalogue, wire index mapping and availability
   modes.py          identity-only lock/boost policy
@@ -171,16 +172,16 @@ with the profile, and keep the entity-surface matrix in the adapter.
 
 - **Slice 1 (codes, profiles, limits) landed.** `smartbox.device.profile`
   owns the neutral `ControllerLimits`, the code/family sets, bounds helpers
-  and `resolve_profile`. The integration's `controller.py` re-exports them and
-  keeps the not-yet-moved gates. The library golden test pins all 51 codes
+  and `resolve_profile`. The integration imports them directly. The library
+  golden test pins all 51 codes
   against the reviewed fixture. Behaviour is unchanged.
 - **Slice 2 (control modes) landed.** `smartbox.device.control_modes` owns
   the decoded family/actuation maps, UI/wire arrays, labels and availability.
   The integration imports it directly (the `control_mode.py` shim was
   deleted); the entity keeps the HA select shape.
 - **Slice 3 complete.** `smartbox.device.modes` owns the identity-only
-  lock/boost policy; the status-reading boost mode helpers stay in the
-  adapter's `controller.py`, and
+  lock/boost policy; the status-reading boost policy helpers stay in the
+  adapter's `boost_policy.py` (`boost_activation.py` keeps planning), and
   `smartbox.device.storage` owns the storage semantics with a neutral
   `StorageIntent`; the integration's `storage.py` maps intents to `HVACMode`.
   No Home Assistant type remains in the moved storage logic.
@@ -237,7 +238,7 @@ same change, and has a golden comparison.
    `SMARTBOX_LIB` or keep `../smartbox`). Add the code row's
    `family`/`actuation`/`limits_family`/`surface`/`label`/
    `supports_extra_options`/`lhz_duty`/`thm_heater`/`fixed_time_boost`/`water`/
-   `stepped_charge` columns and the stored profile facts. The same file carries the reviewed
+   `stepped_charge`/`extra_energy` columns and the stored profile facts. The same file carries the reviewed
    control-mode wire/UI arrays, labels and the storage UI-mode options, so a
    catalogue change updates its top-level `control_modes` block or the
    affected row. Bump `schema` only when the fixture shape itself changes.

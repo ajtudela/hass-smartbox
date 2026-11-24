@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Compatibility notes
+
+- The integration needs `smartbox>=3.3,<3.4` once that library release is
+  published. Until then the branch keeps the published PyPI pin and the local
+  sibling-checkout development flow.
+- Entity/service surface changes: the controller profile now clamps programme
+  temperatures and max-stemp to the stored limit; storage UI mode, boost,
+  easy/runback, control-mode, prog-temps and charging schedule are gated by
+  the product capability checks;
+  the new services follow the app's request shapes. Diagnostics gains the
+  resolved controller profile. Entity IDs and unique IDs are unchanged.
+- The adapter now uses the shared capability checks for storage UI mode,
+  control mode, EASY/RUNBACK, max-stemp, prog-temps, boost mode and the
+  charging schedule. The climate setpoint grid comes from
+  `ControllerLimits.setpoint_step_c`, and the PIR entity gate from
+  `settings.pir_enabled`. `controller.py` is gone; its boost helpers live in
+  `boost_activation.py`, and `storage.py` only maps neutral intents to
+  `HVACMode`.
+- A node whose live PID was missing at discovery schedules one entry reload
+  when the version slot supplies it, so its entity surface can materialize.
+
 ### Added
 
 - Thermostat (`thm`) nodes are modelled as climate entities: `AUTO` and `OFF` (the app's ON resolves to `AUTO`), with `HEAT`/`COOL` as a manual override the app does not list, a 7–35 °C target range (the app's `minTempCelsius: 7` floor and the vendor's 35 °C maximum), the current temperature, and a low-battery binary. Setpoints use the app's plain `{stemp, units}` body: the controller deletes `modified_auto` before POSTing. A thermostat programme is a per-day `{m, t}` array with a `{prog, units}` write, not the heater int-slot shape; the schedule sensor and service are described below. The shape is verified against the vendor 2.54.2 `ThermostatController` (`mode`/`stemp`/`mtemp`/`active`/`units`, `setup.type`, `load_type`/`control_mode`/`anti_grippage`/`away_offset`); the demo-only `batt_level` and `error_code` fields are not exposed, and `presence` (a live panel-touch artifact, not a thermostat field) is not used. The wire taxonomy is recorded in `docs/api-contract.md` §3 and the per-tenant capability surface in `docs/webapi-spec.md` §3.2.
@@ -19,7 +40,7 @@
 - Boost and runback activation attributes: `number.*_config_boost_temperature`, `number.*_config_boost_duration`, `number.*_config_runback_temperature` and `number.*_config_runback_duration`. Legacy controllers keep the boost pair on the device (`extra_options.boost_temp`/`boost_time`, the same fields the app writes). FULL `/boost_mode` WiFi/ATC nodes expose the pair only when status advertises `temp_and_time`, and runback only when it advertises `runback`; those values live in a per-entry `.storage` record, survive a restart, and feed the one-click switch/preset. Runback has its own temperature and duration (30-minute grid) instead of overloading the shared `boost_time` field. A missing, malformed or off-grid value is refused with a validation error, so the frame sent to the heater is always complete.
 - Test coverage now pins every decoded product code (`test_product_code_parity.py`: family, bounds, profiles, boost configs, EASY/RUNBACK, lock and setting gates) and the exact entity domains/unique keys per representative family (`test_entity_surface_matrix.py`), including the FULL-boost attribute variants (temp-and-time, fixed-only, empty mode list). The surface matrix snapshots options, bounds and current states for every case (not a sample), adds live-frame state cases and box-level attributes, and the build no longer leaves the duty/control-mode selects empty before the first status frame (they fall back to the discovery setup).
 - Diagnostics now include the neutral controller profile (limits, bounds, programme kind and ranges) for every node, and `smartbox profile` in the sibling library resolves the same data offline. The migration branch installs the sibling library editable (`tools/dev_install_library.sh`, tox `-e ../smartbox`) until a library minor is published.
-- The migration validation baseline: a reviewed shared product-code fixture (51 codes, now the library's single canonical copy consumed by the integration parity test), per-unit entity-registry and diagnostics goldens, a service-name snapshot with a field/selector check against the registered schemas, an activation request-shape matrix, and a per-surface attribute/state snapshot. `controller.py` now re-exports the neutral limits/profiles/surface predicates from `smartbox.device.profile` and the lock/boost policy from `smartbox.device.modes`; `select.py` imports the catalogue directly from `smartbox.device.control_modes` (the `control_mode.py` shim was deleted); `storage.py` maps the neutral `StorageIntent` from `smartbox.device.storage` to `HVACMode`; and `identity.py` delegates the setting gates to `smartbox.device.settings`.
+- The migration validation baseline: a reviewed shared product-code fixture (51 codes, now the library's single canonical copy consumed by the integration parity test), per-unit entity-registry and diagnostics goldens, a service-name snapshot with a field/selector check against the registered schemas, an activation request-shape matrix, and a per-surface attribute/state snapshot. the adapter imports the neutral limits/profiles/surface predicates from `smartbox.device.profile`, the lock/boost policy from `smartbox.device.modes` and the catalogue from `smartbox.device.control_modes` (the `controller.py` and `control_mode.py` shims were deleted); `storage.py` maps the neutral `StorageIntent` from `smartbox.device.storage` to `HVACMode`; and `identity.py` delegates the setting gates to `smartbox.device.settings`.
 
 ### Changed
 
@@ -52,7 +73,7 @@
 - Storage UI mode is created only for Elnur storage while the unit is in a classic mode. Its choices follow the product: 14 accepts Classic combined/Classic accumulator, 20/25 accept Ecombi/Classic combined, and water storage 2A omits the setting. Water storage filters AUTO/MANUAL through `extra_nrg_conf`, gets no frost/eco/comfort programme numbers, and gets no generic heater schedule (its ON/OFF_AUTO profile shape is not modelled); it also omits the away-offset, window-detection and true-radiant settings, and its target-charge sensor is read-only (no `set_charging_schedule` target). An absent `operational_mode`/`ui_mode` no longer infers AUTO.
 - Duty-limit entities are gated on the Helki/Lhz heater chain, and max-stemp entities are withheld on storage, Tevolve triac/WiFi/towel-rail, and Haverland 1D, matching the app's controller settings.
 - Boost temperatures are formatted to one decimal on both the number and legacy activation paths, so a Fahrenheit-to-Celsius conversion writes `21.1` rather than a long float.
-- Runtime device decisions now use the live version PID: storage modes/writes, boost availability, lock/option choices, controller limits and the schedule catalogue update when a late version frame supplies a PID that the discovery read missed. Entity creation still uses the discovery snapshot, so adding or removing entities after a late PID needs a reload.
+- Runtime device decisions now use the live version PID: storage modes/writes, boost availability, lock/option choices, controller limits and the schedule catalogue update when a late version frame supplies a PID that the discovery read missed. Entity creation still uses the discovery snapshot; a PID that was missing at discovery schedules one automatic entry reload so the surface can materialize.
 - Unknown/`00` ACM nodes use the HelkiStorage mode fallback, and water storage in the combined extra-energy modes offers AUTO/OFF (HEAT/OFF in EXTRA_ENERGY_USAGE), matching the app's default-mode resolution.
 - ATC 4C/4D use the integer lock payload inherited from the WiFi controller.
 - THM 28 with `sensor_mode == NO_PROBES` hides temperature control, the frost/eco/comfort numbers, the boost/EASY/RUNBACK entities, the away-offset/control-mode/window/true-radiant settings and the generic heater schedule; a direct `climate.set_temperature` call is rejected. The ON/OFF timer programme is not modelled.

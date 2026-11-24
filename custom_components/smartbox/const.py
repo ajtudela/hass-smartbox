@@ -36,7 +36,7 @@ DAY_KEYS = ("0", "1", "2", "3", "4", "5", "6")
 # Base ElectricHeater programme catalogue, in the vendor app's sorted order
 # (docs/webapi-spec.md §5): 0=ICE, 1=ECO, 2=COMF. Per-controller catalogues
 # (the four-profile Helki/Haverland families and the off-first htr_mod order)
-# live in controller.py; this tuple is the default used by the sensor when a
+# live in smartbox.device.profile; this tuple is the default used by the sensor when a
 # node has no decoded controller-specific list.
 PROG_PROFILE_NAMES = ("frost", "eco", "comfort")
 CONF_API_NAME = "api_name"

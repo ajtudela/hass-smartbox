@@ -1,40 +1,16 @@
-"""Compatibility re-exports and adapter-local boost helpers.
-
-Limits/profiles/surface predicates live in ``smartbox.device.profile``; lock
-and boost policy in ``smartbox.device.modes``. New imports go to
-``smartbox.device.*`` directly; this module keeps the adapter-local
-status-reading boost helpers and the re-exports the remaining adapter modules
-still import.
-"""
+"""Identity/status boost-policy helpers shared by the adapter surfaces."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from smartbox.core.merging import boost_config
-from smartbox.device.modes import (
-    boost_activation_takes_parameters,
-    boost_params_editable,
-    boost_uses_legacy_path,
-    lock_kind,
-    supports_easy,
-    supports_runback,
-)
+from smartbox.device.codes import product_code
+from smartbox.device.modes import boost_params_editable
 from smartbox.device.profile import (
     HAVERLAND_FIXED_TIME_CODES,
     TEVOLVE_ATC_CODES,
     TEVOLVE_WIFI_CODES,
-    ControllerLimits,
-    boost_temperature_bounds,
-    climate_bounds,
-    controller_limits,
-    has_no_probes,
-    is_heater_surface,
-    is_thermostat_surface,
-    max_limit_bounds,
-    product_code,
-    profile_bounds,
-    prog_bounds_c,
 )
 from smartbox.protocol.values import BoostConfig
 
@@ -96,27 +72,3 @@ def runback_params_configurable(
     if code not in TEVOLVE_WIFI_CODES and code not in TEVOLVE_ATC_CODES:
         return False
     return "runback" in boost_modes_available(status)
-
-
-__all__ = [
-    "ControllerLimits",
-    "boost_activation_mode",
-    "boost_activation_takes_parameters",
-    "boost_modes_available",
-    "boost_params_configurable",
-    "boost_params_editable",
-    "boost_temperature_bounds",
-    "boost_uses_legacy_path",
-    "climate_bounds",
-    "controller_limits",
-    "has_no_probes",
-    "is_heater_surface",
-    "is_thermostat_surface",
-    "lock_kind",
-    "max_limit_bounds",
-    "profile_bounds",
-    "prog_bounds_c",
-    "runback_params_configurable",
-    "supports_easy",
-    "supports_runback",
-]
