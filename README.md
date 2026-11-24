@@ -440,7 +440,7 @@ The diagnostics file is grouped by the question it answers:
 | `runtime.feed` | Whether values are flowing, the reason and duration of a gap, the outage count, and the grace window. |
 | `runtime.membership` | Nodes still awaiting materialization and whether the reload repair issue is raised. |
 | `runtime.statistics_import` | Which first-setup imports are pending or completed, and the failure count, last error and remaining backoff. |
-| `runtime.engine` | Raw device and node slots (device IDs replaced by `device_N` labels), plus the armed deadlines: the direct answer to “why is this entity unavailable?”. |
+| `runtime.engine` | Raw device and node slots (device IDs replaced by `device_N` labels), the resolved neutral controller `profile` per node (code, limits, climate/max/boost/programme bounds), plus the armed deadlines: the direct answer to “why is this entity unavailable?”. |
 | `ws_user_recovery` | Whether the websocket repair issue is raised. |
 | `hass_devices` / `hass_entities` | Home Assistant’s registry view: entity IDs and registry state, with device identifiers, serials, deep links and unique IDs redacted. |
 
@@ -471,11 +471,12 @@ See the [Home Assistant logger docs] for how to view the actual logs. Please fil
 
 > [!IMPORTANT]
 > The device-semantics branch imports the sibling `smartbox` checkout because
-> its `smartbox.device` modules are not in the published wheel yet. Clone it
-> next to this repo and run `tools/dev_install_library.sh` (or set
-> `SMARTBOX_LIB`), then `uv sync --all-extras --dev`. The tox environments do
-> the same with `-e ../smartbox`; CI needs both repositories at matching
-> branches until the library minor is released.
+> its `smartbox.device` modules are not in the published wheel yet. Run
+> `uv sync --all-extras --dev` first, then `tools/dev_install_library.sh`
+> (which installs `../smartbox` editable; override with `SMARTBOX_LIB=/path`).
+> Re-run the script after any `uv sync`. The tox environments install the same
+> sibling path via `SMARTBOX_LIB`; CI must check out both repositories at
+> matching branches until the library minor is released.
 
 
 For wire investigation against the real hosts (without a live HA deploy), `tools/live_probe.py` drives the installed `smartbox.protocol` layer from the CLI. It needs YOUR OWN `.env` file at the repo root (gitignored) with:

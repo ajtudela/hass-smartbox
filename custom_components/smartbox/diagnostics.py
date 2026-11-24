@@ -27,6 +27,7 @@ from homeassistant.helpers import (
 )
 from smartbox.device.profile import resolve_profile
 from smartbox.protocol.errors import ResellerNotExistError
+from smartbox.protocol.values import parse_number_or_none
 
 from . import ws_user_flapping_issue_id
 from .const import CONF_API_NAME, DOMAIN
@@ -261,11 +262,14 @@ def _node_profile(
     if not isinstance(pid, str) or not pid:
         return None
     fw_version = version.get("fw_version")
+    setup = node.setup if isinstance(node.setup, Mapping) else {}
+    max_limit_c = parse_number_or_none(setup.get("max_stemp_limit"))
     profile = resolve_profile(
         node_type,
         pid,
         fw_version if isinstance(fw_version, str) else None,
-        node.setup,
+        setup,
+        max_limit_c=max_limit_c,
     )
     prog_bounds = profile.prog_bounds
     return {

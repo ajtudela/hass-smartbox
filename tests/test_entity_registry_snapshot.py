@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 from homeassistant.helpers import entity_registry as er
+import pytest
 
 from custom_components.smartbox.const import DOMAIN
 from tests.stack import seed_stack
@@ -67,6 +68,7 @@ async def test_entity_registry_snapshot(
         fixture.write_text(
             json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        pytest.skip("snapshot updated")
 
     expected = json.loads(fixture.read_text(encoding="utf-8"))
     assert snapshot == expected

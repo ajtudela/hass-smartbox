@@ -80,7 +80,11 @@ def plan_boost(
     legacy = boost_uses_legacy_path(pid, setup)
     mode = None if legacy else boost_activation_mode(pid, setup, status)
 
-    if not boost_activation_takes_parameters(pid, setup) and mode is None:
+    if (
+        not boost_activation_takes_parameters(pid, setup)
+        and mode is None
+        and node.node_type != "acm"
+    ):
         return ActivationPlan(None, None, None, legacy=legacy)
     if (
         not legacy
@@ -212,7 +216,11 @@ def _runback_max_minutes(node: SmartboxNodeInfo, state: NodeState | None) -> int
     extra = setup.get("extra_options")
     raw = extra.get("max_runback_time") if isinstance(extra, dict) else None
     value = parse_number_or_none(raw)
-    return int(value) if value is not None else RUNBACK_TIME_MAX
+    if value is None:
+        return RUNBACK_TIME_MAX
+    # The slider clamps the same field; keep the planner's ceiling above its
+    # 30-minute floor so an unusually low stored cap cannot invert the range.
+    return max(int(value), RUNBACK_TIME_DEFAULT)
 
 
 def _as_int(value: object) -> int | None:

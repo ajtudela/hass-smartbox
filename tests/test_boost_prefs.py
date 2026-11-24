@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from custom_components.smartbox.boost_prefs import BoostPrefs, boost_prefs_for
@@ -47,3 +49,17 @@ async def test_malformed_records_degrade_to_no_preference(hass):
     await prefs.async_load()
     assert prefs.get("node").boost_time is None
     assert prefs.get("node").boost_temp_c is None
+
+
+async def test_failed_load_does_not_clobber_the_stored_record(hass, monkeypatch):
+    """An unreadable record is not overwritten by a later slider write."""
+    prefs = BoostPrefs(hass, "entry_4")
+    monkeypatch.setattr(
+        prefs._store, "async_load", AsyncMock(side_effect=OSError("unreadable"))
+    )
+    await prefs.async_load()
+    saved = AsyncMock()
+    monkeypatch.setattr(prefs._store, "async_save", saved)
+    await prefs.async_update("node", boost_time=60)
+    assert prefs.get("node").boost_time == 60
+    saved.assert_not_awaited()

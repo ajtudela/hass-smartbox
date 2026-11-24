@@ -37,6 +37,7 @@ from .adapter import (
     extra_temp_from_node_units,
     node_boost_params,
     node_max_stemp_limit,
+    node_max_stemp_limit_c,
     node_power_limit,
     node_runback_limits,
     node_runback_params,
@@ -716,7 +717,7 @@ class MaxTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
             self._ref,
             value,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits),
+            bounds_c=prog_bounds_c(limits, max_limit_c=value),
             offset_c=limits.profile_offset_c,
         )
 
@@ -744,7 +745,12 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     @property
     def _device_scale_bounds(self) -> tuple[float, float, float]:
         """Return the controller's bounds for this programme profile."""
-        bounds = profile_bounds(self._controller_limits(), self.profile)
+        state = self._node_state()
+        bounds = profile_bounds(
+            self._controller_limits(),
+            self.profile,
+            max_limit_c=node_max_stemp_limit_c(state),
+        )
         if bounds is None:
             return super()._device_scale_bounds
         return self._bounds_from_celsius(bounds[0], bounds[1], 0.5, 1.0)
@@ -788,7 +794,7 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
             comf_temp=current["comf_temp"],
             units=units,
             changed=self.status_key,
-            bounds_c=prog_bounds_c(limits),
+            bounds_c=prog_bounds_c(limits, max_limit_c=node_max_stemp_limit_c(state)),
             offset_c=limits.profile_offset_c,
         )
 

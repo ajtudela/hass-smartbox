@@ -13,6 +13,8 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from custom_components.smartbox.diagnostics import async_get_config_entry_diagnostics
 from tests.stack import seed_stack
 
@@ -46,4 +48,5 @@ async def test_diagnostics_snapshot(hass, mock_smartbox, config_entry, units) ->
         fixture.write_text(
             json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+        pytest.skip("snapshot updated")
     assert snapshot == json.loads(fixture.read_text(encoding="utf-8"))

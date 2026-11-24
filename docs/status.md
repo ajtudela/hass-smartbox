@@ -11,8 +11,8 @@
   `migration/device-semantics`.
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
-  request-shape matrix, and an old-vs-new profile equivalence harness.
-  Integration suite: 2076 passed; library: 696 passed.
+  request-shape matrix, and per-surface attribute/state snapshots.
+  Integration suite: 1686 passed, 6 skipped; library: 716 passed.
 - Slice 1 landed: `smartbox.device.profile` owns limits/profiles/bounds and
   `resolve_profile`; slice 2 moved the control-mode catalogue to
   `smartbox.device.control_modes`; slice 3 moved lock/boost policy to

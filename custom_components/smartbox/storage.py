@@ -76,7 +76,13 @@ def write_for(
     hvac_mode: HVACMode,
 ) -> StorageMode | None:
     """Translate one HA mode into the storage operation the app sends."""
-    write = _write_for(node_type, pid, setup, StorageIntent(hvac_mode.value))
+    try:
+        intent = StorageIntent(hvac_mode.value)
+    except ValueError:
+        # HA serves only the entity's hvac_modes; a direct caller can pass any
+        # enum value. Preserve the old None -> translated user-error contract.
+        return None
+    write = _write_for(node_type, pid, setup, intent)
     if write is None:
         return None
     return StorageMode(

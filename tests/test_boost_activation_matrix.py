@@ -1,9 +1,8 @@
 """Activation request-shape matrix.
 
 The surface tests say which controls exist; this matrix says what each
-activation sends. It is the oracle for the device-semantics extraction:
-boost_kind, the fixed-time override and the FULL mode list must keep producing
-the same plan for every family and boost config.
+activation sends. It pins the intended plan for every family and boost config,
+including the config-1/2 legacy paths and the storage `acm` case.
 """
 
 from __future__ import annotations
@@ -144,6 +143,17 @@ BOTH = {"boost_modes_available": ["temp_and_time", "max_temp_fixed_time"]}
             {},
             ActivationPlan("max_temp_fixed_time", None, None, legacy=ENDPOINT),
             id="wifi-full-fixed-only",
+        ),
+        pytest.param(
+            "081C0000",
+            {
+                "factory_options": {"boost_config": 1},
+                "extra_options": {"boost_temp": "20.0", "boost_time": 60},
+            },
+            {"units": "C", "stemp": "20.0"},
+            {},
+            ActivationPlan(None, 20.0, 60, legacy=ENDPOINT),
+            id="storage-config1-keeps-parameters",
         ),
         pytest.param(
             "081C0000",
@@ -293,3 +303,15 @@ def test_fahrenheit_preferences_are_converted_to_node_units() -> None:
     )
     plan = plan_boost(node, state, _Prefs(boost_temp_c=23.0, boost_time=60))
     assert plan.temperature == 73.0
+
+
+def test_runback_low_max_time_is_clamped() -> None:
+    """A max_runback_time below the floor cannot invert the valid range."""
+    node, state, _store = _world(
+        "01340000",
+        {**FULL, "extra_options": {"max_runback_time": 20}},
+        {"units": "C", "stemp": "20.0", "boost_modes_available": ["runback"]},
+    )
+    assert plan_runback(node, state, _Prefs()) == ActivationPlan(
+        "runback", 20.0, 30, legacy=ENDPOINT
+    )

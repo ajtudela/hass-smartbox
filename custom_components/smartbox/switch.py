@@ -625,7 +625,7 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
             self._ref,
             limit,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits),
+            bounds_c=prog_bounds_c(limits, max_limit_c=limit),
             offset_c=limits.profile_offset_c,
         )
 
@@ -637,7 +637,7 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
             self._ref,
             None,
             node_units(self._node_state()),
-            bounds_c=prog_bounds_c(limits),
+            bounds_c=prog_bounds_c(limits, max_limit_c=None),
             offset_c=limits.profile_offset_c,
         )
 

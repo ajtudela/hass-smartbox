@@ -7,13 +7,9 @@ from unittest.mock import MagicMock
 
 from smartbox.core.engine import SmartboxEngine
 from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
+from smartbox.device import control_modes as library_control_mode
 
-from custom_components.smartbox import control_mode
 from custom_components.smartbox.control_mode import (
-    HTR_TRIAC_UI,
-    MODE_LABELS_C,
-    STORAGE_WIRE,
-    _choices,
     control_mode_available,
     control_mode_choices,
     control_mode_label,
@@ -173,19 +169,6 @@ def test_product_code_and_label_none_paths() -> None:
     assert control_mode_label(choices, 99) is None
 
 
-def test_ui_mode_missing_from_wire_returns_none() -> None:
-    # A triac UI offers PID, which the OFF-first storage wire does not contain.
-    assert _choices(HTR_TRIAC_UI, STORAGE_WIRE, MODE_LABELS_C) is None
-
-
-def test_choices_none_path_in_control_mode_choices(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "smartbox.device.control_modes._ui_for_actuation",
-        lambda _actuation, _sensor: ("OFF",),
-    )
-    assert control_mode_choices(PID, "htr", {"control_mode": 0}, "C") is None
-
-
 def test_unoffered_stored_index_keeps_the_catalogue() -> None:
     # Relay htr wire 4 is plain PID, which the relay UI does not offer.
     choices = control_mode_choices(PID, "htr", {"control_mode": 4}, "C")
@@ -221,7 +204,7 @@ def test_unlisted_acm_code_uses_the_htr_default() -> None:
 
 
 def test_storage_family_requires_relay_actuation(monkeypatch) -> None:
-    monkeypatch.setitem(control_mode.ACTUATION, "1C", "TRIAC")
+    monkeypatch.setitem(library_control_mode.ACTUATION, "1C", "TRIAC")
     assert control_mode_choices("041C", "acm", {"control_mode": 5}, "C") is None
 
 

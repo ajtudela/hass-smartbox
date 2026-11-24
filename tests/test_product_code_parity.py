@@ -684,6 +684,9 @@ def test_product_code_parity_row(code: str) -> None:
         assert limits.min_c == row.min_c
         assert limits.max_c == row.max_c
         assert limits.profiles == row.profiles
+        # The row records the unclamped controller catalogue; a node's
+        # max_stemp_limit shifts these ceilings (tested in the library and the
+        # programme-number entity tests).
         assert prog_bounds_c(limits) == row.prog_bounds
         if row.ice_editable:
             assert profile_bounds(limits, "frost") is not None

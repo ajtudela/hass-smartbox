@@ -1,8 +1,9 @@
 # Device semantics extraction — design record
 
-> **Status: design, not scheduled.** The extraction starts only after the
-> current feature batch is released and its behavior is frozen. Until then this
-> document is the reference for the target boundary and the migration order.
+> **Status: migration in progress.** Slices 1-4 have landed on
+> `migration/device-semantics`; slice 5 (CLI/diagnostics/pin) is partly done.
+> The library minor and the integration pin are deferred. See
+> [Migration progress](#migration-progress) for the landed boundary.
 
 ## Purpose
 
@@ -39,8 +40,10 @@ is released and its entity behavior is fixed.
 
 ## Current duplication (pre-extraction inventory)
 
-This table describes the adapter as it is before the extraction. Delete the
-relevant row as each slice lands.
+This table describes the adapter as it was before the extraction. The slices
+have moved the listed facts into `smartbox.device`; the integration keeps only
+thin re-exports/adapters. Use the table as the migration checklist, not as a
+current duplication map.
 
 | Fact | Current homes |
 |---|---|
@@ -194,15 +197,15 @@ with the profile, and keep the entity-surface matrix in the adapter.
 - **Slice 1 (codes, profiles, limits) landed.** `smartbox.device.profile`
   owns the neutral `ControllerLimits`, the code/family sets, bounds helpers
   and `resolve_profile`. The integration's `controller.py` re-exports them and
-  keeps the not-yet-moved gates. The library golden test pins all 51 codes;
-  the temporary `tests/test_profile_equivalence.py` compares the old helpers
-  to the library resolver across 51 codes × 4 firmware branches × 2 setup
-  shapes. Behaviour is unchanged.
+  keeps the not-yet-moved gates. The library golden test pins all 51 codes
+  against the reviewed fixture. Behaviour is unchanged.
 - **Slice 2 (control modes) landed.** `smartbox.device.control_modes` owns
   the decoded family/actuation maps, UI/wire arrays, labels and availability.
   The integration's `control_mode.py` re-exports it; the entity keeps the HA
   select shape.
-- **Slice 3 complete.** `smartbox.device.modes` owns the lock/boost policy and
+- **Slice 3 complete.** `smartbox.device.modes` owns the identity-only
+  lock/boost policy; the status-reading boost mode helpers stay in the
+  adapter's `controller.py`, and
   `smartbox.device.storage` owns the storage semantics with a neutral
   `StorageIntent`; the integration's `storage.py` maps intents to `HVACMode`.
   No Home Assistant type remains in the moved storage logic.
@@ -227,9 +230,8 @@ with the profile, and keep the entity-surface matrix in the adapter.
 Each slice is behavior-preserving, lands with the adapter copy deleted in the
 same change, and has a golden comparison.
 
-1. **Codes, profiles and limits.** Add `device/codes.py`,
-   `device/profiles.py`, `device/temperatures.py`; move the controller table
-   and bounds. The integration imports the profile; the old adapter copy is
+1. **Codes, profiles and limits.** Land `device/profile.py` (codes, limits,
+   programme catalogues and bounds) and move the controller table. The integration imports the profile; the old adapter copy is
    deleted. No entity state change.
 2. **Control-mode catalogue.** Move the family/actuation/UI/wire data and
    resolution; the adapter keeps labels and `HVACMode` options. Delete the
@@ -247,6 +249,9 @@ same change, and has a golden comparison.
    diagnostics. This proves the extraction and closes the trigger.
 
 ## Golden tests
+
+See [profile-audit.md](profile-audit.md) for the decoded profile formulas,
+the per-family table and the max-stemp programme rule.
 
 - One table-driven library test, independent of Home Assistant, covering the
   current product codes and setup branches. `tests/test_product_code_parity.py`

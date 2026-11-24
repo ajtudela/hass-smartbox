@@ -10,6 +10,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 library="${SMARTBOX_LIB:-$repo_root/../smartbox}"
 python="$repo_root/.venv/bin/python"
 
+if [[ ! -x "$python" ]]; then
+  echo "No virtualenv at $repo_root/.venv; run 'uv sync --all-extras --dev' first." >&2
+  exit 1
+fi
+
 if [[ ! -d "$library/src/smartbox" ]]; then
   echo "smartbox checkout not found at $library" >&2
   echo "Set SMARTBOX_LIB=/path/to/smartbox and retry." >&2

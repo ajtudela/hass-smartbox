@@ -173,3 +173,8 @@ def test_storage_ui_mode_setting_only_in_a_classic_mode() -> None:
     assert ui_mode_available("08200000", ELNUR_ECOMBI) is False
     assert ui_mode_available("08200000", {"factory_options": {"ui_mode": 1}}) is True
     assert ui_mode_available("082A0000", {"factory_options": {"ui_mode": 1}}) is False
+
+
+def test_unsupported_hvac_mode_returns_none() -> None:
+    """A direct caller's unknown mode keeps the translated user-error path."""
+    assert write_for("acm", "081C", HELKI_MANUAL, HVACMode.COOL) is None

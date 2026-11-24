@@ -3271,21 +3271,21 @@ SNAPSHOTS = {
         },
         "number.prog_frost_temperature": {
             "min": 0.0,
-            "max": 34.0,
+            "max": 29.0,
             "step": 0.5,
             "unit": "°C",
             "device_class": "temperature",
         },
         "number.prog_eco_temperature": {
             "min": 0.5,
-            "max": 34.5,
+            "max": 29.5,
             "step": 0.5,
             "unit": "°C",
             "device_class": "temperature",
         },
         "number.prog_comfort_temperature": {
             "min": 1.0,
-            "max": 35.0,
+            "max": 30.0,
             "step": 0.5,
             "unit": "°C",
             "device_class": "temperature",
@@ -3444,7 +3444,8 @@ def test_entity_surface_matrix(name, node, expected) -> None:
     ],
 )
 def test_entity_attribute_matrix(node, expected) -> None:
-    """Options, bounds and current states for representative families."""
+    """Options, bounds and current states for every surface case."""
+    assert {case.id for case in CASES} == set(SNAPSHOTS)
     assert _attributes(node) == expected
 
 

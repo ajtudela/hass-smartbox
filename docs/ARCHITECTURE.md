@@ -193,7 +193,7 @@ Availability moves on evidence: a lost marker opens an unavailable window, an ok
 | Wire units | `test_client`, `test_auth`, `test_writes`, `test_values`, `test_mapping`, `test_ws_user_transport` | The wire rules: request shapes, body forms, normalization, the token lifecycle. Expected values trace to the contract record. |
 | Domain units | `test_core_engine`, `test_core_availability`, `test_core_writes`, `test_core_state` | Store merging and engine behavior, exercised with no Home Assistant involved. |
 | Platform behavior | `test_climate`, `test_sensor`, `test_number`, `test_switch`, `test_select`, `test_binary_sensor`, `test_init`, `test_availability`, `test_config_flow`, `test_diagnostics`, `test_system_health`, `test_identity`, `test_adapter`, `test_ws_user_wiring` | Real service calls and entity states. Only the wire endpoints are fakes; the engine, store and adapter under them are the real code. |
-| Device matrix | `test_product_code_parity`, `test_entity_surface_matrix`, `test_controller`, `test_storage` | Every decoded product code's family, bounds (climate, programme, max-limit, boost), profiles, boost-parameter policy, duty presets and capability/firmware gates, plus the exact entity domains/unique keys per representative family and variant, including the box-level entities. |
+| Device matrix | `test_product_code_parity`, `test_entity_surface_matrix`, `test_controller`, `test_storage`, `test_boost_activation_matrix`, `test_entity_registry_snapshot`, `test_diagnostics_snapshot`, `test_diagnostics_profile`, `test_services_snapshot` | Every decoded product code's facts, the exact entity domains/keys/options/bounds/states for every surface case, the box-level entities, activation request shapes, and the registry/diagnostics/service goldens. |
 | Wire reality | `test_loopback` | The real client against a real local aiohttp server: pins what the transport fakes assume about handshakes, closes and timeout shapes. |
 | Chaos | `test_soak` | The whole stack against a hostile local server — kills, stalls, 5xx, lost frames — asserting structural invariants: no stuck deadline, no leaked timer, silent teardown. |
 | Gates and tooling | `test_layering`, `test_docs_references`, `test_translations`, `test_version`, `test_utils`, `test_lib_contract`, `test_payload_bounding`, `test_live_probe`, `test_fake_api`, `test_fake_transport` | Architecture, documentation and tooling rules, and the fakes' own behavior. |
@@ -229,14 +229,16 @@ Three documents, three roles: `docs/api-contract.md` settles wire acceptance —
 
 `smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to a tagged tarball. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
 
-### Device semantics (planned extraction)
+### Device semantics (migration in progress)
 
-Product/controller profiles (setpoint and programme ranges, control-mode
-catalogues, lock/boost/storage/thermostat rules) still live in the adapter.
-The target is a Home Assistant-free `smartbox.device` layer consumed by the
-entities, the CLI and diagnostics, with the adapter keeping only presentation
-and entity lifecycle. The design, migration slices and acceptance tests are in
-[device-semantics.md](device-semantics.md). It is not scheduled.
+The neutral device facts live in `smartbox.device` (`profile`, `control_modes`,
+`modes`, `storage`, `settings`): setpoint/programme ranges, control-mode
+catalogues, lock/boost policy, storage intents and setting gates. The
+integration re-exports or maps them; entity construction, boost activation
+planning, preferences and services stay in the adapter. The design, slice
+status and acceptance tests are in [device-semantics.md](device-semantics.md).
+The library minor and the pin are deferred; the branch needs the sibling
+checkout (see the document's "Testing without a published wheel").
 
 ## Where to go deeper
 

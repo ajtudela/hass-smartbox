@@ -7,23 +7,25 @@ from this module while the extraction lands.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from smartbox.core.merging import boost_config
 from smartbox.device.modes import (
-    boost_activation_mode,
     boost_activation_takes_parameters,
     boost_is_fixed_time,
-    boost_modes_available,
-    boost_params_configurable,
     boost_params_editable,
     boost_uses_legacy_path,
     lock_kind,
-    runback_params_configurable,
     supports_easy,
     supports_runback,
 )
 from smartbox.device.profile import (
+    HAVERLAND_FIXED_TIME_CODES,
     PROFILES_BASE,
     PROFILES_HTR_MOD,
     PROFILES_WITH_OFF,
+    TEVOLVE_ATC_CODES,
+    TEVOLVE_WIFI_CODES,
     UI_MIN_TEMP_C,
     ControllerLimits,
     boost_temperature_bounds,
@@ -41,9 +43,76 @@ from smartbox.device.profile import (
     is_tevolve_wifi_family,
     is_thermostat_surface,
     max_limit_bounds,
+    product_code,
     profile_bounds,
     prog_bounds_c,
 )
+from smartbox.protocol.values import BoostConfig
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+_product_code = product_code
+_HAVERLAND_FIXED_TIME_CODES = HAVERLAND_FIXED_TIME_CODES
+_TEVOLVE_WIFI_CODES = TEVOLVE_WIFI_CODES
+_TEVOLVE_ATC_CODES = TEVOLVE_ATC_CODES
+
+
+def boost_modes_available(
+    status: Mapping[str, object] | None,
+) -> tuple[str, ...]:
+    """Return the FULL endpoint's advertised modes from a status snapshot."""
+    value = (status or {}).get("boost_modes_available")
+    if not isinstance(value, (list, tuple, set)):
+        return ()
+    return tuple(mode for mode in value if isinstance(mode, str))
+
+
+def boost_activation_mode(
+    pid: str | None,
+    setup: Mapping[str, object] | None,
+    status: Mapping[str, object] | None,
+) -> str | None:
+    """Return the ``/boost_mode`` style a FULL controller should use."""
+    if boost_config(setup or {}) != BoostConfig.FULL:
+        return None
+    code = _product_code(pid)
+    if code in _HAVERLAND_FIXED_TIME_CODES:
+        return "max_temp_fixed_time"
+    if code in _TEVOLVE_WIFI_CODES or code in _TEVOLVE_ATC_CODES:
+        modes = boost_modes_available(status)
+        if "temp_and_time" in modes:
+            return "temp_and_time"
+        if "max_temp_fixed_time" in modes:
+            return "max_temp_fixed_time"
+    return None
+
+
+def boost_params_configurable(
+    node_type: str,
+    pid: str | None,
+    setup: Mapping[str, object] | None,
+    status: Mapping[str, object] | None,
+) -> bool:
+    """Whether HA should expose boost temperature/duration controls."""
+    if boost_params_editable(node_type, pid, setup):
+        return True
+    return boost_activation_mode(pid, setup, status) == "temp_and_time"
+
+
+def runback_params_configurable(
+    pid: str | None,
+    setup: Mapping[str, object] | None,
+    status: Mapping[str, object] | None,
+) -> bool:
+    """Whether HA should expose runback temperature/duration controls."""
+    if boost_config(setup or {}) != BoostConfig.FULL:
+        return False
+    code = _product_code(pid)
+    if code not in _TEVOLVE_WIFI_CODES and code not in _TEVOLVE_ATC_CODES:
+        return False
+    return "runback" in boost_modes_available(status)
+
 
 __all__ = [
     "PROFILES_BASE",

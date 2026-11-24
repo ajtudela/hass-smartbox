@@ -59,13 +59,18 @@ class BoostPrefs:
         )
         self._lock = asyncio.Lock()
         self._nodes: dict[str, dict[str, Any]] = {}
+        self._load_failed = False
 
     async def async_load(self) -> None:
         """Load the record; malformed entries are ignored, not fatal."""
+        self._load_failed = False
         try:
             data = await self._store.async_load()
         except OSError, ValueError, TypeError, KeyError:
-            _LOGGER.debug("Ignoring unreadable boost-preference record")
+            # Keep the on-disk record untouched: saving the empty in-memory
+            # map would wipe every other node's preferences.
+            self._load_failed = True
+            _LOGGER.warning("Could not read the boost-preference record")
             return
         nodes = data.get("nodes") if isinstance(data, dict) else None
         if not isinstance(nodes, dict):
@@ -100,6 +105,8 @@ class BoostPrefs:
         if unknown:
             msg = f"unknown boost preference fields: {sorted(unknown)}"
             raise ValueError(msg)
+        if self._load_failed:
+            await self.async_load()
         async with self._lock:
             record = dict(self._nodes.get(node_id, {}))
             for key, value in fields.items():
@@ -111,7 +118,15 @@ class BoostPrefs:
                 self._nodes[node_id] = record
             else:
                 self._nodes.pop(node_id, None)
-            await self._store.async_save({"nodes": self._nodes})
+            if self._load_failed:
+                _LOGGER.warning(
+                    "Not persisting boost preferences: the stored record is unreadable"
+                )
+                return
+            try:
+                await self._store.async_save({"nodes": self._nodes})
+            except OSError:
+                _LOGGER.warning("Could not persist the boost preferences")
 
     async def async_clear(self) -> None:
         """Remove the record (entry removal or a re-pair)."""

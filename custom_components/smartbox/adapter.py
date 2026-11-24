@@ -501,6 +501,19 @@ def node_max_stemp_limit(state: NodeState | None) -> float | None:
     return celsius_to_node_units(limit, units)
 
 
+def node_max_stemp_limit_c(state: NodeState | None) -> float | None:
+    """Return the setup ``max_stemp_limit`` ceiling in Celsius.
+
+    The wire field is Celsius; the entity-facing helper converts it to the
+    node's display unit. Programme ranges are computed in Celsius and need
+    the raw value. ``0.0`` is the disabled sentinel.
+    """
+    limit = node_setup_float(state, "max_stemp_limit")
+    if limit is None or limit <= 0:
+        return None
+    return limit
+
+
 def node_power_limit(state: NodeState | None) -> int | None:
     """Return the node's OWN power limit from ``setup["power_limit"]``.
 
