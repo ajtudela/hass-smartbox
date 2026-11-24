@@ -218,3 +218,78 @@ def test_runback_requires_the_advertised_mode() -> None:
     with pytest.raises(ServiceValidationError) as err:
         plan_runback(node, state, store)
     assert err.value.translation_key == "runback_requires_full_boost"
+
+
+def test_boost_malformed_device_values_are_refused() -> None:
+    """A present-but-unreadable device value is not guessed."""
+    setup = {
+        "factory_options": {"boost_config": 2},
+        "extra_options": {"boost_temp": "bad", "boost_time": 60},
+    }
+    node, state, _store = _world("01320000", setup, {"units": "C"})
+    with pytest.raises(ServiceValidationError) as err:
+        plan_boost(node, state, _Prefs())
+    assert err.value.translation_key == "boost_parameters_required"
+
+
+@pytest.mark.parametrize(
+    ("prefs", "key"),
+    [
+        ({"boost_time": 2000}, "boost_duration_out_of_range"),
+        ({"runback_time": 2000}, "runback_duration_out_of_range"),
+    ],
+)
+def test_duration_ceiling_is_validated(prefs, key) -> None:
+    """Both boost and runback duration caps are enforced."""
+    node, state, _store = _world(
+        "01340000",
+        FULL,
+        {
+            "units": "C",
+            "stemp": "20.0",
+            "boost_modes_available": ["temp_and_time", "runback"],
+        },
+    )
+    store = _Prefs(**prefs)
+    with pytest.raises(ServiceValidationError) as err:
+        if "runback_time" in prefs:
+            plan_runback(node, state, store)
+        else:
+            plan_boost(node, state, store)
+    assert err.value.translation_key == key
+
+
+def test_runback_falls_back_to_controller_bounds_and_default_time() -> None:
+    """No status limits: the controller range and 30-minute default apply."""
+    node, state, _store = _world(
+        "01340000",
+        FULL,
+        {"units": "C", "stemp": "20.0", "boost_modes_available": ["runback"]},
+    )
+    assert plan_runback(node, state, _Prefs()) == ActivationPlan(
+        "runback", 20.0, 30, legacy=ENDPOINT
+    )
+
+
+def test_runback_max_time_comes_from_extra_options() -> None:
+    """The app's max_runback_time caps the runback duration."""
+    node, state, _store = _world(
+        "01340000",
+        {**FULL, "extra_options": {"max_runback_time": 90}},
+        {"units": "C", "stemp": "20.0", "boost_modes_available": ["runback"]},
+    )
+    store = _Prefs(runback_time=120)
+    with pytest.raises(ServiceValidationError) as err:
+        plan_runback(node, state, store)
+    assert err.value.translation_key == "runback_duration_out_of_range"
+
+
+def test_fahrenheit_preferences_are_converted_to_node_units() -> None:
+    """The stored Celsius preference is presented in the node's scale."""
+    node, state, _store = _world(
+        "01340000",
+        FULL,
+        {"units": "F", "stemp": "68.0", "boost_modes_available": ["temp_and_time"]},
+    )
+    plan = plan_boost(node, state, _Prefs(boost_temp_c=23.0, boost_time=60))
+    assert plan.temperature == 73.0

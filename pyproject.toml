@@ -148,8 +148,10 @@ skip_install = true
 description = "Run test under {base_python}"
 dependency_groups = ["dev"]
 # smartbox is a project dependency but tox skips the project install
-# (skip_install); the suite imports smartbox.protocol/core directly.
-deps = ["smartbox>=3.2.1,<3.3"]
+# (skip_install); the suite imports smartbox.protocol/core directly. The
+# migration branch installs the sibling checkout because the new
+# smartbox.device modules are not in the published wheel yet.
+deps = ["-e{toxinidir}/../smartbox"]
 commands = [["python", "-m", "pytest", "--cov=custom_components.smartbox", "--cov-branch", "--cov-fail-under=95", "--cov-append", "--cov-report=term", "--cov-report=xml", "--junitxml=junit.xml"]]
 
 [tool.tox.env.min]
@@ -163,7 +165,7 @@ dependency_groups = []
 deps = [
   "pytest-homeassistant-custom-component==0.13.329",
   "pytest-mock>=3.14.0",
-  "smartbox>=3.2.1,<3.3",
+  "-e{toxinidir}/../smartbox",
 ]
 # The suite's per-test timeout, xdist and coverage plugins come from the
 # harness; only pytest-mock is outside it. Fail loudly if the pin drifts.

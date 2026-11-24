@@ -211,8 +211,12 @@ with the profile, and keep the entity-surface matrix in the adapter.
   power limit, duty presets, priority, programme temperatures, boost
   availability). The integration's `identity.py` keeps thin wrappers over the
   frozen node object.
-- Slice 5 (CLI profile, diagnostics, pin) remains. The adapter keeps boost
-  activation, preferences and the FULL attribute visibility throughout.
+- **Slice 5 is in progress.** `smartbox profile` is the library's second
+  consumer, diagnostics carry the resolved profile per node, and the migration
+  branch installs the sibling checkout via `tools/dev_install_library.sh` and
+  the tox `-e ../smartbox` dependency. The version bump, pin and release
+  remain deferred. The adapter keeps boost activation, preferences and the
+  FULL attribute visibility throughout.
 - The migration branch imports `smartbox.device`, which is not in the
   published 3.2.1 wheel. Develop against the sibling editable checkout and do
   not merge or release until a library minor with these modules is published
@@ -252,9 +256,10 @@ same change, and has a golden comparison.
   and delete the integration's controller imports from that test.
 - One integration snapshot test asserting entity domains, unique keys,
   options, bounds and current states versus the pre-extraction baseline.
-  `tests/test_entity_surface_matrix.py` now does this for 15 representative
-  cases across the families, plus all 33 surface cases and the box-level
-  entities; keep it adapter-side and extend it as new entities appear.
+  `tests/test_entity_surface_matrix.py` now does this for every surface case
+  (33 node cases, live-frame state cases and the box-level entities), plus the
+  full entity-registry and diagnostics goldens; keep it adapter-side and
+  extend it as new entities appear.
 - Use the known live fixtures: the HJM Helki base heater (four profiles,
   integer lock), the base 0402 heater (three profiles, boolean lock, max limit
   23), storage 1C/2E and Elnur 14/20/25/2A setup branches, htr_mod 0A/FF,
@@ -268,6 +273,21 @@ same change, and has a golden comparison.
 - Boost activation planning and validation (`boost_activation.py`), the
   per-entry preference store (`boost_prefs.py`) and the runback parameter
   entities stay in the adapter; their tests remain in this repo.
+
+## Testing without a published wheel
+
+Until the library minor is released, the integration imports
+``smartbox.device`` from the sibling checkout:
+
+- Check the library out next to this repo (``../smartbox``) or set
+  ``SMARTBOX_LIB=/path/to/smartbox``.
+- Run ``tools/dev_install_library.sh`` (it installs the sibling editable and
+  verifies the five device modules import).
+- The tox environments install ``-e {toxinidir}/../smartbox`` instead of the
+  PyPI pin; CI must check out both repositories at matching branches for the
+  migration run. The release pin is a separate, later change.
+- ``tests/conftest.py`` fails with an actionable message when the sibling
+  modules are missing, instead of a raw import error.
 
 ## Release and pin
 

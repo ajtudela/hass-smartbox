@@ -19,9 +19,11 @@
   `smartbox.device.modes` and storage semantics to `smartbox.device.storage`
   with a neutral intent enum; slice 4 moved the entity-setting gates to
   `smartbox.device.settings`; surface predicates joined the profile. The
-  integration re-exports/maps them. Remaining: CLI/diagnostics profile and the
-  pin. `docs/vendor-deviations.md` lists the behaviour the extraction must
-  keep. The branch needs the sibling editable library and must not be merged
+  integration re-exports/maps them. Slice 5 is in progress: `smartbox profile`
+  and diagnostics profile data landed; version/pin/release are deferred.
+  `docs/vendor-deviations.md` lists the behaviour the extraction must keep.
+  The branch installs the sibling library editable
+  (`tools/dev_install_library.sh`, tox `-e ../smartbox`) and must not be merged
   before a library minor is published and the pin raised.
 
 ## State of 3.2.1

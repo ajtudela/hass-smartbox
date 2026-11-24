@@ -13,6 +13,55 @@
         "nodes": {
           "acm/1": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                5.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 5.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  6.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  5.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  5.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -231,6 +280,55 @@
           },
           "htr/0": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -474,6 +572,55 @@
         "nodes": {
           "htr_mod/1": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -693,6 +840,55 @@
           },
           "htr_mod/2": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -913,6 +1109,55 @@
           },
           "htr_mod/3": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -1132,6 +1377,55 @@
           },
           "htr_mod/4": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -1351,6 +1645,55 @@
           },
           "htr_mod/5": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": {
               "prog": {
                 "0": [
@@ -1562,6 +1905,55 @@
           },
           "pmo/0": {
             "available": true,
+            "profile": {
+              "boost_bounds": [
+                5.0,
+                30.0
+              ],
+              "climate_bounds": [
+                1.0,
+                30.0
+              ],
+              "code": "OD",
+              "limits": {
+                "boost_max_c": null,
+                "boost_max_minutes": 1440,
+                "comfort_eco_offset_c": null,
+                "htr_mod": false,
+                "ice_editable": true,
+                "ice_max_c": null,
+                "ice_min_c": null,
+                "max_c": 30.0,
+                "max_limit_max_c": null,
+                "min_c": 0.0,
+                "profile_offset_c": 0.5,
+                "profiles": [
+                  "frost",
+                  "eco",
+                  "comfort"
+                ],
+                "prog_max_c": null,
+                "prog_min_c": null
+              },
+              "max_limit_bounds": [
+                16.0,
+                30.0
+              ],
+              "prog_bounds": {
+                "comf_temp": [
+                  1.0,
+                  30.0
+                ],
+                "eco_temp": [
+                  0.5,
+                  29.5
+                ],
+                "ice_temp": [
+                  0.0,
+                  29.0
+                ]
+              }
+            },
             "prog": null,
             "setup": {
               "circuit_type": 0,

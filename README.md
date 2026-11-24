@@ -469,6 +469,15 @@ See the [Home Assistant logger docs] for how to view the actual logs. Please fil
 
 ## Development / live probing
 
+> [!IMPORTANT]
+> The device-semantics branch imports the sibling `smartbox` checkout because
+> its `smartbox.device` modules are not in the published wheel yet. Clone it
+> next to this repo and run `tools/dev_install_library.sh` (or set
+> `SMARTBOX_LIB`), then `uv sync --all-extras --dev`. The tox environments do
+> the same with `-e ../smartbox`; CI needs both repositories at matching
+> branches until the library minor is released.
+
+
 For wire investigation against the real hosts (without a live HA deploy), `tools/live_probe.py` drives the installed `smartbox.protocol` layer from the CLI. It needs YOUR OWN `.env` file at the repo root (gitignored) with:
 
 ```
