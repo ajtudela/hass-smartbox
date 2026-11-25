@@ -1,8 +1,8 @@
 # Intentional deviations from the vendor app
 
 These are the places where the integration deliberately differs from the
-mobile/web apps, or models a wire behavior the app does not expose. The
-device-semantics extraction must preserve them; a slice that changes one of
+mobile/web apps, or models a wire behavior the app does not expose. Future
+changes to the device model must preserve them; a change that alters one of
 these is a product decision, not a refactor.
 
 | Area | Vendor app | Integration | Why | Guard |

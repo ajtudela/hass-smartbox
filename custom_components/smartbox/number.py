@@ -721,7 +721,7 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     the app-shaped 4-key status body (see ``engine.set_prog_temps``): profiles
     the caller does not change are sent back with their current values plus
     units. The vendor app clamps profile temps against their neighbours before
-    sending (docs/webapi-spec.md §5), and the engine applies that clamp; the
+    sending (docs/api-ws-user.md §2.8), and the engine applies that clamp; the
     slider bounds here are scale-coherent overall bounds, not the
     context-dependent per-profile result.
     """

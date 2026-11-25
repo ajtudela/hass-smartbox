@@ -249,7 +249,7 @@ class SmartboxNodeInfo:
         """Get the model code from a node version payload.
 
         Characters 3-4, uppercased, matching the official app
-        (``pid.toUpperCase().slice(2, 4)``; docs/webapi-spec.md §3.2):
+        (``pid.toUpperCase().slice(2, 4)``; docs/api-ws-user.md §2.5):
         PID '081c' gives '1C'. ``version`` defaults to the discovery copy;
         entity properties pass the live engine slot when they have it.
         """

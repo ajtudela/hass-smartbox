@@ -72,9 +72,22 @@ CI runs ruff and mypy directly and the test suite through tox.
 
 tox resolves the newest allowed Home Assistant and test-harness versions, while `uv.lock` pins the pair the local venv uses; the newer harness escalates deprecations to failures, so a green local run can still fail CI. `.tox/py` is the local CI-parity environment — run the suite there before pushing a change that touches Home Assistant APIs. `.tox/min` runs the same suite against the declared minimum Home Assistant (2026.5.0), which CI also checks; its env installs only the pinned harness (plus `pytest-mock`) and must not inherit the dev group, whose `pytest-asyncio` floor would silently upgrade the harness and Home Assistant.
 
-Wire facts are not guessed from behaviour: the record lives in this repo, at `docs/api-contract.md`, where every claim carries a provenance tag (`[live YYYY-MM-DD]`, `[code file:line]`, `[app]`, `[unverified]`, `[superseded: ...]`). Three documents, three roles: the contract settles wire ACCEPTANCE (live-probed facts, open questions, the deliberate divergences from the 2.7 library), `docs/webapi-spec.md` holds the decoded web app's statics, and `docs/api-ws-user.md` holds the CURRENT vendor apps' behavior plus the parity checklist (re-run it per vendor app release). Where an app-derived document disagrees with a live observation, the live observation wins and the disagreement is recorded, not silently resolved. Code comments cite the in-repo file (for example `docs/api-contract.md §5.1`) instead of restating a rule as folklore, and `tools/live_probe.py` is the CLI for verifying a claim against real hardware.
+Wire facts are not guessed from behaviour: the record lives in this repo, at `docs/api-contract.md`, where every claim carries a provenance tag (`[live YYYY-MM-DD]`, `[code file:line]`, `[app]`, `[unverified]`, `[superseded: ...]`). Three documents, three roles: `docs/api-endpoints.md` indexes every endpoint with its consumer, status and last-confirmed builds; the contract settles wire ACCEPTANCE (live-probed facts, open questions, the deliberate divergences from the 2.7 library); `docs/api-ws-user.md` holds the CURRENT vendor apps' behavior, statics and parity checklist (re-run it per vendor app release). Where an app-derived document disagrees with a live observation, the live observation wins and the disagreement is recorded, not silently resolved. Code comments cite the in-repo file (for example `docs/api-contract.md §5.1`) instead of restating a rule as folklore, and `tools/live_probe.py` is the CLI for verifying a claim against real hardware.
 
 The three documents are maintained in this repository; new probe results and corrections are applied in place, and a test keeps every citation pointing at the in-repo copies or the installed `smartbox` library.
+
+### Changing a controller fact
+
+Device facts have one home in `smartbox.device`:
+
+- product code, family, actuation, surface and flags: `codes.py`
+- limits, bounds and profile resolution: `profile.py`
+- control-mode catalogues and wire indexes: `control_modes.py`
+- lock and boost policy: `modes.py`
+- storage intents and writes: `storage.py`
+- setting gates and option sets: `settings.py`
+
+Update the reviewed expectation in `tests/test_product_code_parity.py` and mirror the row in `smartbox/tests/fixtures/product_codes.json`; the parity test compares the two. Run the library tests, then the integration parity, attribute, registry and diagnostics tests. For a deliberate surface change, regenerate the JSON goldens with `UPDATE_SNAPSHOTS=1 pytest <test>` and review the diff; the attribute matrix is a literal dictionary in `tests/test_entity_surface_matrix.py`. Update `docs/api-contract.md` with the decoded class and offset, then `docs/profile-audit.md` and, when the difference is deliberate, `docs/vendor-deviations.md`. Re-run the `docs/api-ws-user.md` checklist item 13 when the vendor app adds a class or enum member.
 
 ### Writing tests
 

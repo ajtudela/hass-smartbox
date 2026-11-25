@@ -320,7 +320,7 @@ async def test_set_extra_options_requires_mapping(sleeps, session, client, write
 
 
 async def test_set_prog_temps_requires_units(sleeps, session, client, writes):
-    """A unitless profile-temp body is one the app never sends (webapi-spec §4)."""
+    """A unitless profile-temp body is one the app never sends (api-contract §5.2)."""
     with pytest.raises(ValueError, match="units"):
         await writes.set_prog_temps(
             "dev1",

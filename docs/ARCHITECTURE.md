@@ -224,24 +224,44 @@ The lower half of the stack never needs Home Assistant to be testable.
 
 ## Keeping the record honest
 
-Three documents, three roles: `docs/api-contract.md` settles wire acceptance — probed facts with provenance tags, open questions, recorded divergences — `docs/webapi-spec.md` holds the decoded web app's statics, and `docs/api-ws-user.md` holds the current vendor apps' behavior plus a parity checklist to re-run per vendor app release. Where an app-derived document and a live observation disagree, the live observation wins, and the disagreement is recorded rather than silently resolved. [CONTRIBUTING.md](../CONTRIBUTING.md) describes the discipline in full; the gates here keep it enforced — every citation resolves against the in-repo copy, and shipped text stays free of process narrative.
+Three documents, three roles: `docs/api-endpoints.md` indexes every endpoint with its consumer, status and last-confirmed builds; `docs/api-contract.md` settles wire acceptance with probed facts, provenance tags, open questions and recorded divergences; `docs/api-ws-user.md` holds the current vendor apps' behavior, statics and parity checklist to re-run per vendor app release. Where an app-derived document and a live observation disagree, the live observation wins, and the disagreement is recorded rather than silently resolved. [CONTRIBUTING.md](../CONTRIBUTING.md) describes the discipline in full; the gates here keep it enforced — every doc-section citation resolves against the in-repo copy, every library-symbol citation against the installed package, and shipped text stays free of process narrative.
 
 ## The `smartbox` library
 
 `smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to the PyPI version range `smartbox>=3.2.1,<3.3`. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
 
-### Device semantics (migration in progress)
+### Device semantics
 
 The neutral device facts live in `smartbox.device` (`codes`, `capabilities`,
 `setup`, `profile`, `control_modes`, `modes`, `storage`, `settings`): the reviewed
 product-code table, operation-eligibility checks, setpoint/programme ranges,
-control-mode catalogues, lock/boost policy, storage intents and setting gates. Entity code imports those modules directly;
-`boost_activation.py` keeps the adapter-local boost helpers, and the
-compatibility re-export modules are gone. Entity construction, boost activation
-planning, preferences and services stay in the adapter. The design, slice
-status and acceptance tests are in [device-semantics.md](device-semantics.md).
-The library minor and the pin are deferred; the branch needs the sibling
-checkout (see the document's "Testing without a published wheel").
+control-mode catalogues, lock/boost policy, storage intents and setting gates.
+Entity code imports those modules directly; `boost_activation.py` keeps the
+adapter-local boost helpers, and the compatibility re-export modules are gone.
+Entity construction, boost activation planning, preferences and services stay
+in the adapter.
+
+`resolve_profile(node_type, pid, fw_version, setup, max_limit_c=None)` is the
+single resolution entry point. `pid` is the live or discovery
+`version.pid[2:4].upper()`; `fw_version` gates the Helki storage and lock
+profiles; `setup` supplies the factory and operational modes, boost config,
+storage bounds, `max_stemp_limit` and `extra_options`. `max_limit_c` previews
+a proposed ceiling; `resolve_stored_profile` applies the setup's stored limit
+(`<= 0` disabled). Live `status` is not an input for entity presence: a node
+lost at discovery must resolve the same profile. The one exception is the
+boost/runback attribute visibility, which reads `status.boost_modes_available`
+to decide whether a parameter slider exists.
+
+Fallbacks: an unlisted htr/htr_mod PID uses ElectricHeater; an unlisted acm PID
+uses HelkiStorage; an unlisted thm PID uses the thermostat 7–35 surface with
+the control-mode select withheld; a missing PID uses the node-type default.
+Auth or version failures leave the profile absent until a PID is seen.
+
+The profile formulas and per-family table are in [profile-audit.md](profile-audit.md);
+the change recipe for a controller fact is in
+[CONTRIBUTING.md](../CONTRIBUTING.md#changing-a-controller-fact). The 3.3.0
+library release and the integration pin update are pending; see
+[status.md](status.md).
 
 ## Where to go deeper
 
@@ -249,10 +269,11 @@ checkout (see the document's "Testing without a published wheel").
 | --- | --- |
 | What does the vendor cloud do, per endpoint and frame? | `docs/api-contract.md` |
 | What do the current vendor apps do? | `docs/api-ws-user.md` |
-| What did the vendor's web app code do? | `docs/webapi-spec.md` |
+| Which endpoints exist, and are they current? | `docs/api-endpoints.md` |
+| What statics does the vendor web app expose? | `docs/api-ws-user.md` §2.5–§2.8 |
 | How do I set up and contribute? | `CONTRIBUTING.md` |
 | How is the integration used? | `README.md` |
 | What is in flight right now? | `docs/status.md` |
-| Where is the device-semantics extraction design? | `docs/device-semantics.md` |
+| How does the adapter consume the device model? | [Device semantics](#device-semantics) above; change recipe in [CONTRIBUTING.md](../CONTRIBUTING.md#changing-a-controller-fact) |
 | How do I verify a claim against the real cloud? | `tools/live_probe.py` |
 | What changed in each release? | `CHANGELOG.md` |

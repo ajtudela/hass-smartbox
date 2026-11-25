@@ -1,7 +1,9 @@
 """The wire-fact record lives in this repo and is cited by its in-repo path.
 
-The record is `docs/api-contract.md` plus the app statics it cites
-(`docs/webapi-spec.md`); each carries a banner saying it is maintained here.
+The record is `docs/api-contract.md` plus the endpoint catalogue
+(`docs/api-endpoints.md`); each carries a banner saying it is maintained here.
+App statics and current behavior live in the reference document
+`docs/api-ws-user.md`.
 That is what makes this repo self-contained: the protocol layer is vendored
 because it has to execute here, and the document that explains it travels with
 the code for the same reason.
@@ -12,6 +14,7 @@ These checks keep that arrangement honest:
 - the shipped code, tests and tool cite the in-repo `docs/` paths; an external
   checkout is never presented as the place to read a wire fact;
 - each record file still carries its banner;
+- app statics are reference material, not a second wire record;
 - no shipped code, test or tool points at agent-facing or local-only
   files: `AGENTS.md`, the retired `.clinerules/` and `memory-bank/` names,
   and the local `notes/` directory are never cited there.
@@ -19,6 +22,7 @@ These checks keep that arrangement honest:
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 import re
 
@@ -31,7 +35,7 @@ SCANNED_ROOT_FILES = (
     "AGENTS.md",
 )
 RETIRED = "api-notes"
-RECORD_DOCS = ("api-contract.md", "webapi-spec.md")
+RECORD_DOCS = ("api-contract.md", "api-endpoints.md")
 # Repo-authored reference docs: their `§N` citations resolve like the record's,
 # but they carry no banner.
 REFERENCE_DOCS = ("api-ws-user.md",)
@@ -75,12 +79,10 @@ def test_no_tracked_text_cites_the_retired_wire_notes() -> None:
 
 
 def test_shipped_code_cites_the_vendored_copy() -> None:
-    offenders = _citations("../smartbox/api-contract.md") + _citations(
-        "../smartbox/webapi-spec.md"
-    )
+    offenders = _citations("../smartbox/api-contract.md")
     assert not offenders, (
         "shipped code, tests and tools must cite the in-repo copy "
-        f"(docs/api-contract.md, docs/webapi-spec.md): {offenders}"
+        f"(docs/api-contract.md): {offenders}"
     )
 
 
@@ -101,15 +103,15 @@ _SECTION = re.compile(r"^#{2,3}\s+(\d+(?:\.\d+)*)\.?\s+\S", re.MULTILINE)
 # A citation, e.g. "§5.3" / "§ 5.3".
 _CITATION = re.compile(r"§\s*(\d+(?:\.\d+)*)")
 # How a citation names its document. Both spellings in use: the in-repo path
-# and the bare name the record uses in prose ("webapi-spec §4"), plus
+# and the bare name the record uses in prose ("api-endpoints §4"), plus
 # "contract" for `api-contract.md` (THE contract, as the record calls itself).
 _DOC_MENTION = re.compile(
-    r"(?:(?:docs/)?(api-contract|webapi-spec|api-ws-user)\.md"
-    r"|\b(webapi-spec|api-ws-user)\b|\bcontract\b)",
+    r"(?:(?:docs/)?(api-contract|api-endpoints|api-ws-user)\.md"
+    r"|\b(api-endpoints|api-ws-user)\b|\bcontract\b)",
 )
 # The mention must sit immediately before the citation to scope it. Prose and
 # table rows mention a document and cite the OTHER one in the same line
-# (api-contract's evidence table is full of `[doc webapi-spec.md §N]` tags
+# (api-contract's evidence table is full of `[doc api-ws-user.md §N]` tags
 # beside `§N` references to itself), so a line-wide or look-back scope
 # mis-attributes them.
 _MENTION_LOOKBEHIND = 40
@@ -140,8 +142,8 @@ def test_every_citation_resolves_to_a_real_section() -> None:
     section would otherwise rot silently: a comment keeps citing `§5.3`
     after `§5.3` stops existing, and nothing else reads the document. A
     citation that names no document is checked against the ambiguity the
-    two documents actually have - they number their sections
-    independently (§2, §4, §5 and §7 exist in both), so an unnamed one
+    documents actually have - they number their sections
+    independently (§2, §4, §5 and §7 overlap), so an unnamed one
     must be unambiguous by number alone. Inside a record document an
     unnamed citation resolves to that document; unnamed citations in any
     other document are rejected, so the record must be named there.
@@ -197,8 +199,8 @@ def test_the_citation_gate_resolves_a_citation_to_its_document() -> None:
     ambiguity branch rests on: `§9` exists in one document only, `§5` in
     more than one.
     """
-    assert _citation_sites("per webapi-spec §4.2 and docs/api-contract.md §5.1") == [
-        (1, "4.2", "webapi-spec"),
+    assert _citation_sites("per api-endpoints §4 and docs/api-contract.md §5.1") == [
+        (1, "4", "api-endpoints"),
         (1, "5.1", "api-contract"),
     ]
     assert _citation_sites("see docs/api-contract.md §1.9, §5.2 and §7") == [
@@ -213,14 +215,14 @@ def test_the_citation_gate_resolves_a_citation_to_its_document() -> None:
         for name in (*RECORD_DOCS, *REFERENCE_DOCS)
     }
     assert "5.1" in sections["api-contract"]  # the heading parse still works
-    assert "5.1" not in sections["webapi-spec"]
+    assert "5.1" not in sections["api-endpoints"]
     assert [name for name, numbers in sections.items() if "9" in numbers] == [
         "api-contract"
     ]
     assert sorted(name for name, numbers in sections.items() if "5" in numbers) == [
         "api-contract",
+        "api-endpoints",
         "api-ws-user",
-        "webapi-spec",
     ]
 
 
@@ -239,6 +241,7 @@ _REFERENCED_PATH = re.compile(
     r"`((?:tools|tests|custom_components|docs|\.github)/[^`\s]+?)`"
 )
 _FILE_LINE = re.compile(r"\[([A-Za-z0-9_]+\.py):(\d+)(?:-(\d+))?\]")
+_LIB_SYMBOL = re.compile(r"\[lib ([A-Za-z0-9_.]+):([A-Za-z0-9_.]+)\]")
 _PATH_SUFFIXES = (".py", ".md", ".json", ".yaml", ".yml", ".png", ".sh")
 _PLACEHOLDER = re.compile(r"[<>{}$*?…]")
 
@@ -314,6 +317,104 @@ def test_bare_file_line_citations_are_in_range() -> None:
                         f"but {name} has {total} lines"
                     )
     assert not problems, f"file:line citations out of range: {problems}"
+
+
+def test_library_symbol_citations_resolve() -> None:
+    """Every `[lib module:Symbol]` names a real object in the installed library.
+
+    The wire record cites library behavior by symbol so a refactor cannot
+    invalidate a line range silently. Resolving the symbol is the mechanical
+    half; whether it is the RIGHT symbol for the claim stays with review.
+    """
+    problems: list[str] = []
+    for path in _doc_sources():
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for match in _LIB_SYMBOL.finditer(line):
+                module_name, symbol = match.groups()
+                try:
+                    target: object = importlib.import_module(module_name)
+                except ImportError as e:
+                    problems.append(
+                        f"{path.relative_to(REPO_ROOT)}:{number} cites "
+                        f"{module_name}, which does not import: {e}"
+                    )
+                    continue
+                for attr in symbol.split("."):
+                    try:
+                        target = getattr(target, attr)
+                    except AttributeError:
+                        problems.append(
+                            f"{path.relative_to(REPO_ROOT)}:{number} cites "
+                            f"{module_name}:{symbol}, but {attr} is missing"
+                        )
+                        break
+    assert not problems, f"library symbol citations do not resolve: {problems}"
+
+
+_ENDPOINT_ID_ROW = re.compile(r"^\|\s*([ESX]\d{1,2})\s*\|", re.MULTILINE)
+_ENDPOINT_ID = re.compile(r"\b([ESX]\d{1,2})\b")
+
+
+def _catalog_endpoint_ids() -> list[str]:
+    text = (REPO_ROOT / "docs" / "api-endpoints.md").read_text(encoding="utf-8")
+    return _ENDPOINT_ID_ROW.findall(text)
+
+
+def test_endpoint_ids_are_unique_and_references_resolve() -> None:
+    """Every referenced endpoint ID exists in the catalogue, and no ID repeats.
+
+    Endpoint IDs are stable keys used across the contract, apps doc, tests and
+    code comments. A rename is only safe if every reference is visible; this
+    gate covers table cells, backticked IDs and bare prose IDs. ``E2`` is also
+    the app's extra-energy product code, so a bare ``E2`` in prose is ignored;
+    the catalogue row and any backticked ``E2`` still resolve.
+    """
+    ids = _catalog_endpoint_ids()
+    assert len(ids) == len(set(ids)), f"duplicate endpoint IDs: {ids}"
+    known = set(ids)
+    problems: list[str] = []
+    for path in _scanned_files():
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
+        ):
+            refs: set[str] = set()
+            if line.lstrip().startswith("|"):
+                first_cell = line.strip().strip("|").split("|")[0]
+                refs.update(re.findall(r"[ESX]\d{1,2}", first_cell))
+            refs.update(re.findall(r"`([ESX]\d{1,2})`", line))
+            for token in _ENDPOINT_ID.findall(line):
+                if token == "E2" and token not in refs:
+                    continue
+                refs.add(token)
+            problems.extend(
+                f"{path.relative_to(REPO_ROOT)}:{number} cites {ref}, "
+                "which is not in docs/api-endpoints.md"
+                for ref in sorted(refs - known)
+            )
+    assert not problems, f"unknown endpoint IDs: {problems}"
+
+
+_EVIDENCE_ID_ROW = re.compile(r"^- EV(\d{1,2}[a-c]?)\s", re.MULTILINE)
+_EVIDENCE_ID = re.compile(r"\bEV(\d{1,2}[a-c]?)\b")
+
+
+def test_evidence_ids_are_unique_and_references_resolve() -> None:
+    """Evidence entries use EV# so they cannot collide with endpoint E#."""
+    text = (REPO_ROOT / "docs" / "api-contract.md").read_text(encoding="utf-8")
+    ids = _EVIDENCE_ID_ROW.findall(text)
+    assert len(ids) == len(set(ids)), f"duplicate evidence IDs: {ids}"
+    known = set(ids)
+    problems: list[str] = []
+    for path in _scanned_files():
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
+        ):
+            problems.extend(
+                f"{path.relative_to(REPO_ROOT)}:{number} cites EV{ref}, "
+                "which is not in api-contract.md Appendix 8"
+                for ref in sorted(set(_EVIDENCE_ID.findall(line)) - known)
+            )
+    assert not problems, f"unknown evidence IDs: {problems}"
 
 
 def test_shipped_code_never_cites_local_only_files() -> None:

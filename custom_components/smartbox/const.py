@@ -34,7 +34,7 @@ FIELD_SLOT_2 = "slot_2"
 # Schedule profile slot values; day keys are "0".."6" (Sunday..Saturday).
 DAY_KEYS = ("0", "1", "2", "3", "4", "5", "6")
 # Base ElectricHeater programme catalogue, in the vendor app's sorted order
-# (docs/webapi-spec.md §5): 0=ICE, 1=ECO, 2=COMF. Per-controller catalogues
+# (docs/api-ws-user.md §2.8): 0=ICE, 1=ECO, 2=COMF. Per-controller catalogues
 # (the four-profile Helki/Haverland families and the off-first htr_mod order)
 # live in smartbox.device.profile; this tuple is the default used by the sensor when a
 # node has no decoded controller-specific list.
@@ -73,7 +73,7 @@ HEATER_NODE_TYPES = [
 # The API's node-type enum. Product/UI categories in the per-tenant
 # client-data/<serial>/capabilities.json (towel rails, WiFi heater variants,
 # floor thermostats, water/solar storage, timers) are not wire node types
-# (docs/webapi-spec.md §3.2, docs/api-contract.md §3).
+# (docs/api-ws-user.md §2.5, docs/api-contract.md §3).
 WIRE_NODE_TYPES = frozenset(SmartboxNodeType)
 # Node types that carry power and sample data. THM is excluded: the app's
 # thermostat controller has no getPower()/status.power, and its per-node
