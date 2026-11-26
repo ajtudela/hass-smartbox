@@ -220,8 +220,12 @@ class DutyLimit(SmartboxNodeSelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Write the selected factor into the node's extra options."""
         values = dict(self._choices())
+        value = values.get(option)
+        if value is None:
+            msg = "selection_unavailable"
+            raise user_error(msg)
         await self._runtime.engine.set_extra_options(
-            self._dev_id, self._ref, {"user_duty_limit": values[option]}
+            self._dev_id, self._ref, {"user_duty_limit": value}
         )
 
 
@@ -284,9 +288,11 @@ class ControlMode(SmartboxNodeSelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Write the selected control-mode index into the setup."""
         values = dict(self._choices())
-        await self._runtime.engine.set_control_mode(
-            self._dev_id, self._ref, values[option]
-        )
+        value = values.get(option)
+        if value is None:
+            msg = "selection_unavailable"
+            raise user_error(msg)
+        await self._runtime.engine.set_control_mode(self._dev_id, self._ref, value)
 
 
 class ChildLockMode(SmartboxNodeSelectEntity):

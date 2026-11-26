@@ -458,6 +458,12 @@
     },
     "runback_duration_step": {
       "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "Cette option n'est plus disponible ; rechargez l'entité."
+    },
+    "status_unavailable": {
+      "message": "L'état du radiateur n'est pas encore disponible ; réessayez après la prochaine mise à jour."
     }
   },
   "issues": {

@@ -458,6 +458,12 @@
     },
     "runback_duration_step": {
       "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "Diese Option ist nicht mehr verfügbar; die Entität neu laden."
+    },
+    "status_unavailable": {
+      "message": "Der Heizungsstatus ist noch nicht verfügbar; nach der nächsten Aktualisierung erneut versuchen."
     }
   },
   "issues": {

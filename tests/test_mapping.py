@@ -742,9 +742,9 @@ def test_boost_end_datetime_already_passed_rolls_to_tomorrow(fixed_utcnow):
     assert boost_end == datetime(2023, 10, 11, 0, 30, tzinfo=UTC)
 
 
-def test_boost_end_datetime_exactly_now_rolls_to_tomorrow(fixed_utcnow):
+def test_boost_end_datetime_exactly_now_stays_today(fixed_utcnow):
     boost_end = get_boost_end_datetime(60)  # 01:00 UTC == now
-    assert boost_end == datetime(2023, 10, 11, 1, 0, tzinfo=UTC)
+    assert boost_end == datetime(2023, 10, 10, 1, 0, tzinfo=UTC)
 
 
 def test_boost_end_datetime_is_local(fixed_utcnow):

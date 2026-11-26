@@ -76,7 +76,11 @@ def plan_boost(
     fw = _live_fw(node, state)
     units = _units(state)
     legacy = boost_uses_legacy_path(pid, setup)
-    mode = None if legacy else boost_activation_mode(pid, setup, status)
+    mode = (
+        None
+        if legacy or node.node_type == "acm"
+        else boost_activation_mode(pid, setup, status)
+    )
 
     if (
         not boost_activation_takes_parameters(pid, setup)

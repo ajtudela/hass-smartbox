@@ -415,9 +415,10 @@ class BoostSwitch(SmartboxNodeSwitchEntity):
         boost_end: datetime | None = None
         remaining = 0
         end_time: str | None = None
-        if bool(status.get("boost", False)):
+        boost_end_min = status.get("boost_end_min")
+        if bool(status.get("boost", False)) and boost_end_min is not None:
             boost_end = get_boost_end_datetime(
-                status.get("boost_end_min", 0), status.get("boost_end_day")
+                boost_end_min, status.get("boost_end_day")
             )
             if boost_end is not None:
                 remaining = int((boost_end - dt_util.now()).total_seconds())

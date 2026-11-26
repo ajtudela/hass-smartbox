@@ -37,7 +37,7 @@ The setup flow offers these providers. The link identifies the brand/account; mo
 | Technotherm | https://ttiapp.technotherm.com/ | Shares the Lucht LHZ tenant |
 | SmartControl | https://app.smart-control.eu/ | Shares the Lucht LHZ tenant |
 
-Accounts whose backend only serves the retired `socket_io` transport need 2.6.x; the 3.0 line requires `ws_user`. The public web-app check above is a hint: twelve provider apps ship the `ws_user` client, while the EHC public app remains legacy `socket.io` (2026-11-15 audit). The setup probe is authoritative for an individual account — if it reports `unsupported`, stay on 2.6.x. See the websocket warning below.
+Accounts whose backend only serves the retired `socket_io` transport need 2.6.x; the 3.0 line requires `ws_user`. The public web-app check above is a hint: fourteen provider apps ship the `ws_user` client, while the EHC public app remains legacy `socket.io` (2026-11-25 audit). The setup probe is authoritative for an individual account — if it reports `unsupported`, stay on 2.6.x. See the websocket warning below.
 
 ## Installation
 

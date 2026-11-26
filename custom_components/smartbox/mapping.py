@@ -37,8 +37,7 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
-from smartbox.device.codes import PRODUCT_CODES
-from smartbox.device.profile import HtrModPolicy, htr_mod_policy, is_htr_mod_code
+from smartbox.device.profile import HtrModPolicy, htr_mod_policy, is_htr_mod_node
 from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import bounded_repr, parse_number_or_none
 
@@ -198,7 +197,7 @@ def get_boost_end_datetime(
     current = now if now is not None else dt_util.now()
     hour, minute = divmod(minute_of_day, 60)
     boost_end = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if boost_end <= current:
+    if boost_end < current:
         # The end minute has passed: the next occurrence is tomorrow.
         boost_end += timedelta(days=1)
     return boost_end
@@ -263,9 +262,7 @@ def _is_htr_mod(node_type: str, model_code: str | None) -> bool:
     The htr_mod wire keeps its historical surface before the PID arrives;
     ``0A`` is htr_mod on any wire, while ``FF`` is htr_mod only on that wire.
     """
-    if model_code is not None and model_code in PRODUCT_CODES:
-        return is_htr_mod_code(model_code, node_type)
-    return node_type == SmartboxNodeType.HTR_MOD
+    return is_htr_mod_node(model_code, node_type)
 
 
 def get_target_temperature(

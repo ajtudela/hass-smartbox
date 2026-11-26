@@ -421,9 +421,26 @@ _ADAPTER_METHOD_ENDPOINTS = {
     "health_check": "E1",
     "get_api_version": "E2",
     "get_token": "E3",
+    "get_devices": "E4",
+    "get_grouped_devices": "E5",
+    "get_nodes": "E7",
+    "get_connected": "E8",
+    "get_away_status": "E9",
+    "set_away": "E10",
+    "get_rtc_time": "E13",
+    "get_power_limit": "E17",
+    "set_power_limit": "E18",
+    "get_node_samples": "E19",
+    "get_node_status": "E20",
+    "get_node_setup": "E22",
+    "get_node_version": "E24",
+    "set_lock": "E26",
+    "set_boost": "E27",
+    "set_prog": "E30",
     "get_node_power": "E33",
     "get_dev_data": "E46",
     "set_node_power_limit": "E47",
+    "get_sessions": "X2",
 }
 
 
@@ -445,9 +462,15 @@ def test_catalogue_marks_adapter_called_endpoints() -> None:
     )
     consumers = _catalog_consumers()
     for method, endpoint_id in _ADAPTER_METHOD_ENDPOINTS.items():
-        if f".{method}(" in sources:
+        called = f".{method}(" in sources
+        if called:
             assert consumers[endpoint_id] == "library+HA", (
                 f"{endpoint_id} is called as {method} but labelled "
+                f"{consumers[endpoint_id]}"
+            )
+        else:
+            assert consumers[endpoint_id] != "library+HA", (
+                f"{endpoint_id} is not called by the adapter but labelled "
                 f"{consumers[endpoint_id]}"
             )
     assert consumers["E28"] == "—"

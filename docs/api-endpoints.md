@@ -59,10 +59,10 @@ Account and app endpoints (`/api/v2/user/*`, `/api/v2/users/*`, `/client/*`,
 
 | ID | Method and path | What it does | Consumer | Status | Last confirmed | Details |
 |---|---|---|---|---|---|---|
-| E4 | `GET /api/v2/devs` | device list | library+HA | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E4 |
+| E4 | `GET /api/v2/devs` | device list | library | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E4 |
 | E7 | `GET /api/v2/devs/{dev_id}/mgr/nodes` | node list | library+HA | accepted 2026-10-04 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E7 |
 | E8 | `GET /api/v2/devs/{dev_id}/connected` | device connectivity | library | accepted 2026-09-27/30 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E8 |
-| E9 | `GET /api/v2/devs/{dev_id}/mgr/away_status` | away status | library+HA | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E9 |
+| E9 | `GET /api/v2/devs/{dev_id}/mgr/away_status` | away status | library | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E9 |
 | E10 | `POST /api/v2/devs/{dev_id}/mgr/away_status` | set away status | library+HA | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E10 |
 | E11 | `GET /api/v2/devs/{dev_id}/mgr/discovery` | discovery state | library | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E11 |
 | E12 | `POST /api/v2/devs/{dev_id}/mgr/discovery` | start/stop discovery | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E12 |
@@ -126,7 +126,7 @@ sequencing are in `api-ws-user.md` §2.1/§2.4; none is device control.
 | ID | Method and path | What it does | Consumer | Status | Last confirmed | Details |
 |---|---|---|---|---|---|---|
 | X1 | `GET /api/v2/device_data` | per-serial device metadata | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.2 |
-| X2 | `GET /client/sessions`; `DELETE /client/sessions/{id}`; `DELETE /client/sessions` | list or revoke sessions | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §1.6, §2.1 |
+| X2 | `GET /client/sessions`; `DELETE /client/sessions/{id}`; `DELETE /client/sessions` | list or revoke sessions | library | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §1.6, §2.1 |
 | X3 | `POST /client/logout` | log out | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.1 |
 | X4 | `POST /api/v2/events` | analytics events | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.4 |
 | X5 | `GET/POST /api/v2/user/preferences` | app preferences | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.4 |

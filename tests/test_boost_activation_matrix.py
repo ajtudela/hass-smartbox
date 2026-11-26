@@ -337,3 +337,19 @@ def test_runback_low_max_time_is_clamped() -> None:
     assert plan_runback(node, state, _Prefs()) == ActivationPlan(
         "runback", 20.0, 30, legacy=ENDPOINT
     )
+
+
+def test_unreviewed_acm_stays_on_the_legacy_boost_path() -> None:
+    """An unknown acm PID must not be planned onto /boost_mode."""
+    setup = {
+        "factory_options": {"boost_config": 3},
+        "extra_options": {"boost_temp": "20.0", "boost_time": 60},
+    }
+    node, state, _store = _world(
+        "08990000", setup, {"units": "C", "stemp": "20.0"}, "acm"
+    )
+    plan = plan_boost(node, state, _Prefs())
+    assert plan.mode is None
+    assert plan.legacy is False
+    assert plan.temperature == 20.0
+    assert plan.minutes == 60

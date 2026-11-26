@@ -758,6 +758,7 @@ class LatePidWatcher:
             if node.supported_wire_type
         }
         self._pending = False
+        self._pending_marker: tuple[str, str, str, str] | None = None
         self._scheduled = False
         self._closed = False
 
@@ -803,6 +804,7 @@ class LatePidWatcher:
             return
         seen.add(marker)
         self._pending = True
+        self._pending_marker = marker
         if self._entry.state is ConfigEntryState.LOADED:
             self._schedule()
         else:
@@ -818,10 +820,25 @@ class LatePidWatcher:
                 ConfigEntryState.FAILED_UNLOAD,
                 ConfigEntryState.UNLOAD_IN_PROGRESS,
             }:
+                self._discard_pending_marker()
                 return
             await asyncio.sleep(0.1)
-        if self._pending and not self._closed:
+        if self._closed:
+            self._discard_pending_marker()
+            return
+        if self._pending:
             self._schedule()
+
+    def _discard_pending_marker(self) -> None:
+        """Forget a marker whose deferred reload was abandoned."""
+        marker = self._pending_marker
+        self._pending_marker = None
+        self._pending = False
+        if marker is None:
+            return
+        seen = self._hass.data.get(_PID_RELOAD_KEY)
+        if isinstance(seen, set):
+            seen.discard(marker)
 
     def _schedule(self) -> None:
         if self._scheduled or self._closed:

@@ -458,6 +458,12 @@
     },
     "runback_duration_step": {
       "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "Esa opción ya no está disponible; actualiza la entidad."
+    },
+    "status_unavailable": {
+      "message": "El estado del calentador aún no está disponible; inténtalo tras la próxima actualización."
     }
   },
   "issues": {

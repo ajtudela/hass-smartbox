@@ -196,6 +196,12 @@
     },
     "runback_duration_step": {
       "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "That option is no longer available; refresh the entity."
+    },
+    "status_unavailable": {
+      "message": "The heater status is not available yet; try again after the next update."
     }
   },
   "options": {

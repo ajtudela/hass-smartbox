@@ -3562,3 +3562,9 @@ def test_diagnostic_telemetry_follows_the_controller_family():
     }
     wifi = _node("htr", "01320000", "1.8", {}, {"units": "C"})
     assert _diagnostic_keys(wifi) == DIAGNOSTIC_TELEMETRY
+    assert (
+        _diagnostic_keys(_node("thm", "01280000", "1.9", {}, {"units": "C"})) == set()
+    )
+    assert (
+        _diagnostic_keys(_node("acm", "081C0000", "1.9", {}, {"units": "C"})) == set()
+    )

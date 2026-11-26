@@ -16,7 +16,7 @@
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
   request-shape matrix, and per-surface attribute/state snapshots.
-  Integration suite: 1708 passed, 6 skipped; library: 798 passed.
+  Integration suite: 1711 passed, 6 skipped; library: 802 passed.
 - The path override is removed; the integration dependency is PyPI-only at
   `>=3.2.1,<3.3`. The branch imports `smartbox.device`, so it is not
   installable until an approved 3.3.0 delivery method is chosen. Do not merge
@@ -39,7 +39,7 @@
   - Schedule writes reject profile indexes outside the controller catalogue; malformed temperature/duty/power/charge values read as unknown; legacy PIDs omit `extra_options` from setup POSTs; invited accounts work in the CLI.
   - Coverage: `test_product_code_parity.py` pins all 51 decoded product codes and their family/bounds (climate, programme, max-limit, boost)/profiles/boost-mode policy/duty presets/EASY/RUNBACK/lock/firmware gates; `test_entity_surface_matrix.py` pins the domains and unique keys per representative family and variant (capability flags, boost config 0, NO_PROBES, fw-1.6 lock, PIR, FULL temp/fixed/empty mode lists), snapshots options, bounds and current states for 15 representative families, and covers the box-level entities. `test_services_snapshot.py` now also checks every `services.yaml` field and selector against the registered `vol` schema.
 - Live-confirmed in this cycle: HJM `0132` schedule OFF index and 48-slot day, 0402/HJM controller ranges, child-lock `1`/`2`/`0` and the ignored boolean, setpoint while OFF, boost config 2 app path, the lost-at-discovery/reload symptom on `Spálňa`, the inferred `window_open` cold-night retry (flag flipped true, heating paused, recovered on close), and the RTC month indexing on 2026-11-24 (`n=10` rendered November).
-- Soak Window A ran 2026-11-24 22:29→2026-11-25 06:48: 119 entities, ~506 MB, no Smartbox errors. Window B is running on the follow-up image (119 entities, ~440 MB, no new errors); one duplicate-statistics recorder warning appeared at the 07:45 restart, did not recur at 08:32 or 11:46, and recurred at the 10:38 restart on 2026-11-26. Most library changes are additive; the new `set_extra_options` omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
+- Soak Window A ran 2026-11-24 22:29→2026-11-25 06:48: 119 entities, ~506 MB, no Smartbox errors. Window B ran the review-fix image, was stopped 2026-11-26 16:24 and resumed 18:21; current check 152 registry entries (155 before the unsupported diagnostics were removed), ~447 MB, no Smartbox errors. The duplicate-statistics recorder warning appeared at the 07:45 restart, did not recur at 08:32 or 11:46, recurred at 10:38, and recurred again at the 18:21 resume on 2026-11-26; it is non-fatal and unfixed. Most library changes are additive; the `_setup_body` extra_options omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
 
 ## Post-release watch
 

@@ -468,6 +468,9 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
                 if mode == "advanced_slot":
                     msg = "advanced_slot_temperature_fixed"
                     raise user_error(msg)
+        if self._status.get("units") not in ("C", "F"):
+            msg = "status_unavailable"
+            raise user_error(msg)
         state = self._node_state()
         write = temperature_write(
             self._node.node_type,
@@ -839,7 +842,13 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
 
     async def _async_activate_advanced_slot(self, engine: SmartboxEngine) -> None:
         """Activate the boost-until-next-schedule mode."""
-        if not self.supports_boost_mode:
+        if (
+            not self.supports_boost_mode
+            or not check_boost_mode(
+                node_facts(self._node, pid=self._live_pid, setup=self._node.setup),
+                "advanced_slot",
+            ).ok
+        ):
             msg = "advanced_slot_requires_full_boost"
             raise user_error(msg)
         await engine.set_boost_mode(

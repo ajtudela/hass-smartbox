@@ -42,10 +42,9 @@ from smartbox.device.capabilities import (
     check_runback,
     check_storage_lock,
 )
-from smartbox.device.codes import PRODUCT_CODES
 from smartbox.device.profile import (
     is_heater_surface,
-    is_htr_mod_code,
+    is_htr_mod_node as htr_mod_node,
     is_thermostat_surface,
 )
 from smartbox.protocol.client import NodeRef, SmartboxClient
@@ -699,9 +698,7 @@ def is_htr_mod_node(node: SmartboxNodeInfo, model_code: str | None = None) -> bo
     wire type so the entity keeps its discovery-time surface.
     """
     code = model_code if model_code is not None else node.get_model_code()
-    if code is not None and code in PRODUCT_CODES:
-        return is_htr_mod_code(code, node.node_type)
-    return node.node_type == "htr_mod"
+    return htr_mod_node(code, node.node_type)
 
 
 def node_facts(
