@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install the sibling smartbox checkout editable into this repo's venv.
 #
-# The migration branch imports modules that are not in the published PyPI
-# release. This keeps local testing reproducible without publishing a wheel.
+# The integration pins the published smartbox RC; this overlays a local
+# library checkout when developing against unreleased library changes.
 # Override the sibling location with SMARTBOX_LIB=/path/to/smartbox.
 set -euo pipefail
 

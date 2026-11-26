@@ -51,8 +51,8 @@ For how the code is structured — the layer rules, the repository map and the t
 
 ```
 uv sync --all-extras --dev
-# The device-semantics branch imports smartbox.device, which is not in the
-# published 3.2.1 wheel; install the sibling checkout over the PyPI copy.
+# The integration pins smartbox==3.3.0rc1; install the sibling checkout over
+# the PyPI copy only when developing against local library changes.
 tools/dev_install_library.sh
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check custom_components tests tools

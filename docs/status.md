@@ -16,17 +16,17 @@
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
   request-shape matrix, and per-surface attribute/state snapshots.
-  Integration suite: 1713 passed, 6 skipped; library: 804 passed.
-- The path override is removed; the integration dependency is PyPI-only at
-  `>=3.2.1,<3.3`. The branch imports `smartbox.device`, so it is not
-  installable until an approved 3.3.0 delivery method is chosen. Do not merge
-  before that decision; a fresh `uv sync` installs 3.2.1, so run
-  `tools/dev_install_library.sh` immediately afterwards.
+  Integration suite: 1744 passed, 6 skipped at 96.6% branch coverage
+  (patch 97%); library: 841 passed at 97.75% (patch 98.4%).
+- Library RC `3.3.0rc1` is published on PyPI and as the `v3.3.0rc1` GitHub
+  pre-release. The integration pins `smartbox==3.3.0rc1`; this branch is the
+  `3.3.0-rc.1` integration RC, served by HACS after the tag `v3.3.0-rc.1`
+  and the pre-release are created.
 
-## State of 3.2.1
+## Release state
 
-- Library `3.2.1` and integration `3.2.1` are the current stable releases. The migration branch has library 3.3.0 code but the integration dependency is PyPI-only at `>=3.2.1,<3.3`; a fresh install cannot import `smartbox.device` until the 3.3.0 delivery method is approved.
-- Working tree after 3.2.1 (unreleased):
+- Library `3.2.1` and integration `3.2.1` remain the current stable releases; `3.3.0rc1` (library) and `3.3.0-rc.1` (integration) are the in-flight release candidates.
+- On the 3.3.0-rc.1 branch:
   - Per-controller setpoint and programme ranges from the decoded 2.54.2 table (`smartbox.device.profile`), applied to climate, programme numbers, max-limit and boost numbers, and the programme sanitizer. The Tevolve WiFi/towel-rail rows, Ferroli 4D, factory-default 0D/18/24/43 and the unknown-acm HelkiStorage fallback now match the factory.
   - Controller-specific schedule catalogues: base three-profile, Helki/Haverland four-profile with OFF, and htr_mod off-first. The schedule sensor and program card accept a 24- or 48-slot day and render/edit the OFF slot; 48-slot storage is live-confirmed. THM code 28 gets the heater catalogue and surface; 04/09/0F keep the thermostat `{m,t}` shape.
   - Integer child-lock families expose an Off / Local lock / Remote lock select; boolean families keep the switch. Helki/Lhz heater nodes take the integer select only with `factory_options.super_lock_available`; Haverland 1D joins at fw 1.7, 47 stays integer, and 43/0D/18 stay boolean.
@@ -44,7 +44,7 @@
 ## Post-release watch
 
 - Watch issue reports from fork users and the upstream thread.
-- After the next integration release: confirm the integer-lock select replaces the old switch without an orphan, the programme-temperature numbers survive a lost-at-discovery reload, and the new controller ranges match the app on one unit per family.
+- After 3.3.0-rc.1: confirm the integer-lock select replaces the old switch without an orphan, the programme-temperature numbers survive a lost-at-discovery reload, and the new controller ranges match the app on one unit per family.
 - After 3.2.1: the boxless reporter to confirm the power-limit entities and priority select stay gone, and watch reports on the Power Limit Factor select. A stored value outside its presets reads as unknown in HA; the app's heater card shows `"<value> %"`, while its settings select is blank.
 - After 3.2.0: htr_mod reporters (#66) and the accumulator reporter (#54) to confirm what the maintainer's units cannot; acm users to confirm the integer `locked` surface.
 - After 3.2.0: confirm HA restarts stop adding `/client/sessions` rows (same `sid` across a restart), and that reauth, reconfigure and entry removal clear the stored token bundle.

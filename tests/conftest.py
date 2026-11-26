@@ -16,9 +16,9 @@ try:
     import smartbox.device  # noqa: F401
 except ModuleNotFoundError as ex:  # pragma: no cover - developer setup only
     msg = (
-        "The migration branch needs the sibling smartbox checkout. "
-        "Run tools/dev_install_library.sh or "
-        "`uv pip install -e ../smartbox` before the tests."
+        "The integration needs the smartbox 3.3 library. Run "
+        "`uv sync --all-extras --dev` (installs smartbox==3.3.0rc1) or "
+        "tools/dev_install_library.sh for a sibling checkout."
     )
     raise RuntimeError(msg) from ex
 

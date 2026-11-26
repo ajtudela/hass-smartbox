@@ -87,7 +87,7 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
     from smartbox.protocol.reseller import SmartboxReseller
 
-__version__ = "3.2.1"
+__version__ = "3.3.0-rc.1"
 
 _LOGGER = logging.getLogger(__name__)
 

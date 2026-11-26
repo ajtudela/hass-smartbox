@@ -6,7 +6,7 @@ How the integration is put together, and why it is shaped this way. It is writte
 
 A Home Assistant custom integration (domain `smartbox`) for Smartbox electric heaters. It talks to the vendor's cloud directly: REST calls for reads and writes, plus one `ws_user` websocket per account for pushed updates. A "box" (the site gateway) carries several heater nodes; both become Home Assistant devices.
 
-Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`); this branch adds the neutral controller facts as `smartbox.device` (see “Device semantics” below). `manifest.json` requires `smartbox>=3.2.1,<3.3` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
+Since `3.1.0-rc.1` the wire and domain layers are the separate `smartbox` library (`smartbox.protocol` and `smartbox.core`); this branch adds the neutral controller facts as `smartbox.device` (see “Device semantics” below). `manifest.json` requires `smartbox==3.3.0rc1` (published on PyPI), so Home Assistant installs it with the integration. The 3.0.0 release vendored the same layers; the split is the 3.1 line.
 
 ## The three layers
 
@@ -228,7 +228,7 @@ Three documents, three roles: `docs/api-endpoints.md` indexes every endpoint wit
 
 ## The `smartbox` library
 
-`smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to the PyPI version range `smartbox>=3.2.1,<3.3`. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
+`smartbox.protocol` and `smartbox.core` are the extracted library, pinned by `manifest.json` to the PyPI release `smartbox==3.3.0rc1`. The integration owns only the HA adapter, the entity model and the platform wiring. The reseller table and node-type values come from the library; `tests/test_lib_contract.py` keeps the integration side in step with it. The library is versioned independently and is also usable without Home Assistant.
 
 ### Device semantics
 

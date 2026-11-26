@@ -1,12 +1,11 @@
 # Changelog
 
-## Unreleased
+## 3.3.0-rc.1 (2026-11-26)
 
 ### Compatibility notes
 
-- The integration needs `smartbox>=3.3,<3.4` once that library release is
-  published. Until then the branch keeps the published PyPI pin and the local
-  sibling-checkout development flow.
+- The integration pins `smartbox==3.3.0rc1` (published on PyPI). The final
+  3.3.0 release moves the pin to `>=3.3.0,<3.4`.
 - Entity/service surface changes: the controller profile now clamps programme
   temperatures and max-stemp to the stored limit; storage UI mode, boost,
   easy/runback, control-mode, prog-temps and charging schedule are gated by
@@ -39,14 +38,14 @@
 - Integer-lock controllers expose an **Off / Local lock / Remote lock** select for `status.locked` 0/1/2; boolean-lock controllers keep the child-lock switch. The HJM fw-1.8 unit confirmed `{locked: 1}` and `{locked: 2}` echo while `{locked: true}` is silently ignored.
 - Boost and runback activation attributes: `number.*_config_boost_temperature`, `number.*_config_boost_duration`, `number.*_config_runback_temperature` and `number.*_config_runback_duration`. Legacy controllers keep the boost pair on the device (`extra_options.boost_temp`/`boost_time`, the same fields the app writes). FULL `/boost_mode` WiFi/ATC nodes expose the pair only when status advertises `temp_and_time`, and runback only when it advertises `runback`; those values live in a per-entry `.storage` record, survive a restart, and feed the one-click switch/preset. Runback has its own temperature and duration (30-minute grid) instead of overloading the shared `boost_time` field. A missing, malformed or off-grid value is refused with a validation error, so the frame sent to the heater is always complete.
 - Test coverage now pins every decoded product code (`test_product_code_parity.py`: family, bounds, profiles, boost configs, EASY/RUNBACK, lock and setting gates) and the exact entity domains/unique keys per representative family (`test_entity_surface_matrix.py`), including the FULL-boost attribute variants (temp-and-time, fixed-only, empty mode list). The surface matrix snapshots options, bounds and current states for every case (not a sample), adds live-frame state cases and box-level attributes, and the build no longer leaves the duty/control-mode selects empty before the first status frame (they fall back to the discovery setup).
-- Diagnostics now include the neutral controller profile (limits, bounds, programme kind and ranges) for every node, and `smartbox profile` in the sibling library resolves the same data offline. The migration branch installs the sibling library editable (`tools/dev_install_library.sh`, tox `-e ../smartbox`) until a library minor is published.
+- Diagnostics now include the neutral controller profile (limits, bounds, programme kind and ranges) for every node, and `smartbox profile` in the sibling library resolves the same data offline. The integration pins `smartbox==3.3.0rc1`; tox installs that wheel by default, and `tools/dev_install_library.sh` still overlays a sibling checkout for library development.
 - The migration validation baseline: a reviewed shared product-code fixture (51 codes, now the library's single canonical copy consumed by the integration parity test), per-unit entity-registry and diagnostics goldens, a service-name snapshot with a field/selector check against the registered schemas, an activation request-shape matrix, and a per-surface attribute/state snapshot. the adapter imports the neutral limits/profiles/surface predicates from `smartbox.device.profile`, the lock/boost policy from `smartbox.device.modes` and the catalogue from `smartbox.device.control_modes` (the `controller.py` and `control_mode.py` shims were deleted); `storage.py` maps the neutral `StorageIntent` from `smartbox.device.storage` to `HVACMode`; and `identity.py` delegates the setting gates to `smartbox.device.settings`.
 
 ### Changed
 
 - Node types are handled against the API's five wire values (`htr`, `htr_mod`, `thm`, `acm`, `pmo`). Product/UI categories from the per-tenant `capabilities.json` (towel rails, WiFi heater variants, floor thermostats, water/solar storage) are not wire types. An unknown wire type is skipped with one discovery warning instead of getting meaningless power/consumption entities.
 - Power and total-consumption sensors are created only for `htr`, `htr_mod`, `acm` and `pmo`. The app hides per-node kWh for thermostats (it shows usage time), so both old THM registry entries (`{node_id}_power`, `{node_id}_total_consumption`) are removed at setup.
-- The integration currently requires the published `smartbox>=3.2.1,<3.3`. The 3.3.0 device package is unreleased and needs an approved delivery method before this branch can install it. The 3.2.1 library adds the numeric-string write-echo handling, the Ducasa/Ducaheat alias and `set_control_mode`.
+- The integration requires `smartbox==3.3.0rc1`, which carries the 3.3 device package, the neutral controller facts and the `set_prog_resolution` write. The final 3.3.0 release moves the pin to `>=3.3.0,<3.4`.
 
 ### Fixed
 
