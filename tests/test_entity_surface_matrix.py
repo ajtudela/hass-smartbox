@@ -71,6 +71,18 @@ PROG_NUMBERS = [
 BOOST_NUMBERS = ["config_boost_duration", "config_boost_temperature"]
 BOOST_SENSORS = ["duty_cycle", "power", "schedule", "temperature", "total_consumption"]
 LOCK_SWITCHES = ["lock"]
+DIAGNOSTIC_TELEMETRY = {
+    "actual_duty_cycle",
+    "error_code",
+    "pcb_temperature",
+    "power_fail_detection",
+    "power_pcb_temperature",
+    "true_radiant_active",
+}
+
+
+def _matrix_key(entity, node) -> str:
+    return entity.unique_id.removeprefix(f"{node.node_id}_")
 
 
 def _device(box_power_limit_available: bool = True) -> SmartboxDeviceInfo:
@@ -155,9 +167,10 @@ def _surface(node: SmartboxNodeInfo) -> dict[str, list[str]]:
     surface: dict[str, list[str]] = {}
     for domain, builder in PLATFORMS:
         keys = [
-            entity.unique_id.removeprefix(f"{node.node_id}_")
+            key
             for entities, _ in builder(node, entry, runtime, fanout)
             for entity in entities
+            if (key := _matrix_key(entity, node)) not in DIAGNOSTIC_TELEMETRY
         ]
         if keys:
             surface[domain] = sorted(keys)
@@ -299,7 +312,9 @@ def _attributes(node: SmartboxNodeInfo) -> dict[str, dict[str, object]]:
     for domain, builder in PLATFORMS:
         for entities, _ in builder(node, entry, runtime, fanout):
             for entity in entities:
-                key = entity.unique_id.removeprefix(f"{node.node_id}_")
+                key = _matrix_key(entity, node)
+                if key in DIAGNOSTIC_TELEMETRY:
+                    continue
                 snapshot[f"{domain}.{key}"] = _entity_spec(domain, entity)
     return snapshot
 
@@ -322,7 +337,7 @@ def _device_attributes(
     return snapshot
 
 
-def _states(node: SmartboxNodeInfo) -> dict[str, object]:
+def _states(node: SmartboxNodeInfo) -> dict[str, object]:  # noqa: C901
     """Return every non-None state, with the climate preset split out."""
     runtime = _runtime(node)
     entry = MagicMock()
@@ -333,7 +348,9 @@ def _states(node: SmartboxNodeInfo) -> dict[str, object]:
     for domain, builder in PLATFORMS:
         for entities, _ in builder(node, entry, runtime, fanout):
             for entity in entities:
-                name = f"{domain}.{entity.unique_id.removeprefix(f'{node.node_id}_')}"
+                if _matrix_key(entity, node) in DIAGNOSTIC_TELEMETRY:
+                    continue
+                name = f"{domain}.{_matrix_key(entity, node)}"
                 if domain == "climate":
                     hvac_mode = getattr(entity, "hvac_mode", None)
                     if hvac_mode is not None:
@@ -3470,3 +3487,78 @@ def test_device_attribute_matrix(box_power_limit_available, expected) -> None:
     """The box-level options, bounds and states for both box capabilities."""
     device = _device(box_power_limit_available)
     assert _device_attributes(device) == expected
+
+
+def test_diagnostic_telemetry_entities_are_off_by_default():
+    """Controller health fields exist, but only as disabled diagnostics."""
+    node = _node(
+        "htr",
+        "01320000",
+        "1.8.0",
+        {"units": "C", "factory_options": {"true_radiant_available": True}},
+        {
+            "units": "C",
+            "error_code": "none",
+            "pcb_temp": "30.0",
+            "power_pcb_temp": "35.0",
+            "act_duty": 45,
+            "power_fail_det": True,
+            "true_radiant_active": True,
+        },
+    )
+    runtime = _runtime(node)
+    entry = MagicMock()
+    entry.entry_id = "entry"
+    entry.options = {}
+    fanout = NoopFanout()
+    entities = {
+        _matrix_key(entity, node): entity
+        for builder in (_build_node_sensors, _build_node_binary_sensors)
+        for group, _ in builder(node, entry, runtime, fanout)
+        for entity in group
+    }
+    for key in DIAGNOSTIC_TELEMETRY:
+        entity = entities[key]
+        assert entity.entity_category.value == "diagnostic"
+        assert entity.entity_registry_enabled_default is False
+    assert entities["error_code"].native_value == "none"
+    assert entities["pcb_temperature"].native_value == 30.0
+    assert entities["power_pcb_temperature"].native_value == 35.0
+    assert entities["actual_duty_cycle"].native_value == 45
+    assert entities["power_fail_detection"].is_on is True
+    assert entities["true_radiant_active"].is_on is True
+
+
+def _diagnostic_keys(node: SmartboxNodeInfo) -> set[str]:
+    runtime = _runtime(node)
+    entry = MagicMock()
+    entry.entry_id = "entry"
+    entry.options = {}
+    fanout = NoopFanout()
+    return {
+        _matrix_key(entity, node)
+        for builder in (_build_node_sensors, _build_node_binary_sensors)
+        for group, _ in builder(node, entry, runtime, fanout)
+        for entity in group
+        if _matrix_key(entity, node) in DIAGNOSTIC_TELEMETRY
+    }
+
+
+def test_diagnostic_telemetry_follows_the_controller_family():
+    """Base relay, TRIAC module and WiFi heater expose different telemetry."""
+    base = _node("htr", "04020000", "1.9", {}, {"units": "C"})
+    assert _diagnostic_keys(base) == {
+        "error_code",
+        "pcb_temperature",
+        "true_radiant_active",
+    }
+    module = _node("htr_mod", "010A0000", "1.8", {}, {"units": "C"})
+    assert _diagnostic_keys(module) == {
+        "actual_duty_cycle",
+        "error_code",
+        "pcb_temperature",
+        "power_pcb_temperature",
+        "true_radiant_active",
+    }
+    wifi = _node("htr", "01320000", "1.8", {}, {"units": "C"})
+    assert _diagnostic_keys(wifi) == DIAGNOSTIC_TELEMETRY

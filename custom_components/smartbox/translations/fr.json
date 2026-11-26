@@ -96,6 +96,12 @@
       },
       "window_detection": {
         "name": "Détection de fenêtre"
+      },
+      "true_radiant_active": {
+        "name": "True Radiant actif"
+      },
+      "power_fail_detection": {
+        "name": "Détection de coupure"
       }
     },
     "climate": {
@@ -142,6 +148,18 @@
           "eco": "Éco",
           "comfort": "Confort"
         }
+      },
+      "error_code": {
+        "name": "Code d'erreur"
+      },
+      "pcb_temperature": {
+        "name": "Température PCB"
+      },
+      "power_pcb_temperature": {
+        "name": "Température PCB de puissance"
+      },
+      "actual_duty_cycle": {
+        "name": "Cycle de service réel"
       }
     },
     "number": {

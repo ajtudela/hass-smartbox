@@ -96,6 +96,12 @@
       },
       "window_detection": {
         "name": "Fenstererkennung"
+      },
+      "true_radiant_active": {
+        "name": "True Radiant aktiv"
+      },
+      "power_fail_detection": {
+        "name": "Netzausfallerkennung"
       }
     },
     "climate": {
@@ -142,6 +148,18 @@
           "eco": "Eco",
           "comfort": "Komfort"
         }
+      },
+      "error_code": {
+        "name": "Fehlercode"
+      },
+      "pcb_temperature": {
+        "name": "PCB-Temperatur"
+      },
+      "power_pcb_temperature": {
+        "name": "Leistungs-PCB-Temperatur"
+      },
+      "actual_duty_cycle": {
+        "name": "Tatsächlicher Einschaltzyklus"
       }
     },
     "number": {

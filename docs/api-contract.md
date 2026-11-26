@@ -105,6 +105,7 @@ GET retry policy: `_request_with_retry` retries `APIUnavailableError` only, on G
 - `raw_response=False` returns a typed pydantic model; drift raises `SmartboxValidationError` carrying the wire `payload` `[code session.py:730-731, error.py:23-38]`.
 - Model strictness is deliberate and asymmetric: status models are strict (drift is the signal); the TOP-LEVEL setup models (`DefaultNodeSetup`/`PmoSetup`) are `extra="allow"` because setup feeds destructive full-repost writes and unknown keys must survive `[code models.py:69, 93]`. CAVEAT: the nested `NodeFactoryOptions`/`NodeExtraOptions` sub-models use pydantic's default `ignore` `[code models.py:19-59]` — a typed read-and-repost would drop any FUTURE undeclared key nested inside `factory_options`/`extra_options` (the wipe hazard the doctrine warns against); the survive-the-roundtrip doctrine holds for the top-level setup models only.
 - fw-1.9 status family: int `error_code`, extra `easy`/`runback`/`version` keys, no `act_duty`/`power_pcb_temp`; `DefaultNodeStatus` accepts both families (`error_code: str | int`, the latter two optional) `[live 2026-09-26]` `[code models.py:148-177]`.
+- Diagnostic status fields by controller family: `pcb_temp`, `error_code` and `true_radiant_active` are common to the htr/htr_mod status families; TRIAC controllers add `act_duty` and `power_pcb_temp`; the WiFi heater product `32` adds `power_fail_det`. Base relay `0402` (fw 1.6/1.9) reports only the common set, and the HJM `0132` WiFi heater reports all six `[live 2026-11-26]`.
 
 ### 1.7 Secret hygiene
 

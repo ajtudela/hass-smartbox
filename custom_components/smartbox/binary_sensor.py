@@ -15,6 +15,7 @@ from homeassistant.components.binary_sensor import (  # type: ignore[attr-define
     BinarySensorEntity,
 )
 from homeassistant.const import EntityCategory
+from smartbox.device.profile import diagnostic_fields
 from smartbox.device.settings import pir_enabled
 from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import parse_number_or_none
@@ -104,6 +105,11 @@ def _build_node_binary_sensors(
         # the app (TevolvePIRHeaterController.getStatusIndicators).
         if pir_enabled(node.setup):
             entities.append(PirPresence(node, entry, runtime, fanout))
+    fields = diagnostic_fields(node.pid, node.node_type)
+    if "true_radiant_active" in fields:
+        entities.append(TrueRadiantActive(node, entry, runtime, fanout))
+    if "power_fail_det" in fields:
+        entities.append(PowerFailureDetection(node, entry, runtime, fanout))
     if node.node_type == SmartboxNodeType.ACM:
         # Water storage replaces CHARGING with active/water-ready states.
         if is_water_storage(node.pid):
@@ -195,6 +201,32 @@ class WindowDetection(SmartboxNodeBinarySensor):
     _strict_true = True
     device_class = BinarySensorDeviceClass.WINDOW
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+
+class PowerFailureDetection(SmartboxNodeBinarySensor):
+    """Whether the controller's power-failure detection is active.
+
+    The field is true on a healthy HJM WiFi heater, so it describes the
+    detection feature rather than a current fault.
+    """
+
+    _key = "power_fail_detection"
+    payload_key = "power_fail_det"
+    _strict_true = True
+    device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+
+class TrueRadiantActive(SmartboxNodeBinarySensor):
+    """Whether the true-radiant element is currently active."""
+
+    _key = "true_radiant_active"
+    payload_key = "true_radiant_active"
+    _strict_true = True
+    device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
 
 class Charging(SmartboxNodeBinarySensor):

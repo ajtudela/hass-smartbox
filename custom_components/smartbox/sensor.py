@@ -51,7 +51,7 @@ from homeassistant.helpers.event import (
     async_track_time_interval,
 )
 from homeassistant.util import dt as dt_util
-from smartbox.device.profile import controller_limits, has_no_probes
+from smartbox.device.profile import controller_limits, diagnostic_fields, has_no_probes
 from smartbox.device.storage import (
     is_elnur_stepped_storage,
     is_helki_storage,
@@ -91,6 +91,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
     from smartbox.core.state import Change
 
@@ -206,6 +207,40 @@ def _build_device_sensors(
     return [([ClockDriftSensor(device, entry, runtime, fanout)], False)]
 
 
+def _diagnostic_telemetry_sensors(
+    node: SmartboxNodeInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+    fields: frozenset[str],
+) -> list[Entity]:
+    """Build the controller health telemetry, disabled by default."""
+    sensors: list[Entity] = []
+    if "error_code" in fields:
+        sensors.append(ErrorCodeSensor(node, entry, runtime, fanout))
+    if "pcb_temp" in fields:
+        sensors.append(PcbTemperatureSensor(node, entry, runtime, fanout))
+    if "power_pcb_temp" in fields:
+        sensors.append(PowerPcbTemperatureSensor(node, entry, runtime, fanout))
+    if "act_duty" in fields:
+        sensors.append(ActualDutyCycleSensor(node, entry, runtime, fanout))
+    return sensors
+
+
+def _diagnostic_telemetry_groups(
+    node: SmartboxNodeInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Return the diagnostic telemetry group for supported controllers."""
+    fields = diagnostic_fields(node.pid, node.node_type)
+    if not fields:
+        return []
+    sensors = _diagnostic_telemetry_sensors(node, entry, runtime, fanout, fields)
+    return [(sensors, False)] if sensors else []
+
+
 def _build_node_sensors(
     node: SmartboxNodeInfo,
     entry: SmartboxConfigEntry,
@@ -239,6 +274,7 @@ def _build_node_sensors(
     # Duty Cycle: only 'htr' nodes report it.
     if node.node_type == SmartboxNodeType.HTR:
         groups.append(([DutyCycleSensor(node, entry, runtime, fanout)], False))
+    groups.extend(_diagnostic_telemetry_groups(node, entry, runtime, fanout))
     if node.heater_node and node.node_type == SmartboxNodeType.ACM:
         groups.append(([ChargeLevelSensor(node, entry, runtime, fanout)], False))
         target = TargetChargeSensor(node, entry, runtime, fanout)
@@ -477,6 +513,105 @@ class DutyCycleSensor(SmartboxNodeSensorEntity):
     def native_value(self) -> float | None:
         """Return the native value of the sensor."""
         return parse_number_or_none(self._status.get("duty"))
+
+
+class ErrorCodeSensor(SmartboxNodeSensorEntity):
+    """The controller's raw error/fault code."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the error-code sensor."""
+        super().__init__(node, entry, runtime, fanout, "error_code")
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the raw code; firmware sends 0, '0000' or 'none'."""
+        value = self._status.get("error_code")
+        if value is None or value == "":
+            return None
+        return str(value)
+
+
+class _DiagnosticTemperatureSensor(SmartboxNodeSensorEntity):
+    """A diagnostic temperature read from one status field."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _status_key: str
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the temperature, or None until the field arrives."""
+        return parse_number_or_none(self._status.get(self._status_key))
+
+
+class PcbTemperatureSensor(_DiagnosticTemperatureSensor):
+    """Internal controller PCB temperature."""
+
+    _status_key = "pcb_temp"
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the PCB temperature sensor."""
+        super().__init__(node, entry, runtime, fanout, "pcb_temperature")
+
+
+class PowerPcbTemperatureSensor(_DiagnosticTemperatureSensor):
+    """Internal power-board PCB temperature."""
+
+    _status_key = "power_pcb_temp"
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the power-board temperature sensor."""
+        super().__init__(node, entry, runtime, fanout, "power_pcb_temperature")
+
+
+class ActualDutyCycleSensor(SmartboxNodeSensorEntity):
+    """The duty cycle the controller reports as actually applied."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_device_class = SensorDeviceClass.POWER_FACTOR
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        node: SmartboxNodeInfo,
+        entry: SmartboxConfigEntry,
+        runtime: SmartboxRuntime,
+        fanout: EngineChangeFanOut,
+    ) -> None:
+        """Initialize the actual duty-cycle sensor."""
+        super().__init__(node, entry, runtime, fanout, "actual_duty_cycle")
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the applied duty, or None until the field arrives."""
+        return parse_number_or_none(self._status.get("act_duty"))
 
 
 class TotalConsumptionSensor(SmartboxNodeSensorEntity):
