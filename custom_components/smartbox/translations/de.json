@@ -318,6 +318,16 @@
           "description": "Alle sieben Tagesschlüssel; jeder Wert ist eine Liste von Minuten-/Temperatursegmenten, z. B. Tag 0 mit m=360, t=19.0."
         }
       }
+    },
+    "set_schedule_resolution": {
+      "name": "Zeitplanauflösung setzen",
+      "description": "Schaltet den Zeitplan-Editor zwischen stündlicher und halbstündlicher Auflösung um.",
+      "fields": {
+        "resolution": {
+          "name": "Auflösung",
+          "description": "0 = stündlich (24 Slots), 1 = halbstündlich (48 Slots)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -464,6 +474,9 @@
     },
     "status_unavailable": {
       "message": "Der Heizungsstatus ist noch nicht verfügbar; nach der nächsten Aktualisierung erneut versuchen."
+    },
+    "schedule_target_missing": {
+      "message": "Keine geladene Smartbox-Zeitplan-Entität passte zum Ziel."
     }
   },
   "issues": {

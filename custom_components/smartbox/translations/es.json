@@ -318,6 +318,16 @@
           "description": "Las siete claves de día; cada valor es una lista de segmentos minuto/temperatura, p. ej. día 0 con m=360, t=19.0."
         }
       }
+    },
+    "set_schedule_resolution": {
+      "name": "Establecer resolución del programa",
+      "description": "Cambia el editor del programa entre resolución horaria y media horaria.",
+      "fields": {
+        "resolution": {
+          "name": "Resolución",
+          "description": "0 = horaria (24 franjas), 1 = media horaria (48 franjas)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -464,6 +474,9 @@
     },
     "status_unavailable": {
       "message": "El estado del calentador aún no está disponible; inténtalo tras la próxima actualización."
+    },
+    "schedule_target_missing": {
+      "message": "Ninguna entidad de programa Smartbox cargada coincidió con el objetivo."
     }
   },
   "issues": {

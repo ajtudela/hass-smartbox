@@ -318,6 +318,16 @@
           "description": "All seven day keys; each value is a list of minute/temperature segments, e.g. day 0 with m=360, t=19.0."
         }
       }
+    },
+    "set_schedule_resolution": {
+      "name": "Set schedule resolution",
+      "description": "Switches the heater schedule editor between hourly and half-hourly resolution.",
+      "fields": {
+        "resolution": {
+          "name": "Resolution",
+          "description": "0 = hourly (24 slots), 1 = half-hourly (48 slots)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -464,6 +474,9 @@
     },
     "status_unavailable": {
       "message": "The heater status is not available yet; try again after the next update."
+    },
+    "schedule_target_missing": {
+      "message": "No loaded Smartbox schedule entity matched the target."
     }
   },
   "issues": {

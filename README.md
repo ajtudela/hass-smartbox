@@ -218,7 +218,7 @@ entity: sensor.living_room_schedule
 
 The card takes the heater's Schedule sensor as its entity; the visual editor lists the available Smartbox schedule sensors. The legend shows the profile names with their current Frost/Eco/Comfort values; the **Legend** switch is on by default and hides the whole legend when turned off. The rows run from 00:00 at the top to 24:00 at the bottom; open the editor for the exact slot times.
 
-The card presents the week as a seven-column grid — days across, time slots down — starting on the Home Assistant user's configured first day of the week. It has a color legend for the profiles and is deliberately plan-only: the heater's mode, current target and overrides belong to the climate card, and the card does not derive a "now" or "next" state from the programme. Click the week grid to open the editor; on desktop the grid shows an **Edit program** overlay on hover or keyboard focus, and clicking a cell starts at that day and time. The editor has profile brushes, drag painting with a mouse, tap-to-apply on touch, undo, reset, and copy-day to weekdays, the weekend, or the whole week. Tap a day header to choose the copy source; the copy row names the selected day, and one instruction line above the grid covers painting and copying. Apply sends only the days you changed through `smartbox.set_schedule`. The dialog closes from its X button or Escape; a week with unsaved changes asks before discarding it. The editor warns when the program changed elsewhere, and it keeps unknown program formats read-only.
+The card presents the week as a seven-column grid — days across, time slots down — starting on the Home Assistant user's configured first day of the week. It has a color legend for the profiles and is deliberately plan-only: the heater's mode, current target and overrides belong to the climate card, and the card does not derive a "now" or "next" state from the programme. Click the week grid to open the editor; on desktop the grid shows an **Edit program** overlay on hover or keyboard focus, and clicking a cell starts at that day and time. The editor has profile brushes, drag painting with a mouse, tap-to-apply on touch, undo, reset, copy-day to weekdays, the weekend, or the whole week, and an hourly/half-hourly resolution toggle when the heater reports the resolution setting. Tap a day header to choose the copy source; the copy row names the selected day, and one instruction line above the grid covers painting and copying. Apply sends only the days you changed through `smartbox.set_schedule`. The dialog closes from its X button or Escape; a week with unsaved changes asks before discarding it. The editor warns when the program changed elsewhere, and it keeps unknown program formats read-only.
 
 ![Smartbox program card editor](docs/images/program-card-editor.png)
 
@@ -283,7 +283,7 @@ These are the boundaries of what the integration can do; the linked sections exp
 
 ## Services
 
-The integration registers five domain services, also available under **Developer tools → Actions**.
+The integration registers six domain services, also available under **Developer tools → Actions**.
 
 ### `smartbox.set_schedule`
 
@@ -297,6 +297,18 @@ data:
   schedule:
     "0": [0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0,
           0, 0, 1, 1, 2, 2, 2, 2, 1, 1, 0, 0]
+```
+
+### `smartbox.set_schedule_resolution`
+
+Target a schedule sensor. Switches the editor between hourly (`0`, 24 slots/day) and half-hourly (`1`, 48 slots/day) programme resolution by writing the setup keys the vendor app uses (`prog_resol` and `prog_resolution`). It changes the resolution mode, not the programme array; the card calls it when its editor toggle changes.
+
+```yaml
+action: smartbox.set_schedule_resolution
+target:
+  entity_id: sensor.living_room_schedule
+data:
+  resolution: 1
 ```
 
 ### `smartbox.set_charging_schedule`

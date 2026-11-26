@@ -56,9 +56,11 @@ from custom_components.smartbox import sensor as sensor_mod
 from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
     DOMAIN,
+    FIELD_RESOLUTION,
     FIELD_SCHEDULE,
     SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_SCHEDULE_RESOLUTION,
     HistoryConsumptionStatus,
     SmartboxNodeType,
 )
@@ -1749,6 +1751,31 @@ async def test_set_schedule_service_accepts_48_half_hourly_day(
     # GET-merge-POST: the complete merged object, 48 slots kept verbatim
     posted_days = body["prog"]
     assert posted_days["0"] == half_hourly
+
+
+async def test_set_schedule_resolution_service_writes_both_setup_keys(
+    hass, mock_smartbox, config_entry
+):
+    """The resolution service posts the vendor app's two-key setup body."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    _runtime, fake = await seed_stack(hass, mock_smartbox)
+    _dev_id, _mock_node, entity_id = await _first_heater_schedule_id(mock_smartbox)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_SCHEDULE_RESOLUTION,
+        {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 1},
+        blocking=True,
+    )
+    setup_posts = [
+        body
+        for method, path, body in fake.requests
+        if method == "POST" and path.endswith("/setup")
+    ]
+    assert setup_posts
+    assert setup_posts[-1]["prog_resol"] == 1
+    assert setup_posts[-1]["prog_resolution"] == 1
 
 
 async def test_total_consumption_failing_samples_unavailable(

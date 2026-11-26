@@ -48,6 +48,7 @@ from .const import (
     DAY_KEYS,
     DOMAIN,
     FIELD_ACTIVE_DAYS,
+    FIELD_RESOLUTION,
     FIELD_SCHEDULE,
     FIELD_SLOT_1,
     FIELD_SLOT_2,
@@ -55,6 +56,7 @@ from .const import (
     SERVICE_SET_BOOST_PARAMS,
     SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_SCHEDULE_RESOLUTION,
     SERVICE_SET_THERMOSTAT_SCHEDULE,
 )
 from .exceptions import user_error, validation_error
@@ -84,6 +86,7 @@ _SERVICE_NAMES = (
     SERVICE_SET_BOOST_MODE,
     SERVICE_SET_BOOST_PARAMS,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_SCHEDULE_RESOLUTION,
     SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_THERMOSTAT_SCHEDULE,
 )
@@ -98,6 +101,9 @@ class ScheduleServiceTarget(Protocol):
 
     async def async_set_schedule(self, prog: ProgDict) -> None:
         """Write the schedule for this entity's node."""
+
+    async def async_set_schedule_resolution(self, resolution: int) -> None:
+        """Write the programme resolution for this entity's node."""
 
 
 class ThermostatScheduleTarget(Protocol):
@@ -383,6 +389,34 @@ async def _handle_set_boost_params(hass: HomeAssistant, call: ServiceCall) -> No
             ) from ex
 
 
+async def _handle_set_schedule_resolution(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    """Write the programme resolution to targeted schedule sensors."""
+    resolution = int(call.data[FIELD_RESOLUTION])
+    target_entity_ids = require_service_target(
+        hass, call.data, SERVICE_SET_SCHEDULE_RESOLUTION
+    )
+    matched = False
+    for other in loaded_runtimes(hass):
+        for schedule_entity in other.services.schedule:
+            if schedule_entity.entity_id not in target_entity_ids:
+                continue
+            matched = True
+            try:
+                await schedule_entity.async_set_schedule_resolution(resolution)
+            except ValueError as ex:
+                msg = "schedule_invalid"
+                raise validation_error(
+                    msg,
+                    entity_id=schedule_entity.entity_id or "",
+                    error=str(ex),
+                ) from ex
+    if not matched:
+        msg = "schedule_target_missing"
+        raise validation_error(msg, entity_id=next(iter(target_entity_ids), ""))
+
+
 async def _handle_set_schedule(hass: HomeAssistant, call: ServiceCall) -> None:
     """Write a day-keyed schedule to targeted schedule sensors."""
     schedule: ProgDict = call.data[FIELD_SCHEDULE]
@@ -572,6 +606,13 @@ _CHARGING_SCHEDULE_SCHEMA = vol.All(
     cv.has_at_least_one_key(FIELD_ACTIVE_DAYS, FIELD_SLOT_1, FIELD_SLOT_2),
 )
 
+_SCHEDULE_RESOLUTION_SCHEMA = vol.Schema(
+    {
+        vol.Required(FIELD_RESOLUTION): vol.All(vol.Coerce(str), vol.In(("0", "1"))),
+        **cv.ENTITY_SERVICE_FIELDS,
+    }
+)
+
 _SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required(FIELD_SCHEDULE): vol.All(
@@ -609,6 +650,13 @@ def async_register_services(hass: HomeAssistant) -> None:
             SERVICE_SET_SCHEDULE,
             partial(_handle_set_schedule, hass),
             schema=_SCHEDULE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCHEDULE_RESOLUTION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            partial(_handle_set_schedule_resolution, hass),
+            schema=_SCHEDULE_RESOLUTION_SCHEMA,
         )
     if not hass.services.has_service(DOMAIN, SERVICE_SET_CHARGING_SCHEDULE):
         hass.services.async_register(

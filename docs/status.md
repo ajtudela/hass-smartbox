@@ -16,7 +16,7 @@
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
   request-shape matrix, and per-surface attribute/state snapshots.
-  Integration suite: 1711 passed, 6 skipped; library: 802 passed.
+  Integration suite: 1713 passed, 6 skipped; library: 804 passed.
 - The path override is removed; the integration dependency is PyPI-only at
   `>=3.2.1,<3.3`. The branch imports `smartbox.device`, so it is not
   installable until an approved 3.3.0 delivery method is chosen. Do not merge

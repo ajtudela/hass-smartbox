@@ -121,6 +121,27 @@ set_schedule:
       selector:
         object:
 
+set_schedule_resolution:
+  name: Set schedule resolution
+  description: >-
+    Switches a heater schedule editor between hourly (24 slots/day) and
+    half-hourly (48 slots/day) programme resolution. This writes the setup
+    keys the vendor app uses; it does not rewrite the programme itself.
+  target:
+    entity:
+      integration: smartbox
+      domain: sensor
+  fields:
+    resolution:
+      name: Resolution
+      description: "0 = hourly (24 slots), 1 = half-hourly (48 slots)."
+      required: true
+      selector:
+        select:
+          options:
+            - "0"
+            - "1"
+
 set_charging_schedule:
   name: Set storage charging schedule
   description: >-

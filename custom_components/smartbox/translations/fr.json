@@ -318,6 +318,16 @@
           "description": "Les sept clés de jour ; chaque valeur est une liste de segments minute/température, par ex. jour 0 avec m=360, t=19.0."
         }
       }
+    },
+    "set_schedule_resolution": {
+      "name": "Définir la résolution du programme",
+      "description": "Bascule l’éditeur de programme entre une résolution horaire et demi-horaire.",
+      "fields": {
+        "resolution": {
+          "name": "Résolution",
+          "description": "0 = horaire (24 créneaux), 1 = demi-horaire (48 créneaux)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -464,6 +474,9 @@
     },
     "status_unavailable": {
       "message": "L'état du radiateur n'est pas encore disponible ; réessayez après la prochaine mise à jour."
+    },
+    "schedule_target_missing": {
+      "message": "Aucune entité de programme Smartbox chargée ne correspond à la cible."
     }
   },
   "issues": {

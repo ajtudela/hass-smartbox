@@ -100,6 +100,8 @@ if TYPE_CHECKING:
     from .identity import SmartboxDeviceInfo, SmartboxNodeInfo
 
 _LOGGER = logging.getLogger(__name__)
+HOURLY_SLOTS = 24
+HALF_HOURLY_SLOTS = 48
 
 _MINUTES_PER_DAY = 24 * 60
 
@@ -1151,13 +1153,49 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
         state = self._node_state()
         return normalize_prog(state.prog) if state is not None else None
 
+    def _setup_resolution(self) -> int | None:
+        """Return the setup's programme resolution, if the node carries it."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        for source in (setup, setup.get("factory_options")):
+            if not isinstance(source, Mapping):
+                continue
+            for key in ("prog_resolution", "prog_resol"):
+                value = source.get(key)
+                if isinstance(value, bool):
+                    continue
+                if isinstance(value, int):
+                    return value
+        return None
+
+    @property
+    def resolution_available(self) -> bool:
+        """Whether the card may offer the 24/48-slot editor toggle."""
+        if self._setup_resolution() is not None:
+            return True
+        prog = self._prog
+        return bool(prog and any(len(slots) != HOURLY_SLOTS for slots in prog.values()))
+
+    @property
+    def resolution(self) -> int:
+        """Return 0 for hourly slots, 1 for half-hourly slots."""
+        prog = self._prog
+        if prog and any(len(slots) == HALF_HOURLY_SLOTS for slots in prog.values()):
+            return 1
+        setup_value = self._setup_resolution()
+        return 1 if setup_value == 1 else 0
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the full schedule as attributes."""
+        """Return the full schedule and the editor resolution."""
         prog = self._prog
         if prog is None:
             return {}
-        return {FIELD_SCHEDULE: prog}
+        return {
+            FIELD_SCHEDULE: prog,
+            "resolution": self.resolution,
+            "resolution_available": self.resolution_available,
+        }
 
     @property
     def native_value(self) -> str | None:
@@ -1247,6 +1285,15 @@ class ScheduleSensor(SmartboxNodeSensorEntity):
         ref = NodeRef(self._node.node_type, str(self._node.addr))
         await self._runtime.engine.set_prog(self._dev_id, ref, prog)
         self._track_next_change()
+        self.async_write_ha_state()
+
+    async def async_set_schedule_resolution(self, resolution: int) -> None:
+        """Write the editor resolution (0 hourly, 1 half-hourly)."""
+        if resolution not in (0, 1):
+            msg = f"resolution must be 0 or 1, got {resolution!r}"
+            raise ValueError(msg)
+        ref = NodeRef(self._node.node_type, str(self._node.addr))
+        await self._runtime.engine.set_prog_resolution(self._dev_id, ref, resolution)
         self.async_write_ha_state()
 
 
