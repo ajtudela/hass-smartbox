@@ -2,7 +2,7 @@
 
 > **Role.** The short, curated record of what is in flight: current work, post-release watch, and the open items that wait on hardware or on a decision. Long-lived facts live in the code and the other `docs/` files; completed work lives in git. Release history and CI status live in `CHANGELOG.md`, tags/releases and GitHub Actions; they do not belong here.
 
-*Updated 2026-11-25. Keep this a 90-second read and prune entries as they close.*
+*Updated 2026-11-26. Keep this a 90-second read and prune entries as they close.*
 
 ## Device-semantics migration (landed on branch)
 
@@ -16,7 +16,7 @@
 - Validation baseline: reviewed product-code fixture (51 codes), per-unit
   entity-registry/diagnostics goldens, service snapshot, activation
   request-shape matrix, and per-surface attribute/state snapshots.
-  Integration suite: 1698 passed, 6 skipped; library: 790 passed.
+  Integration suite: 1708 passed, 6 skipped; library: 798 passed.
 - The path override is removed; the integration dependency is PyPI-only at
   `>=3.2.1,<3.3`. The branch imports `smartbox.device`, so it is not
   installable until an approved 3.3.0 delivery method is chosen. Do not merge
@@ -39,7 +39,7 @@
   - Schedule writes reject profile indexes outside the controller catalogue; malformed temperature/duty/power/charge values read as unknown; legacy PIDs omit `extra_options` from setup POSTs; invited accounts work in the CLI.
   - Coverage: `test_product_code_parity.py` pins all 51 decoded product codes and their family/bounds (climate, programme, max-limit, boost)/profiles/boost-mode policy/duty presets/EASY/RUNBACK/lock/firmware gates; `test_entity_surface_matrix.py` pins the domains and unique keys per representative family and variant (capability flags, boost config 0, NO_PROBES, fw-1.6 lock, PIR, FULL temp/fixed/empty mode lists), snapshots options, bounds and current states for 15 representative families, and covers the box-level entities. `test_services_snapshot.py` now also checks every `services.yaml` field and selector against the registered `vol` schema.
 - Live-confirmed in this cycle: HJM `0132` schedule OFF index and 48-slot day, 0402/HJM controller ranges, child-lock `1`/`2`/`0` and the ignored boolean, setpoint while OFF, boost config 2 app path, the lost-at-discovery/reload symptom on `Spálňa`, the inferred `window_open` cold-night retry (flag flipped true, heating paused, recovered on close), and the RTC month indexing on 2026-11-24 (`n=10` rendered November).
-- Soak Window A ran 2026-11-24 22:29→2026-11-25 06:48: 119 entities, ~506 MB, no Smartbox errors. Window B is running on the follow-up image (119 entities, ~440 MB, no new errors); one duplicate-statistics recorder warning appeared at the 07:45 restart and did not recur at the 08:32 or 11:46 restarts. Most library changes are additive; the new `set_extra_options` omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
+- Soak Window A ran 2026-11-24 22:29→2026-11-25 06:48: 119 entities, ~506 MB, no Smartbox errors. Window B is running on the follow-up image (119 entities, ~440 MB, no new errors); one duplicate-statistics recorder warning appeared at the 07:45 restart, did not recur at 08:32 or 11:46, and recurred at the 10:38 restart on 2026-11-26. Most library changes are additive; the new `set_extra_options` omission and the `SlotReader.version` protocol member are not purely backward-compatible, so the next library release is a minor and the integration pin must move with it.
 
 ## Post-release watch
 

@@ -166,6 +166,28 @@ BOTH = {"boost_modes_available": ["temp_and_time", "max_temp_fixed_time"]}
             ActivationPlan(None, 20.0, 60, legacy=ENDPOINT),
             id="helki-storage-boost",
         ),
+        pytest.param(
+            "081C0000",
+            {
+                "factory_options": {"boost_config": 3},
+                "extra_options": {"boost_temp": "20.0", "boost_time": 60},
+            },
+            {"units": "C", "stemp": "20.0"},
+            {},
+            ActivationPlan(None, 20.0, 60, legacy=False),
+            id="storage-config3-stays-on-boost",
+        ),
+        pytest.param(
+            "082E0000",
+            {
+                "factory_options": {"boost_config": 3},
+                "extra_options": {"boost_temp": "20.0", "boost_time": 60},
+            },
+            {"units": "C", "stemp": "20.0"},
+            {},
+            ActivationPlan(None, 20.0, 60, legacy=False),
+            id="storage-config3-2e-stays-on-boost",
+        ),
     ],
 )
 def test_boost_request_shape(pid, setup, status, prefs, expected) -> None:

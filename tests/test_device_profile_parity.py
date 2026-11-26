@@ -211,6 +211,9 @@ def test_full_boost_attribute_visibility_follows_the_advertised_modes() -> None:
     assert boost_activation_mode("0134", setup, fixed) == "max_temp_fixed_time"
     assert boost_activation_mode("0134", setup, none) is None
     assert boost_activation_mode("011D", setup, none) == "max_temp_fixed_time"
+    assert boost_activation_mode("081C", setup, none) is None
+    assert boost_activation_mode("082E", setup, none) is None
+    assert boost_params_configurable("acm", "0114", setup, none) is False
 
     assert boost_params_configurable("htr", "0134", setup, temp) is True
     assert boost_params_configurable("htr", "0134", setup, fixed) is False

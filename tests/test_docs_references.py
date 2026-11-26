@@ -417,6 +417,42 @@ def test_evidence_ids_are_unique_and_references_resolve() -> None:
     assert not problems, f"unknown evidence IDs: {problems}"
 
 
+_ADAPTER_METHOD_ENDPOINTS = {
+    "health_check": "E1",
+    "get_api_version": "E2",
+    "get_token": "E3",
+    "get_node_power": "E33",
+    "get_dev_data": "E46",
+    "set_node_power_limit": "E47",
+}
+
+
+def _catalog_consumers() -> dict[str, str]:
+    text = (REPO_ROOT / "docs" / "api-endpoints.md").read_text(encoding="utf-8")
+    consumers: dict[str, str] = {}
+    for line in text.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 4 and re.fullmatch(r"[ESX]\d+", cells[0]):
+            consumers[cells[0]] = cells[3]
+    return consumers
+
+
+def test_catalogue_marks_adapter_called_endpoints() -> None:
+    """A method the adapter calls must be labelled library+HA."""
+    sources = "\n".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (REPO_ROOT / "custom_components" / "smartbox").glob("*.py")
+    )
+    consumers = _catalog_consumers()
+    for method, endpoint_id in _ADAPTER_METHOD_ENDPOINTS.items():
+        if f".{method}(" in sources:
+            assert consumers[endpoint_id] == "library+HA", (
+                f"{endpoint_id} is called as {method} but labelled "
+                f"{consumers[endpoint_id]}"
+            )
+    assert consumers["E28"] == "—"
+
+
 def test_shipped_code_never_cites_local_only_files() -> None:
     """A shipped comment cites the durable docs, not agent instructions."""
     offenders: list[str] = []

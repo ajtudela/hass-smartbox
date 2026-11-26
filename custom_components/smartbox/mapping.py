@@ -37,7 +37,8 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
-from smartbox.device.profile import HtrModPolicy, htr_mod_policy
+from smartbox.device.codes import PRODUCT_CODES
+from smartbox.device.profile import HtrModPolicy, htr_mod_policy, is_htr_mod_code
 from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import bounded_repr, parse_number_or_none
 
@@ -260,10 +261,22 @@ def _get_htr_mod_target(status: dict[str, Any], prog: ProgDict | None) -> float 
     raise KeyError(msg)
 
 
+def _is_htr_mod(node_type: str, model_code: str | None) -> bool:
+    """Whether the node uses htr_mod control.
+
+    The htr_mod wire keeps its historical surface before the PID arrives;
+    ``0A`` is htr_mod on any wire, while ``FF`` is htr_mod only on that wire.
+    """
+    if model_code is not None and model_code in PRODUCT_CODES:
+        return is_htr_mod_code(model_code, node_type)
+    return node_type == SmartboxNodeType.HTR_MOD
+
+
 def get_target_temperature(
     node_type: str,
     status: dict[str, Any],
     prog: ProgDict | None = None,
+    model_code: str | None = None,
 ) -> float | None:
     """Get the target temperature.
 
@@ -273,7 +286,7 @@ def get_target_temperature(
     the target from the current programme slot, as the app's
     ``getAutoModeTemp`` does.
     """
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if _is_htr_mod(node_type, model_code):
         return _get_htr_mod_target(status, prog)
     if status.get("boost", False):
         # The app's boost mode is a UI heating mode of its own; the wire keeps
@@ -417,7 +430,7 @@ def temperature_write(
 ) -> TemperatureWrite:
     """Map a target-temperature change onto the operation that performs it."""
     check_status_key("units", node_type, status)
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if _is_htr_mod(node_type, model_code):
         policy = htr_mod_policy(model_code)
         if (
             policy is not None
@@ -527,11 +540,14 @@ def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
 
 
 def hvac_mode_write(
-    node_type: str, status: dict[str, Any], hvac_mode: str
+    node_type: str,
+    status: dict[str, Any],
+    hvac_mode: str,
+    model_code: str | None = None,
 ) -> StatusModeWrite:
     """Map an HVAC-mode change onto the operation that performs it."""
     error_msg = f"Unsupported hvac mode {hvac_mode}"
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if _is_htr_mod(node_type, model_code):
         if hvac_mode == HVACMode.OFF:
             return HtrModWrite(on=False)
         if hvac_mode == HVACMode.HEAT:
@@ -554,10 +570,13 @@ def hvac_mode_write(
 
 
 def preset_mode_write(
-    node_type: str, status: dict[str, Any], preset_mode: str
+    node_type: str,
+    status: dict[str, Any],
+    preset_mode: str,
+    model_code: str | None = None,
 ) -> StatusModeWrite:
     """Map a preset change onto the operation that performs it."""
-    if node_type != SmartboxNodeType.HTR_MOD:
+    if not _is_htr_mod(node_type, model_code):
         msg = f"{node_type} nodes do not support preset {preset_mode}"
         raise ValueError(msg)
     # PRESET_HOME and PRESET_AWAY are not handled via status updates
@@ -566,7 +585,7 @@ def preset_mode_write(
         raise ValueError(msg)
 
     if preset_mode == PRESET_SCHEDULE:
-        return hvac_mode_write(node_type, status, HVACMode.AUTO)
+        return hvac_mode_write(node_type, status, HVACMode.AUTO, model_code=model_code)
     if preset_mode == PRESET_SELF_LEARN:
         return HtrModWrite(on=True, mode="self_learn")
     if preset_mode == PRESET_ACTIVITY:

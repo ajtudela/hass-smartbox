@@ -77,7 +77,7 @@ from .const import (
     SmartboxNodeType,
 )
 from .entity_builder import EntityBuilder
-from .identity import charging_schedule_available
+from .identity import charging_schedule_available, is_htr_mod_node
 from .mapping import (
     ProgDict,
     get_boost_end_datetime,
@@ -428,11 +428,14 @@ class PowerSensor(SmartboxNodeSensorEntity):
 
     def _node_power(self, status: dict[str, Any]) -> float | None:
         """Return the controller-specific power reading."""
-        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+        state = self._node_state()
+        model_code = self._node.get_model_code(
+            state.version if state is not None else None
+        )
+        if is_htr_mod_node(self._node, model_code):
             # HaverlandHtrModController.getPower() uses the configured rated
             # power while active/heating, not status.power.
             if status.get("active") or status.get("heating"):
-                state = self._node_state()
                 setup = state.setup if state is not None else self._node.setup
                 return parse_number_or_none(setup.get("power"))
             return 0

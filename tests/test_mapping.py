@@ -205,8 +205,8 @@ def test_temperature_write_htr_mod_18c_is_an_eco_setpoint():
     )
 
 
-def test_temperature_write_htr_mod_other_product_keeps_the_legacy_body():
-    """Only the two Haverland product codes get the app's limits."""
+def test_temperature_write_known_non_htr_mod_code_uses_the_base_body():
+    """A known non-0A/FF code on the htr_mod wire follows the base controller."""
     assert temperature_write(
         SmartboxNodeType.HTR_MOD,
         {
@@ -218,14 +218,7 @@ def test_temperature_write_htr_mod_other_product_keeps_the_legacy_body():
         },
         14.2,
         model_code="1C",
-    ) == HtrModWrite(
-        on=True,
-        mode="manual",
-        selected_temp="eco",
-        comfort_temp=18.2,
-        eco_offset="4",
-        units="C",
-    )
+    ) == SetpointWrite(units="C")
 
 
 def test_temperature_write_htr_mod_fahrenheit_keeps_the_legacy_body():
@@ -391,12 +384,11 @@ def test_temperature_write_htr_mod_comfort_needs_the_stored_offset():
         (
             {
                 "mode": "auto",
-                "selected_temp": "eco",
                 "comfort_temp": "17.2",
                 "units": "C",
             },
-            "eco_offset",
-            "1C",
+            "selected_temp",
+            "0A",
         ),
         (
             {
@@ -414,6 +406,31 @@ def test_temperature_write_htr_mod_missing_keys_raise(status, key, model_code):
     # None pins only the exception type - the message wording is not contract
     with pytest.raises(KeyError, match=key):
         temperature_write(SmartboxNodeType.HTR_MOD, status, 17.2, model_code=model_code)
+
+
+def test_htr_mod_writes_follow_the_pid_on_a_plain_htr_wire():
+    """0A is htr_mod on any wire; FF is htr_mod only on the htr_mod wire."""
+    status = {
+        "units": "C",
+        "mode": "manual",
+        "selected_temp": "comfort",
+        "comfort_temp": "21.0",
+        "eco_offset": "0.0",
+    }
+    assert isinstance(
+        temperature_write(SmartboxNodeType.HTR, status, 21.5, model_code="0A"),
+        HtrModWrite,
+    )
+    assert isinstance(
+        hvac_mode_write(SmartboxNodeType.HTR, status, HVACMode.HEAT, model_code="0A"),
+        HtrModWrite,
+    )
+    assert temperature_write(
+        SmartboxNodeType.HTR,
+        {"units": "C", "stemp": "20.0"},
+        21.5,
+        model_code="FF",
+    ) == SetpointWrite(units="C")
 
 
 def test_temperature_write_modified_auto_engagement():

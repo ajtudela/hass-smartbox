@@ -33,12 +33,6 @@ FIELD_SLOT_1 = "slot_1"
 FIELD_SLOT_2 = "slot_2"
 # Schedule profile slot values; day keys are "0".."6" (Sunday..Saturday).
 DAY_KEYS = ("0", "1", "2", "3", "4", "5", "6")
-# Base ElectricHeater programme catalogue, in the vendor app's sorted order
-# (docs/api-ws-user.md §2.8): 0=ICE, 1=ECO, 2=COMF. Per-controller catalogues
-# (the four-profile Helki/Haverland families and the off-first htr_mod order)
-# live in smartbox.device.profile; this tuple is the default used by the sensor when a
-# node has no decoded controller-specific list.
-PROG_PROFILE_NAMES = ("frost", "eco", "comfort")
 CONF_API_NAME = "api_name"
 CONF_DISPLAY_ENTITY_PICTURES = "reseller_entity"
 CONF_TIMEDELTA_POWER = "timedelta_update_power"

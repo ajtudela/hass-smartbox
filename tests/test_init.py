@@ -1174,6 +1174,19 @@ async def test_late_pid_reloads_once(hass, config_entry):
         await runtime.engine.callback(change)
         reload.assert_called_once_with("entry1")
 
+        # A fresh watcher after the reload still sees a missing discovery PID:
+        # the cross-reload marker must prevent a second reload.
+        node.version = {"pid": None}
+        reload_world = SimpleNamespace(
+            identity=SimpleNamespace(nodes=[node]), engine=Engine()
+        )
+        LatePidWatcher(
+            hass, entry, reload_world.identity, reload_world.engine
+        ).async_start()
+        reload.reset_mock()
+        await reload_world.engine.callback(change)
+        reload.assert_not_called()
+
         # A present discovery PID, a status change or an unknown node is not
         # a late-identity event.
         node.version = {"pid": "04020000"}

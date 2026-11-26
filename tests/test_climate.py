@@ -58,7 +58,6 @@ from smartbox.core.engine import SmartboxEngine
 from smartbox.core.state import NodeState, node_key
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.events import Snapshot, Update
-from smartbox.protocol.writes import VALID_BOOST_MODES
 
 from custom_components.smartbox.adapter import node_boost_params
 from custom_components.smartbox.boost_prefs import NodeBoostPrefs
@@ -130,7 +129,9 @@ async def smartbox_stack(hass, mock_smartbox, config_entry):
 def test_locked_attribute_normalizes_int(locked, expected):
     """An acm-style 0/1 locked value becomes a real bool on climate."""
     heater = object.__new__(SmartboxHeater)
-    heater._node = SimpleNamespace(node_type=SmartboxNodeType.HTR)
+    heater._node = SimpleNamespace(
+        node_type=SmartboxNodeType.HTR, get_model_code=lambda *_args: None
+    )
     heater._node_state = lambda: NodeState(status={"locked": locked})
     assert heater.extra_state_attributes[ATTR_LOCKED] is expected
 
@@ -987,7 +988,7 @@ async def test_htr_mod_non_haverland_product_keeps_the_generic_grid(
     nodes = await mock_smartbox.session.get_nodes("device_2")
     node = nodes[1]  # selected comfort, comfort_temp "20.3"
     await runtime.transport.deliver_update(
-        "device_2", f"/{node['type']}/{node['addr']}/version", {"pid": "08010000"}
+        "device_2", f"/{node['type']}/{node['addr']}/version", {"pid": "08990000"}
     )
     await hass.async_block_till_done()
     status = await fake.get_node_status("device_2", ref(node))
@@ -2023,7 +2024,59 @@ async def test_full_boost_entity_rejects_an_unknown_mode():
             active=True, mode="nope", temperature=None, time_minutes=None
         )
     assert err.value.translation_key == "boost_mode_invalid"
-    assert err.value.translation_placeholders == {"modes": ", ".join(VALID_BOOST_MODES)}
+    assert err.value.translation_placeholders == {
+        "modes": "advanced_slot, max_temp_fixed_time, runback, temp_and_time"
+    }
+
+
+async def test_fixed_time_boost_editor_does_not_post_temp_and_time():
+    """A missing boost_mode on a fixed-time controller falls through to setpoint."""
+    entity = _full_boost_entity(
+        {
+            "boost": True,
+            "mode": "manual",
+            "units": "C",
+            "stemp": "20.0",
+        },
+        pid="011D",
+    )
+    engine = entity._runtime.engine
+    with (
+        patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode,
+        patch.object(engine, "set_setpoint", AsyncMock()),
+    ):
+        await entity.async_set_temperature(temperature=21.0)
+    set_boost_mode.assert_not_awaited()
+
+
+async def test_fixed_time_boost_entity_rejects_a_full_parameter_mode():
+    """The entity guard uses the per-mode capability check, not just FULL."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C", "stemp": "20.0"},
+        pid="011D",
+    )
+    with pytest.raises(ServiceValidationError) as err:
+        await entity.async_set_boost_mode(
+            active=True, mode="temp_and_time", temperature=None, time_minutes=None
+        )
+    assert err.value.translation_key == "boost_mode_invalid"
+    assert "max_temp_fixed_time" in err.value.translation_placeholders["modes"]
+
+
+async def test_lhz_relay_config_three_activates_with_temp_and_time():
+    """A generic FULL controller without a fixed-time row uses temp_and_time."""
+    entity = _full_boost_entity(
+        {"boost": False, "mode": "off", "units": "C", "stemp": "20.0"},
+        setup={"extra_options": {"boost_temp": "21.0", "boost_time": 60}},
+        pid="01360000",
+    )
+    engine = entity._runtime.engine
+    with patch.object(engine, "set_boost_mode", AsyncMock()) as set_boost_mode:
+        await entity.async_set_preset_mode(PRESET_BOOST)
+    _args, kwargs = set_boost_mode.await_args
+    assert kwargs["mode"] == "temp_and_time"
+    assert kwargs["temperature"] == 21.0
+    assert kwargs["time_minutes"] == 60
 
 
 def test_runback_limits_apply_only_while_runback_is_active():

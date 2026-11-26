@@ -34,6 +34,7 @@ from homeassistant.const import (
 )
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.capabilities import check_boost_mode
 from smartbox.device.modes import boost_uses_legacy_path
 from smartbox.device.profile import HtrModPolicy, has_no_probes, htr_mod_policy
 from smartbox.device.storage import classic_accumulator
@@ -47,7 +48,7 @@ from .adapter import (
     node_runback_limits,
 )
 from .boost_activation import ActivationPlan, plan_boost, plan_runback
-from .boost_policy import boost_modes_available
+from .boost_policy import boost_activation_mode, boost_modes_available
 from .const import (
     PRESET_ADVANCED_SLOT,
     PRESET_FROST,
@@ -62,6 +63,8 @@ from .identity import (
     boost_available,
     boost_mode_available,
     easy_available,
+    is_htr_mod_node,
+    node_facts,
     runback_available,
 )
 from .mapping import (
@@ -312,13 +315,12 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             return None
         state = self._node_state()
         prog = normalize_prog(state.prog) if state is not None else None
-        target = get_target_temperature(self._node.node_type, self._status, prog)
+        target = get_target_temperature(
+            self._node.node_type, self._status, prog, model_code=self._model_code()
+        )
         # In AUTO the target comes from the programme and may be ICE (7 C),
         # below the manual comfort/eco union; do not clamp it to that profile.
-        if (
-            self._node.node_type == SmartboxNodeType.HTR_MOD
-            and self._status.get("mode") == "auto"
-        ):
+        if self._is_htr_mod() and self._status.get("mode") == "auto":
             return target
         limits = self._htr_mod_status_limits()
         if target is None or limits is None:
@@ -349,9 +351,13 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         state = self._node_state()
         return self._node.get_model_code(state.version if state is not None else None)
 
+    def _is_htr_mod(self) -> bool:
+        """Whether this node uses the htr_mod control surface."""
+        return is_htr_mod_node(self._node, self._model_code())
+
     def _htr_mod_policy(self) -> HtrModPolicy | None:
         """Return the node's htr_mod setpoint policy, when it has one."""
-        if self._node.node_type != SmartboxNodeType.HTR_MOD:
+        if not self._is_htr_mod():
             return None
         return htr_mod_policy(self._model_code())
 
@@ -437,21 +443,31 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             return
         engine = self._runtime.engine
         if self._boost and self.supports_boost_mode:
-            mode = self._boost_mode_value or "temp_and_time"
-            if mode in ("temp_and_time", "runback"):
-                # The app's active-mode editor re-posts /boost_mode with the
-                # new temperature; the defaults stay untouched.
-                await engine.set_boost_mode(
-                    self._dev_id,
-                    self._ref,
-                    active=True,
-                    mode=mode,
-                    temperature=temp,
-                )
-                return
-            if mode == "advanced_slot":
-                msg = "advanced_slot_temperature_fixed"
-                raise user_error(msg)
+            state = self._node_state()
+            setup = state.setup if state is not None else self._node.setup
+            mode = self._boost_mode_value or boost_activation_mode(
+                self._live_pid, setup, self._status
+            )
+            if (
+                mode is not None
+                and check_boost_mode(
+                    node_facts(self._node, pid=self._live_pid, setup=setup), mode
+                ).ok
+            ):
+                if mode in ("temp_and_time", "runback"):
+                    # The app's active-mode editor re-posts /boost_mode with the
+                    # new temperature; the defaults stay untouched.
+                    await engine.set_boost_mode(
+                        self._dev_id,
+                        self._ref,
+                        active=True,
+                        mode=mode,
+                        temperature=temp,
+                    )
+                    return
+                if mode == "advanced_slot":
+                    msg = "advanced_slot_temperature_fixed"
+                    raise user_error(msg)
         state = self._node_state()
         write = temperature_write(
             self._node.node_type,
@@ -491,7 +507,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             if acm_active(status, self._live_pid):
                 return HVACAction.HEATING
         elif (
-            node_type == SmartboxNodeType.HTR_MOD
+            self._is_htr_mod()
             and status.get("mode") == "manual"
             and status.get("selected_temp") == "off"
             and not self._boost
@@ -503,8 +519,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         if mode is None and not self._boost:
             return None
         if (
-            mode == "off"
-            or (node_type == SmartboxNodeType.HTR_MOD and not status.get("on", True))
+            mode == "off" or (self._is_htr_mod() and not status.get("on", True))
         ) and not self._boost:
             return HVACAction.OFF
         return HVACAction.IDLE
@@ -561,7 +576,12 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
                 msg = "hvac_mode_unsupported"
                 raise user_error(msg)
             return
-        write = hvac_mode_write(self._node.node_type, self._status, hvac_mode)
+        write = hvac_mode_write(
+            self._node.node_type,
+            self._status,
+            hvac_mode,
+            model_code=self._model_code(),
+        )
         if isinstance(write, HtrModWrite):
             await engine.set_htr_mod_status(
                 self._dev_id,
@@ -643,7 +663,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             return PRESET_AWAY
         if self._boost:
             return self._active_boost_preset()
-        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+        if self._is_htr_mod():
             return self._preset_mode_for_htr_mod()
         return PRESET_HOME
 
@@ -688,7 +708,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
                 default_preset_modes.append(PRESET_RUNBACK)
             if "advanced_slot" in available or active_mode == "advanced_slot":
                 default_preset_modes.append(PRESET_ADVANCED_SLOT)
-        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+        if self._is_htr_mod():
             default_preset_modes.extend(
                 [
                     PRESET_ACTIVITY,
@@ -723,7 +743,7 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             # htr reports a bool, acm reports 0/1; expose one type
             # (hass-smartbox docs/api-contract.md §7 item 18).
             attributes[ATTR_LOCKED] = bool(self._status["locked"])
-        if self._node.node_type == SmartboxNodeType.HTR_MOD:
+        if self._is_htr_mod():
             value = self._status.get("selected_temp")
             if isinstance(value, str) and value:
                 attributes["selected_temp"] = value
@@ -767,8 +787,13 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
             )
             await self._async_apply_activation(engine, plan)
             return
-        if self._node.node_type == SmartboxNodeType.HTR_MOD:
-            write = preset_mode_write(self._node.node_type, self._status, preset_mode)
+        if self._is_htr_mod():
+            write = preset_mode_write(
+                self._node.node_type,
+                self._status,
+                preset_mode,
+                model_code=self._model_code(),
+            )
             if isinstance(write, HtrModWrite):
                 await engine.set_htr_mod_status(
                     self._dev_id,
@@ -836,9 +861,21 @@ class SmartboxHeater(SmartboxNodeAdapterEntity, ClimateEntity):
         if not self.supports_boost_mode:
             msg = "boost_mode_unsupported"
             raise user_error(msg)
-        if active and mode not in VALID_BOOST_MODES:
-            msg = "boost_mode_invalid"
-            raise validation_error(msg, modes=", ".join(VALID_BOOST_MODES))
+        if active:
+            state = self._node_state()
+            setup = state.setup if state is not None else self._node.setup
+            mode_check = check_boost_mode(
+                node_facts(self._node, pid=self._live_pid, setup=setup), mode
+            )
+            if not mode_check.ok:
+                offered = mode_check.detail.get("offered", ())
+                modes = (
+                    ", ".join(str(item["value"]) for item in offered)
+                    if isinstance(offered, list)
+                    else ", ".join(VALID_BOOST_MODES)
+                )
+                msg = "boost_mode_invalid"
+                raise validation_error(msg, modes=modes)
         await self._runtime.engine.set_boost_mode(
             self._dev_id,
             self._ref,
@@ -921,7 +958,12 @@ class SmartboxThermostat(SmartboxHeater):
         if temp is None:
             return
         # setup=None keeps the helper off the modified_auto branch.
-        write = temperature_write(self._node.node_type, self._status, temp)
+        write = temperature_write(
+            self._node.node_type,
+            self._status,
+            temp,
+            model_code=self._model_code(),
+        )
         await self._runtime.engine.set_setpoint(
             self._dev_id, self._ref, temp, cast("str", write.units)
         )
@@ -934,7 +976,7 @@ class SmartboxThermostat(SmartboxHeater):
         if self._status.get("mode") == "off":
             return HVACAction.OFF
         if (
-            self._node.node_type == SmartboxNodeType.HTR_MOD
+            self._is_htr_mod()
             and self._status.get("mode") == "manual"
             and self._status.get("selected_temp") == "off"
         ):

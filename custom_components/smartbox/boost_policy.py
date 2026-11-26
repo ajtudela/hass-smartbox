@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from smartbox.core.merging import boost_config
-from smartbox.device.codes import product_code
+from smartbox.device.codes import code_info, product_code
 from smartbox.device.modes import boost_params_editable
 from smartbox.device.profile import (
+    ELNUR_STORAGE_CODES,
     HAVERLAND_FIXED_TIME_CODES,
+    HELKI_STORAGE_CODES,
     TEVOLVE_ATC_CODES,
     TEVOLVE_WIFI_CODES,
 )
@@ -28,7 +30,7 @@ def boost_modes_available(
     return tuple(mode for mode in value if isinstance(mode, str))
 
 
-def boost_activation_mode(
+def boost_activation_mode(  # noqa: PLR0911 - one branch per family
     pid: str | None,
     setup: Mapping[str, object] | None,
     status: Mapping[str, object] | None,
@@ -37,6 +39,9 @@ def boost_activation_mode(
     if boost_config(setup or {}) != BoostConfig.FULL:
         return None
     code = product_code(pid)
+    if code in HELKI_STORAGE_CODES or code in ELNUR_STORAGE_CODES:
+        # Storage uses the legacy /boost path even at boost_config 3.
+        return None
     if code in HAVERLAND_FIXED_TIME_CODES:
         return "max_temp_fixed_time"
     if code in TEVOLVE_WIFI_CODES or code in TEVOLVE_ATC_CODES:
@@ -45,7 +50,13 @@ def boost_activation_mode(
             return "temp_and_time"
         if "max_temp_fixed_time" in modes:
             return "max_temp_fixed_time"
-    return None
+        return None
+    # An acm PID outside the storage sets takes this generic tail; no reviewed
+    # storage row carries a FULL boost config, so the storage list stays explicit.
+    info = code_info(pid)
+    if info is not None and info.fixed_time_boost:
+        return "max_temp_fixed_time"
+    return "temp_and_time"
 
 
 def boost_params_configurable(

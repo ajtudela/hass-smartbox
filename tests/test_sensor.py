@@ -57,7 +57,6 @@ from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
     DOMAIN,
     FIELD_SCHEDULE,
-    PROG_PROFILE_NAMES,
     SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_SCHEDULE,
     HistoryConsumptionStatus,
@@ -77,6 +76,7 @@ from custom_components.smartbox.sensor import (
     TotalConsumptionSensor,
     _usable_sample_rows,
 )
+from custom_components.smartbox.services import ServiceTargets
 from tests.mocks import (
     MOCK_DEVICE_RTC,
     active_or_charging_update,
@@ -459,6 +459,41 @@ async def test_basic_charge_level(hass, mock_smartbox, config_entry):
             )
             # a real number, not just "not unavailable"
             numeric_state(hass, entity_id)
+
+
+def test_water_storage_is_not_a_charging_service_target():
+    """Water storage omits the charging schedule target; storage keeps it."""
+    node = SimpleNamespace(
+        node_type="acm",
+        supported_wire_type=True,
+        heater_surface=False,
+        thermostat_surface=False,
+        heater_node=True,
+        boost_available=False,
+        pid="082A0000",
+        version={"pid": "082A0000"},
+        setup={},
+    )
+    runtime = SimpleNamespace(services=ServiceTargets())
+    with (
+        patch.object(sensor_mod, "PowerSensor"),
+        patch.object(sensor_mod, "TotalConsumptionSensor"),
+        patch.object(sensor_mod, "ChargeLevelSensor"),
+        patch.object(sensor_mod, "TargetChargeSensor"),
+    ):
+        sensor_mod._build_node_sensors(node, MagicMock(), runtime, MagicMock())
+    assert runtime.services.charging == []
+
+    node.pid = "08140000"
+    node.version = {"pid": "08140000"}
+    with (
+        patch.object(sensor_mod, "PowerSensor"),
+        patch.object(sensor_mod, "TotalConsumptionSensor"),
+        patch.object(sensor_mod, "ChargeLevelSensor"),
+        patch.object(sensor_mod, "TargetChargeSensor"),
+    ):
+        sensor_mod._build_node_sensors(node, MagicMock(), runtime, MagicMock())
+    assert len(runtime.services.charging) == 1
 
 
 def test_charge_level_sensor_model_1c():
@@ -1348,7 +1383,7 @@ async def test_schedule_sensor_renders_and_unsubscribes(
         assert state.state == "eco"
         assert state.attributes[FIELD_SCHEDULE]
         # the profile names the card renders, in wire-index order
-        assert state.attributes["options"] == list(PROG_PROFILE_NAMES)
+        assert state.attributes["options"] == ["frost", "eco", "comfort"]
         assert entity._unsub_boundary is not None
 
     monday_18 = monday_7.replace(hour=18)

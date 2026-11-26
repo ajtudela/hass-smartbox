@@ -16,7 +16,8 @@ the section grouping is the category.
 
 **Consumer.** `library+HA` = a library method exists and the Home Assistant adapter
 uses it; `library` = a library method exists but the adapter does not use it;
-`app only` = current vendor app surface with no client implementation here.
+`app only` = current vendor app surface with no client implementation here;
+`—` = declared in vendor code but with no current caller.
 
 **Status.** `accepted` = live-probed and recorded in the contract; `current` =
 observed in the current app builds but not accepted live; `unverified` = declared
@@ -35,9 +36,9 @@ Account and app endpoints (`/api/v2/user/*`, `/api/v2/users/*`, `/client/*`,
 
 | ID | Method and path | What it does | Consumer | Status | Last confirmed | Details |
 |---|---|---|---|---|---|---|
-| E1 | `GET /health_check` | host health | library | unverified | — | contract §3.2 E1 |
-| E2 | `GET /version` | API version | library | accepted 2026-09-26 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E2 |
-| E3 | `POST /client/token` | password/refresh grant | library | accepted 2026-10-04 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §2.1, §3.2 E3 |
+| E1 | `GET /health_check` | host health | library+HA | unverified | — | contract §3.2 E1 |
+| E2 | `GET /version` | API version | library+HA | accepted 2026-09-26 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E2 |
+| E3 | `POST /client/token` | password/refresh grant | library+HA | accepted 2026-10-04 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §2.1, §3.2 E3 |
 
 ## 2. Homes and guests
 
@@ -72,8 +73,8 @@ Account and app endpoints (`/api/v2/user/*`, `/api/v2/users/*`, `/client/*`,
 | S5 | `POST /api/v2/devs` | add device | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.3 |
 | E17 | `GET /api/v2/devs/{dev_id}/htr_system/power_limit` | box power limit | library+HA | accepted 2026-09-29 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E17 |
 | E18 | `POST /api/v2/devs/{dev_id}/htr_system/power_limit` | set box power limit | library+HA | accepted 2026-09-29 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E18 |
-| E47 | `POST /api/v2/devs/{dev_id}/pmo/{addr}/power_limit` | set pmo node power limit | library | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E47 |
-| E46 | `GET /api/v2/devs/{dev_id}/dev_data` | full device snapshot | library | accepted 2026-11-20 | live 2026-11-20 | contract §3.2 E46 |
+| E47 | `POST .../{type}/{addr}/power_limit` | set node power limit | library+HA | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E47 |
+| E46 | `GET /api/v2/devs/{dev_id}/dev_data` | full device snapshot | library+HA | accepted 2026-11-20 | live 2026-11-20 | contract §3.2 E46 |
 | S2 | `POST /api/v2/devs/{dev_id}/pmo_system` | PMO configuration | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | — |
 
 ## 4. Nodes
@@ -93,13 +94,13 @@ address. The per-node base path is `/api/v2/devs/{dev_id}/{type}/{addr}`.
 | E26 | `POST .../{type}/{addr}/lock` | lock write | library+HA | accepted 2026-11-22 (status path) | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E26 |
 | E27 | `POST .../{type}/{addr}/boost` | boost write | library+HA | accepted 2026-09-26 (status path) | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E27 |
 | S4 | `POST .../{type}/{addr}/boost_mode` | full-boost activation | library+HA | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | api-ws-user.md §2.3 |
-| E28 | `POST .../{type}/{addr}/prog_temps` | dedicated profile-temp write | library | unverified | — | contract §3.2 E28 |
+| E28 | `POST .../{type}/{addr}/prog_temps` | dedicated profile-temp write | — | unverified | — | contract §3.2 E28 |
 | E29 | `GET .../{type}/{addr}/prog` | programme read | library+HA | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E29 |
 | E30 | `POST .../{type}/{addr}/prog` | programme write | library+HA | accepted 2026-09-27 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E30 |
 | E19 | `GET .../{type}/{addr}/samples?start=&end=` | samples read | library+HA | accepted 2026-10-04 | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E19 |
 | E31 | `POST .../{type}/{addr}/name` | rename node | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E31 |
 | E32 | `POST .../{type}/{addr}/select` | select firmware/version | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E32 |
-| E33 | `GET .../{type}/{addr}/power` | node power | library | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E33 |
+| E33 | `GET .../{type}/{addr}/power` | node power | library+HA | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E33 |
 | E34 | `DELETE /api/v2/devs/{dev_id}/{type}/{addr}` | remove node | app only | current | 2.55.0, 3.7.0, 2.8.8 (2026-11-25) | contract §3.2 E34 |
 
 ## 5. Notifications
