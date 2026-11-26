@@ -474,9 +474,6 @@
     },
     "status_unavailable": {
       "message": "The heater status is not available yet; try again after the next update."
-    },
-    "schedule_target_missing": {
-      "message": "No loaded Smartbox schedule entity matched the target."
     }
   },
   "issues": {

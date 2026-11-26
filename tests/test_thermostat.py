@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.climate import HVACAction, HVACMode
 from homeassistant.components.climate.const import DEFAULT_MAX_TEMP, DEFAULT_MIN_TEMP
@@ -14,7 +14,12 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util.unit_conversion import TemperatureConverter
 import pytest
 from smartbox.core.state import NodeState
-from smartbox.protocol import NodeRef
+from smartbox.protocol import (
+    AuthError,
+    NodeRef,
+    SmartboxError,
+    TransportUnavailableError,
+)
 
 from custom_components.smartbox.climate import (
     SmartboxHeater,
@@ -460,6 +465,99 @@ async def test_boost_mode_skips_thermostats_in_a_mixed_target(
     )
     heater.async_set_boost_mode.assert_awaited_once()
     thermostat.async_set_boost_mode.assert_not_awaited()
+
+
+async def test_thermostat_schedule_service_writes_and_checks_targets(
+    hass, mock_smartbox, config_entry
+):
+    """The service posts the {prog, units} body and rejects other targets."""
+    _add_thm_node(mock_smartbox)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+    schedule = next(iter(runtime.services.thermostat_schedule))
+    prog = {str(day): [{"m": 360, "t": 19.0}] for day in range(7)}
+
+    await hass.services.async_call(
+        "smartbox",
+        "set_thermostat_schedule",
+        {ATTR_ENTITY_ID: [schedule.entity_id], "schedule": prog},
+        blocking=True,
+    )
+    posts = [(path, body) for method, path, body in fake.requests if method == "POST"]
+    assert posts[-1][0].endswith(f"/thm/{THM_ADDR}/prog")
+    assert posts[-1][1]["prog"]["0"] == [{"m": 360, "t": "19.0"}]
+    assert posts[-1][1]["units"] == "C"
+
+    # The thermostat's own climate entity is not a programme target.
+    climate_id = get_entity_id_from_unique_id(
+        hass, "climate", f"device_1_{THM_ADDR}_thermostat"
+    )
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            "smartbox",
+            "set_thermostat_schedule",
+            {ATTR_ENTITY_ID: [climate_id], "schedule": prog},
+            blocking=True,
+        )
+    assert err.value.translation_key == "thermostat_schedule_wrong_target"
+
+    # An API failure on the write reaches the caller, not the log.
+    fake.fail_next(500)
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "smartbox",
+            "set_thermostat_schedule",
+            {ATTR_ENTITY_ID: [schedule.entity_id], "schedule": prog},
+            blocking=True,
+        )
+    assert err.value.translation_key == "thermostat_schedule_api_unavailable"
+    assert err.value.translation_placeholders["entity_id"] == schedule.entity_id
+
+
+@pytest.mark.parametrize(
+    ("error", "exc_type", "translation_key"),
+    [
+        (
+            ValueError("bad programme"),
+            ServiceValidationError,
+            "thermostat_schedule_invalid",
+        ),
+        (AuthError("denied"), HomeAssistantError, "thermostat_schedule_auth_failed"),
+        (
+            TransportUnavailableError("down"),
+            HomeAssistantError,
+            "thermostat_schedule_api_unavailable",
+        ),
+        (
+            SmartboxError("rejected"),
+            HomeAssistantError,
+            "thermostat_schedule_write_failed",
+        ),
+    ],
+)
+async def test_thermostat_schedule_service_error_keys(
+    hass, mock_smartbox, config_entry, error, exc_type, translation_key
+):
+    """Every rejection keeps the thermostat_schedule error vocabulary."""
+    _add_thm_node(mock_smartbox)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, _fake = await seed_stack(hass, mock_smartbox)
+    schedule = next(iter(runtime.services.thermostat_schedule))
+    prog = {str(day): [{"m": 360, "t": 19.0}] for day in range(7)}
+
+    with (
+        patch.object(schedule, "async_set_thermostat_schedule", side_effect=error),
+        pytest.raises(exc_type) as err,
+    ):
+        await hass.services.async_call(
+            "smartbox",
+            "set_thermostat_schedule",
+            {ATTR_ENTITY_ID: [schedule.entity_id], "schedule": prog},
+            blocking=True,
+        )
+    assert err.value.translation_key == translation_key
 
 
 def _thermostat_schedule_sensor(prog):

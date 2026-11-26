@@ -53,6 +53,7 @@ from smartbox.protocol.client import SmartboxClient
 from smartbox.protocol.events import SocketClosed
 
 from custom_components.smartbox import sensor as sensor_mod
+from custom_components.smartbox.compat import vol
 from custom_components.smartbox.const import (
     CONF_HISTORY_CONSUMPTION,
     DOMAIN,
@@ -2034,6 +2035,78 @@ async def test_set_charging_schedule_service_writes_setup(
     assert setup["charging_conf"]["slot_1"] == {"start": 60, "end": 120}
 
 
+async def test_set_charging_schedule_service_errors(hass, mock_smartbox, config_entry):
+    """Wrong targets and rejected writes keep the charging error vocabulary."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+    charging = next(iter(runtime.services.charging))
+    _dev_id, _mock_node, heater_schedule_id = await _first_heater_schedule_id(
+        mock_smartbox
+    )
+    call_data = {ATTR_ENTITY_ID: [charging.entity_id], "active_days": [1] * 7}
+
+    # A heater schedule sensor is not a storage charging target.
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_CHARGING_SCHEDULE,
+            {**call_data, ATTR_ENTITY_ID: [heater_schedule_id]},
+            blocking=True,
+        )
+    assert err.value.translation_key == "charging_schedule_wrong_target"
+
+    with (
+        patch.object(
+            charging,
+            "async_set_charging_schedule",
+            side_effect=ValueError("bad days"),
+        ),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_SET_CHARGING_SCHEDULE, call_data, blocking=True
+        )
+    assert err.value.translation_key == "charging_schedule_invalid"
+    assert err.value.translation_placeholders["entity_id"] == charging.entity_id
+
+    fake.fail_next(500)
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_SET_CHARGING_SCHEDULE, call_data, blocking=True
+        )
+    assert err.value.translation_key == "charging_schedule_api_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("error", "translation_key"),
+    [
+        (AuthError("denied"), "charging_schedule_auth_failed"),
+        (SmartboxError("rejected"), "charging_schedule_write_failed"),
+    ],
+)
+async def test_set_charging_schedule_api_error_keys(
+    hass, mock_smartbox, config_entry, error, translation_key
+):
+    """Rejected charging writes keep their own translation keys."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, _fake = await seed_stack(hass, mock_smartbox)
+    charging = next(iter(runtime.services.charging))
+
+    with (
+        patch.object(charging, "async_set_charging_schedule", side_effect=error),
+        pytest.raises(HomeAssistantError) as err,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_CHARGING_SCHEDULE,
+            {ATTR_ENTITY_ID: [charging.entity_id], "active_days": [1] * 7},
+            blocking=True,
+        )
+    assert err.value.translation_key == translation_key
+
+
 async def test_water_storage_target_charge_is_not_a_charging_service_target(
     hass, mock_smartbox, config_entry
 ):
@@ -2055,3 +2128,185 @@ async def test_water_storage_target_charge_is_not_a_charging_service_target(
             blocking=True,
         )
     assert err.value.translation_key == "charging_schedule_wrong_target"
+
+
+async def test_schedule_resolution_attributes_and_entity_validation(
+    hass, mock_smartbox, config_entry
+):
+    """The sensor exposes the setup resolution and rejects bad values."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+    _dev_id, _mock_node, entity_id = await _first_heater_schedule_id(mock_smartbox)
+    sensor = next(
+        item for item in runtime.services.schedule if item.entity_id == entity_id
+    )
+
+    def only_setup(setup, prog=None):
+        return patch.object(
+            sensor,
+            "_node_state",
+            return_value=NodeState(available=True, setup=setup, prog=prog),
+        )
+
+    # Both setup keys the vendor app reads are accepted, top level first.
+    with only_setup({"factory_options": {"prog_resolution": 1}}, {"0": [1] * 24}):
+        assert sensor.resolution_available is True
+        assert sensor.resolution == 1
+        attributes = sensor.extra_state_attributes
+        assert attributes[FIELD_SCHEDULE]
+        assert attributes["resolution"] == 1
+        assert attributes["resolution_available"] is True
+    with only_setup({"prog_resol": 1}):
+        assert sensor.resolution == 1
+
+    # Bools, strings and non-mapping blocks are not resolutions, and without
+    # a programme the card gets no toggle and the sensor no attributes.
+    for setup in (
+        {"prog_resolution": True},
+        {"factory_options": {"prog_resol": "1"}},
+        {"factory_options": []},
+        {},
+    ):
+        with only_setup(setup):
+            assert sensor.resolution_available is False
+            assert sensor.resolution == 0
+    with only_setup({}):
+        assert sensor.extra_state_attributes == {}
+
+    # A 48-slot programme is half-hourly even when the setup says hourly.
+    half_hourly = {"0": [1] * 48}
+    with patch.object(
+        sensor,
+        "_node_state",
+        return_value=NodeState(
+            available=True, setup={"prog_resolution": 0}, prog=half_hourly
+        ),
+    ):
+        assert sensor.resolution_available is True
+        assert sensor.resolution == 1
+    with patch.object(
+        sensor,
+        "_node_state",
+        return_value=NodeState(available=True, setup={}, prog={"0": [1] * 24}),
+    ):
+        assert sensor.resolution_available is False
+        assert sensor.resolution == 0
+
+    with pytest.raises(ValueError, match="resolution"):
+        await sensor.async_set_schedule_resolution(2)
+    await sensor.async_set_schedule_resolution(0)
+    assert any(
+        method == "POST" and path.endswith("/setup") and body["prog_resolution"] == 0
+        for method, path, body in fake.requests
+    )
+
+
+async def test_set_schedule_resolution_service_errors(
+    hass, mock_smartbox, config_entry
+):
+    """Wrong targets, invalid values and API failures are translated."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, fake = await seed_stack(hass, mock_smartbox)
+    _dev_id, mock_node, entity_id = await _first_heater_schedule_id(mock_smartbox)
+
+    temperature_id = get_sensor_entity_id(mock_node, "temperature")
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [temperature_id], FIELD_RESOLUTION: 1},
+            blocking=True,
+        )
+    assert err.value.translation_key == "schedule_wrong_target"
+    assert err.value.translation_placeholders == {
+        "service": SERVICE_SET_SCHEDULE_RESOLUTION
+    }
+
+    sensor = next(
+        item for item in runtime.services.schedule if item.entity_id == entity_id
+    )
+    with (
+        patch(
+            "custom_components.smartbox.services.require_service_target",
+            return_value={"sensor.missing"},
+        ),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 1},
+            blocking=True,
+        )
+    assert err.value.translation_key == "schedule_wrong_target"
+
+    # The schema rejects values outside 0/1 before the handler runs.
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 2},
+            blocking=True,
+        )
+
+    with (
+        patch.object(
+            sensor,
+            "async_set_schedule_resolution",
+            side_effect=ValueError("bad resolution"),
+        ),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 1},
+            blocking=True,
+        )
+    assert err.value.translation_key == "schedule_invalid"
+
+    fake.fail_next(500)
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 1},
+            blocking=True,
+        )
+    assert err.value.translation_key == "schedule_api_unavailable"
+    assert err.value.translation_placeholders["entity_id"] == entity_id
+
+
+@pytest.mark.parametrize(
+    ("error", "translation_key"),
+    [
+        (AuthError("denied"), "schedule_auth_failed"),
+        (SmartboxError("rejected"), "schedule_api_error"),
+    ],
+)
+async def test_set_schedule_resolution_api_error_keys(
+    hass, mock_smartbox, config_entry, error, translation_key
+):
+    """Rejected writes keep the set_schedule error vocabulary."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    runtime, _fake = await seed_stack(hass, mock_smartbox)
+    _dev_id, _mock_node, entity_id = await _first_heater_schedule_id(mock_smartbox)
+    sensor = next(
+        item for item in runtime.services.schedule if item.entity_id == entity_id
+    )
+
+    with (
+        patch.object(sensor, "async_set_schedule_resolution", side_effect=error),
+        pytest.raises(HomeAssistantError) as err,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            {ATTR_ENTITY_ID: [entity_id], FIELD_RESOLUTION: 1},
+            blocking=True,
+        )
+    assert err.value.translation_key == translation_key
+    assert err.value.translation_placeholders["entity_id"] == entity_id

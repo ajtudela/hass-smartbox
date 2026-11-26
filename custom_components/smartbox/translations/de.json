@@ -474,9 +474,6 @@
     },
     "status_unavailable": {
       "message": "Der Heizungsstatus ist noch nicht verfügbar; nach der nächsten Aktualisierung erneut versuchen."
-    },
-    "schedule_target_missing": {
-      "message": "Keine geladene Smartbox-Zeitplan-Entität passte zum Ziel."
     }
   },
   "issues": {

@@ -412,9 +412,21 @@ async def _handle_set_schedule_resolution(
                     entity_id=schedule_entity.entity_id or "",
                     error=str(ex),
                 ) from ex
+            except SmartboxError as ex:
+                if isinstance(ex, AuthError):
+                    key = "schedule_auth_failed"
+                elif isinstance(ex, TransportUnavailableError):
+                    key = "schedule_api_unavailable"
+                else:
+                    key = "schedule_api_error"
+                raise user_error(
+                    key,
+                    entity_id=schedule_entity.entity_id or "",
+                    error=str(ex),
+                ) from ex
     if not matched:
-        msg = "schedule_target_missing"
-        raise validation_error(msg, entity_id=next(iter(target_entity_ids), ""))
+        msg = "schedule_wrong_target"
+        raise validation_error(msg, service=SERVICE_SET_SCHEDULE_RESOLUTION)
 
 
 async def _handle_set_schedule(hass: HomeAssistant, call: ServiceCall) -> None:

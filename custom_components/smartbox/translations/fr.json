@@ -474,9 +474,6 @@
     },
     "status_unavailable": {
       "message": "L'état du radiateur n'est pas encore disponible ; réessayez après la prochaine mise à jour."
-    },
-    "schedule_target_missing": {
-      "message": "Aucune entité de programme Smartbox chargée ne correspond à la cible."
     }
   },
   "issues": {
