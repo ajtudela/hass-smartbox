@@ -1264,3 +1264,151 @@ async def test_late_pid_watcher_seeds_the_ingested_version(hass):
     with patch.object(hass.config_entries, "async_schedule_reload") as reload:
         watcher.async_start()
         reload.assert_called_once_with("entry2")
+
+
+async def test_late_pid_defers_until_the_entry_is_loaded(hass):
+    """A late PID seen during a reload waits, then schedules once."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry4", state=ConfigEntryState.SETUP_IN_PROGRESS)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        await asyncio.sleep(0.05)
+        reload.assert_not_called()
+        entry.state = ConfigEntryState.LOADED
+        await asyncio.sleep(0.25)
+        reload.assert_called_once_with("entry4")
+
+
+async def test_late_pid_abandons_a_deferred_marker_on_terminal_state(hass):
+    """A setup-retry entry discards the marker instead of reloading later."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry5", state=ConfigEntryState.SETUP_RETRY)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        await asyncio.sleep(0.25)
+        reload.assert_not_called()
+    assert not any(
+        marker[0] == "entry5"
+        for marker in hass.data.get(f"{DOMAIN}_pid_reloads", set())
+    )
+
+
+async def test_late_pid_close_discards_the_deferred_marker(hass):
+    """Closing the watcher while it waits drops the reload request."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry6", state=ConfigEntryState.SETUP_IN_PROGRESS)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        watcher.close()
+        await asyncio.sleep(0.25)
+        reload.assert_not_called()
+    assert not any(
+        marker[0] == "entry6"
+        for marker in hass.data.get(f"{DOMAIN}_pid_reloads", set())
+    )
+
+
+def test_late_pid_start_schedules_a_pending_marker(hass):
+    """A marker set before start schedules the wait, and scheduling is guarded."""
+
+    class Engine:
+        def subscribe(self, _callback):
+            pass
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry7", state=ConfigEntryState.LOADED)
+    watcher = LatePidWatcher(hass, entry, SimpleNamespace(nodes=[node]), Engine())
+    watcher._discard_pending_marker()
+    watcher._pending = True
+    with patch.object(hass, "async_create_task") as create_task:
+        create_task.side_effect = lambda coro: coro.close()
+        watcher.async_start()
+        create_task.assert_called_once()
+    marker = ("entry7", "dev1", "htr/2", "04020000")
+    hass.data[f"{DOMAIN}_pid_reloads"] = {marker}
+    watcher._pending_marker = marker
+    watcher._discard_pending_marker()
+    assert hass.data[f"{DOMAIN}_pid_reloads"] == set()
+    watcher._scheduled = True
+    watcher._schedule()

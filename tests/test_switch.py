@@ -11,8 +11,10 @@ up in-body so setup log lines land in caplog.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import logging
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.components.switch import (
@@ -25,13 +27,21 @@ from homeassistant.core import State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_component import async_update_entity
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import mock_restore_cache
 from smartbox.core.state import NodeState
+from smartbox.protocol import NodeRef
 
 from custom_components.smartbox.const import DOMAIN
 from custom_components.smartbox.identity import boost_available
-from custom_components.smartbox.switch import MaxTemperatureLimitSwitch
+from custom_components.smartbox.switch import (
+    AntiGrippageSwitch,
+    BoostSwitch,
+    EasyModeSwitch,
+    MaxTemperatureLimitSwitch,
+    RunbackModeSwitch,
+)
 from tests.mocks import (
     get_away_status_switch_entity_id,
     get_away_status_switch_entity_name,
@@ -921,3 +931,105 @@ async def test_no_node_power_limit_without_a_remembered_value_fails_loudly(
             blocking=True,
         )
     assert err.value.translation_key == "node_power_limit_not_known"
+
+
+def _node_switch(switch_cls, state, *, pid="01360000"):
+    """Build a node switch with a stub runtime and the given node state."""
+    switch = object.__new__(switch_cls)
+    switch._node = SimpleNamespace(
+        name="Heater",
+        node_type="htr",
+        node_id="dev1_htr_0",
+        pid=pid,
+        setup=state.setup,
+        status=state.status,
+        version={"pid": pid},
+    )
+    switch._node_state = lambda: state
+    switch._dev_id = "dev1"
+    switch._ref = NodeRef("htr", "0")
+    switch._runtime = SimpleNamespace(
+        engine=SimpleNamespace(
+            set_boost=AsyncMock(),
+            set_boost_mode=AsyncMock(),
+            set_easy=AsyncMock(),
+            set_runback=AsyncMock(),
+            set_setup_value=AsyncMock(),
+        ),
+    )
+    return switch
+
+
+def test_boost_switch_attributes_report_the_end_time(monkeypatch):
+    """An active boost renders its remaining time from boost_end_min."""
+    fixed = datetime(2026, 11, 26, 20, 0, tzinfo=UTC)
+    monkeypatch.setattr(dt_util, "now", lambda: fixed)
+    state = NodeState(
+        status={"boost": True, "boost_end_min": 1260},
+        setup={"extra_options": {"boost_temp": "22.0", "boost_time": 60}},
+    )
+    attrs = _node_switch(BoostSwitch, state).extra_state_attributes
+    assert attrs["boost_temperature"] == 22.0
+    assert attrs["boost_duration_minutes"] == 60
+    assert attrs["boost_end_time"] == "21:00"
+    assert attrs["boost_time_remaining"] == 3600
+
+
+async def test_boost_switch_uses_boost_mode_for_a_full_controller():
+    """A FULL-toggle controller writes the activation to /boost_mode."""
+    setup = {
+        "factory_options": {"boost_config": 3},
+        "extra_options": {"boost_temp": "22.0", "boost_time": 60},
+    }
+    state = NodeState(status={"boost_modes_available": ["temp_and_time"]}, setup=setup)
+    switch = _node_switch(BoostSwitch, state)
+    await switch.async_turn_on()
+    switch._runtime.engine.set_boost.assert_not_awaited()
+    switch._runtime.engine.set_boost_mode.assert_awaited_once_with(
+        "dev1",
+        NodeRef("htr", "0"),
+        active=True,
+        mode="temp_and_time",
+        temperature=22.0,
+        time_minutes=60,
+    )
+
+
+async def test_easy_switch_clears_runback_first():
+    """EASY and RUNBACK are mutually exclusive in the app."""
+    switch = _node_switch(EasyModeSwitch, NodeState(status={"runback": True}))
+    await switch.async_turn_on()
+    switch._runtime.engine.set_runback.assert_awaited_once_with(
+        "dev1", NodeRef("htr", "0"), enabled=False
+    )
+    switch._runtime.engine.set_easy.assert_awaited_once_with(
+        "dev1", NodeRef("htr", "0"), enabled=True
+    )
+    await switch.async_turn_off()
+    switch._runtime.engine.set_easy.assert_awaited_with(
+        "dev1", NodeRef("htr", "0"), enabled=False
+    )
+
+
+async def test_runback_switch_clears_easy_first():
+    """Enabling RUNBACK clears EASY before it writes."""
+    switch = _node_switch(RunbackModeSwitch, NodeState(status={"easy": True}))
+    await switch.async_turn_on()
+    switch._runtime.engine.set_easy.assert_awaited_once_with(
+        "dev1", NodeRef("htr", "0"), enabled=False
+    )
+    switch._runtime.engine.set_runback.assert_awaited_once_with(
+        "dev1", NodeRef("htr", "0"), enabled=True
+    )
+    await switch.async_turn_off()
+    switch._runtime.engine.set_runback.assert_awaited_with(
+        "dev1", NodeRef("htr", "0"), enabled=False
+    )
+
+
+async def test_anti_grippage_switch_turn_on_writes_the_setup_string():
+    switch = _node_switch(AntiGrippageSwitch, NodeState(setup={"anti_grippage": "off"}))
+    await switch.async_turn_on()
+    switch._runtime.engine.set_setup_value.assert_awaited_once_with(
+        "dev1", NodeRef("htr", "0"), "anti_grippage", "on"
+    )

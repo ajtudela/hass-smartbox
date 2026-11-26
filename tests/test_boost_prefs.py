@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -64,3 +64,40 @@ async def test_failed_load_does_not_clobber_the_stored_record(hass, monkeypatch)
     await prefs.async_update("node", boost_time=60)
     assert prefs.get("node").boost_time == 60
     saved.assert_not_awaited()
+
+
+async def test_load_skips_non_string_keys_and_non_mapping_records(hass):
+    """A hand-edited record never leaks a bad key into the store."""
+    prefs = BoostPrefs(hass, "entry_4")
+    prefs._store.async_load = AsyncMock(
+        return_value={
+            "nodes": {
+                1: {"boost_time": 30},
+                "bad": "not-a-record",
+                "ok": {"boost_time": 45},
+            }
+        }
+    )
+    await prefs.async_load()
+    assert prefs.get("ok").boost_time == 45
+
+
+async def test_clearing_every_field_drops_the_node(hass):
+    """A node with no stored fields is removed instead of kept empty."""
+    prefs = BoostPrefs(hass, "entry_5")
+    await prefs.async_update("node", boost_time=30)
+    await prefs.async_update("node", boost_time=None)
+    assert "node" not in prefs._nodes
+
+
+async def test_unreadable_record_is_not_flushed_and_save_errors_warn(hass, caplog):
+    """The record is never rewritten after a failed read, and save errors warn."""
+    prefs = BoostPrefs(hass, "entry_6")
+    prefs._store.async_load = AsyncMock(side_effect=OSError)
+    await prefs.async_load()
+    assert prefs._load_failed is True
+    await prefs.async_flush()
+    prefs._load_failed = False
+    with patch.object(prefs._store, "async_save", AsyncMock(side_effect=OSError)):
+        await prefs.async_flush()
+    assert "Could not persist the boost preferences" in caplog.text
