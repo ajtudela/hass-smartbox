@@ -252,7 +252,6 @@
             },
             "setup": {
               "away_offset": "5.4",
-              "boost_enabled": true,
               "factory_options": {
                 "boost_config": 2,
                 "true_radiant_available": false,
@@ -521,7 +520,6 @@
             },
             "setup": {
               "away_offset": "3.6",
-              "boost_enabled": false,
               "factory_options": {
                 "boost_config": 0,
                 "true_radiant_available": true,
@@ -815,7 +813,6 @@
             },
             "setup": {
               "away_offset": "2.7",
-              "boost_enabled": true,
               "factory_options": {
                 "boost_config": 2,
                 "true_radiant_available": true,
@@ -1085,7 +1082,6 @@
             },
             "setup": {
               "away_offset": "2.7",
-              "boost_enabled": false,
               "factory_options": {
                 "boost_config": 2,
                 "true_radiant_available": true,
@@ -1356,7 +1352,6 @@
             },
             "setup": {
               "away_offset": "2.7",
-              "boost_enabled": false,
               "factory_options": {
                 "boost_config": 2,
                 "true_radiant_available": true,
@@ -1626,7 +1621,6 @@
             },
             "setup": {
               "away_offset": "2.7",
-              "boost_enabled": false,
               "factory_options": {
                 "boost_config": 2,
                 "true_radiant_available": false,
