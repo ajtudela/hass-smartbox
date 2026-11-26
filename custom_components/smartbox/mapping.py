@@ -183,10 +183,12 @@ def get_boost_end_datetime(
 
     ``boost_end_min`` is the HOME-LOCAL minute of day, not UTC: a 60-minute
     boost started at 13:49 CET reported ``889`` (14:49) `[live 2026-11-22]`.
-    ``boost_end_day`` is the wire day offset (0 = today, 1 = tomorrow).
+    ``boost_end_day`` is the weekday of the end (0 = Sunday), not a day offset;
+    the vendor apps ignore it. It stays in the signature for compatibility.
     Returns a future datetime, or None for a malformed/out-of-range minute
     value (entity properties must not raise).
     """
+    del boost_end_day
     try:
         minute_of_day = int(boost_end_min)
     except TypeError, ValueError:
@@ -196,14 +198,8 @@ def get_boost_end_datetime(
     current = now if now is not None else dt_util.now()
     hour, minute = divmod(minute_of_day, 60)
     boost_end = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    try:
-        day_offset = int(boost_end_day) if boost_end_day is not None else 0
-    except TypeError, ValueError:
-        day_offset = 0
-    if day_offset > 0:
-        boost_end += timedelta(days=day_offset)
     if boost_end <= current:
-        # A stale or day-less marker: the next occurrence is tomorrow.
+        # The end minute has passed: the next occurrence is tomorrow.
         boost_end += timedelta(days=1)
     return boost_end
 

@@ -755,16 +755,22 @@ def test_boost_end_datetime_is_local(fixed_utcnow):
     assert get_boost_end_datetime(1440) is None
 
 
-def test_boost_end_datetime_is_home_local_and_honours_the_day_offset():
-    """A 60-minute CET boost at 13:49 reports 889 (14:49), not 14:49 UTC."""
+def test_boost_end_datetime_is_home_local_and_ignores_the_weekday():
+    """boost_end_day is the end weekday, not a day offset."""
     paris = ZoneInfo("Europe/Paris")
     now = datetime(2026, 11, 22, 13, 49, tzinfo=paris)
     assert get_boost_end_datetime(889, 0, now=now) == now.replace(
         hour=14, minute=49, second=0, microsecond=0
     )
+    # 1 = Monday, not "tomorrow": the end is still today.
     assert get_boost_end_datetime(889, 1, now=now) == now.replace(
         hour=14, minute=49, second=0, microsecond=0
-    ) + timedelta(days=1)
+    )
+    # 2026-11-26 is Thursday (4); a 60-minute boost at 15:07 ends 16:07 today.
+    thursday = datetime(2026, 11, 26, 15, 7, tzinfo=paris)
+    assert get_boost_end_datetime(967, 4, now=thursday) == thursday.replace(
+        hour=16, minute=7, second=0, microsecond=0
+    )
     assert get_boost_end_datetime(0, 0, now=now) == now.replace(
         hour=0, minute=0, second=0, microsecond=0
     ) + timedelta(days=1)
