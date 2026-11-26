@@ -12,8 +12,12 @@
  * - `attributes.options`: profile names in wire-index order (the enum
  *   sensor's capability attribute); `frost`/`eco`/`comfort` for the plain
  *   heater family.
+ * - `attributes.resolution` / `attributes.resolution_available`: the current
+ *   slot resolution (0 hourly, 1 half-hourly) and whether the editor may
+ *   toggle it.
  * - `smartbox.set_schedule`: the write path; only changed days are sent, and
  *   the service merges them into the current week.
+ * - `smartbox.set_schedule_resolution`: writes the editor resolution.
  *
  * The card presents the plan in a seven-column week grid (days across, time
  * slots down). Columns follow the Home Assistant user's first-day-of-week
@@ -50,6 +54,8 @@ const PROFILE_COLORS = {
     "var(--smartbox-eco-color, color-mix(in srgb, #2f9e63 85%, var(--card-background-color, #1c1c1c)))",
   comfort:
     "var(--smartbox-comfort-color, color-mix(in srgb, #e8862e 85%, var(--card-background-color, #1c1c1c)))",
+  off:
+    "var(--smartbox-off-color, color-mix(in srgb, #8a8f94 85%, var(--card-background-color, #1c1c1c)))",
 };
 const UNKNOWN_COLOR = "#9aa0a6";
 const MINUTES_PER_DAY = 1440;
@@ -122,6 +128,7 @@ const STRINGS = {
     cycle: "Cycle",
     frost: "Frost",
     eco: "Eco",
+    off: "Off",
     comfort: "Comfort",
     unknown: "Unknown",
     noSchedule: "The heater has not reported a program yet.",
@@ -154,6 +161,9 @@ const STRINGS = {
     configTitle: "Title",
     configEntity: "Schedule sensor",
     configLegend: "Legend",
+    resolution: "Resolution",
+    hourly: "Hourly",
+    halfHourly: "Half-hourly",
   },
   de: {
     program: "Programm",
@@ -165,6 +175,7 @@ const STRINGS = {
     cycle: "Wechseln",
     frost: "Frost",
     eco: "Eco",
+    off: "Aus",
     comfort: "Komfort",
     unknown: "Unbekannt",
     noSchedule: "Die Heizung hat noch kein Programm gemeldet.",
@@ -198,6 +209,9 @@ const STRINGS = {
     configTitle: "Titel",
     configEntity: "Schedule-Sensor",
     configLegend: "Legende",
+    resolution: "Auflösung",
+    hourly: "Stündlich",
+    halfHourly: "Halbstündlich",
   },
   es: {
     program: "Programa",
@@ -209,6 +223,7 @@ const STRINGS = {
     cycle: "Alternar",
     frost: "Escarcha",
     eco: "Eco",
+    off: "Apagado",
     comfort: "Confort",
     unknown: "Desconocido",
     noSchedule: "El calefactor aún no ha comunicado un programa.",
@@ -242,6 +257,9 @@ const STRINGS = {
     configTitle: "Título",
     configEntity: "Sensor de programa",
     configLegend: "Leyenda",
+    resolution: "Resolución",
+    hourly: "Horaria",
+    halfHourly: "Media horaria",
   },
   fr: {
     program: "Programme",
@@ -253,6 +271,7 @@ const STRINGS = {
     cycle: "Alterner",
     frost: "Gel",
     eco: "Éco",
+    off: "Arrêt",
     comfort: "Confort",
     unknown: "Inconnu",
     noSchedule: "Le radiateur n'a pas encore signalé de programme.",
@@ -287,6 +306,9 @@ const STRINGS = {
     configTitle: "Titre",
     configEntity: "Capteur de programme",
     configLegend: "Légende",
+    resolution: "Résolution",
+    hourly: "Horaire",
+    halfHourly: "Demi-horaire",
   },
 };
 
@@ -632,6 +654,30 @@ function diffDays(original, draft) {
   return changed;
 }
 
+function convertScheduleResolution(schedule, fromSlots, toSlots) {
+  if (fromSlots === toSlots) {
+    return cloneSchedule(schedule);
+  }
+  const converted = {};
+  for (const day of DAY_KEYS) {
+    const slots = Array.isArray(schedule?.[day]) ? schedule[day] : [];
+    if (toSlots > fromSlots && fromSlots > 0) {
+      const factor = Math.round(toSlots / fromSlots);
+      converted[day] = slots.flatMap((value) =>
+        Array.from({ length: factor }, () => value),
+      );
+    } else if (fromSlots > toSlots && toSlots > 0) {
+      const factor = Math.round(fromSlots / toSlots);
+      converted[day] = Array.from({ length: toSlots }, (_, index) =>
+        slots[index * factor],
+      );
+    } else {
+      converted[day] = slots.slice();
+    }
+  }
+  return converted;
+}
+
 function dayLabelsFor(locale) {
   // 2024-01-07 is a Sunday; index the labels by the schedule day key.
   const labels = [];
@@ -887,6 +933,14 @@ class SmartboxProgramCard extends HTMLElement {
       schedule,
       profiles,
       shape,
+      resolution:
+        state?.attributes?.resolution === 1 ||
+        state?.attributes?.resolution === 0
+          ? state.attributes.resolution
+          : scheduleShape(schedule, profiles.length).slotCount === 48
+            ? 1
+            : 0,
+      resolutionAvailable: state?.attributes?.resolution_available === true,
       notice,
       error,
       temps,
@@ -913,6 +967,8 @@ class SmartboxProgramCard extends HTMLElement {
       resolved?.notice || null,
       resolved?.shape?.editable || false,
       resolved?.shape?.slotCount || 0,
+      resolved?.resolutionAvailable || false,
+      resolved?.resolution ?? null,
       state?.attributes?.schedule
         ? JSON.stringify(state.attributes.schedule)
         : null,
@@ -1147,6 +1203,10 @@ class SmartboxProgramCard extends HTMLElement {
     this._baselineJson = JSON.stringify(resolved.schedule);
     this._profiles = resolved.profiles.slice();
     this._slots = resolved.shape.slotCount;
+    this._initialResolution =
+      resolved.shape.slotCount === 48 ? 1 : 0;
+    this._resolutionChanged = false;
+    this._resolutionAvailable = resolved.resolutionAvailable;
     this._undo = [];
     this._brush = "cycle";
     this._brushIndex = null;
@@ -1205,6 +1265,17 @@ class SmartboxProgramCard extends HTMLElement {
             <button type="button" class="btn small" data-action="reset">${escapeHtml(
               strings.reset,
             )}</button>
+            ${
+              resolved.resolutionAvailable
+                ? `<button type="button" class="btn small resolution-toggle" data-action="toggle-resolution" aria-pressed="${
+                    this._slots === 48 ? "true" : "false"
+                  }">${escapeHtml(strings.resolution)}: ${escapeHtml(
+                    this._slots === 48
+                      ? strings.halfHourly
+                      : strings.hourly,
+                  )}</button>`
+                : ""
+            }
           </div>
         </div>
         <div class="copy-row">
@@ -1406,6 +1477,41 @@ class SmartboxProgramCard extends HTMLElement {
     this._updateActionButtons();
   }
 
+  _toggleResolution() {
+    if (
+      !this._dialog ||
+      this._sending ||
+      !this._resolutionAvailable ||
+      ![24, 48].includes(this._slots)
+    ) {
+      return;
+    }
+    const target = this._slots === 24 ? 48 : 24;
+    this._draft = convertScheduleResolution(this._draft, this._slots, target);
+    this._slots = target;
+    this._resolutionChanged =
+      target !== (this._initialResolution === 1 ? 48 : 24);
+    this._undo = [];
+    this._buildGrid();
+    this._updateDirty();
+    this._updateDialogChrome();
+  }
+
+  _updateResolutionControl() {
+    const button = this._dialog?.panel.querySelector(
+      '[data-action="toggle-resolution"]',
+    );
+    if (!button) {
+      return;
+    }
+    const halfHourly = this._slots === 48;
+    button.textContent = `${this._strings.resolution}: ${
+      halfHourly ? this._strings.halfHourly : this._strings.hourly
+    }`;
+    button.setAttribute("aria-pressed", halfHourly ? "true" : "false");
+    button.disabled = this._sending;
+  }
+
   _updateActionButtons() {
     if (!this._dialog) {
       return;
@@ -1424,6 +1530,7 @@ class SmartboxProgramCard extends HTMLElement {
     }
     this._updateSelectedDay();
     this._updateBrushes();
+    this._updateResolutionControl();
   }
 
   _updateBrushes() {
@@ -1574,6 +1681,8 @@ class SmartboxProgramCard extends HTMLElement {
     this._original = cloneSchedule(schedule);
     this._draft = cloneSchedule(schedule);
     this._baselineJson = JSON.stringify(schedule);
+    this._initialResolution = shape.slotCount === 48 ? 1 : 0;
+    this._resolutionChanged = false;
     this._undo = [];
     this._externalChange = false;
     this._externalSchedule = null;
@@ -1608,6 +1717,9 @@ class SmartboxProgramCard extends HTMLElement {
         break;
       case "reset":
         this._resetDraft();
+        break;
+      case "toggle-resolution":
+        this._toggleResolution();
         break;
       case "brush":
         this._selectBrush(button.dataset.profile);
@@ -1869,8 +1981,10 @@ class SmartboxProgramCard extends HTMLElement {
       return;
     }
     this._pushUndo();
+    this._slots = this._initialResolution === 1 ? 48 : 24;
+    this._resolutionChanged = false;
     this._draft = cloneSchedule(this._original);
-    this._refreshGrid();
+    this._buildGrid();
     this._updateDirty();
   }
 
@@ -2105,6 +2219,14 @@ class SmartboxProgramCard extends HTMLElement {
     this._dialogError = null;
     this._updateDialogChrome();
     try {
+      if (this._resolutionChanged) {
+        await this._hass.callService(
+          "smartbox",
+          "set_schedule_resolution",
+          { resolution: this._slots === 48 ? 1 : 0 },
+          { entity_id: resolved.entityId },
+        );
+      }
       await this._hass.callService(
         "smartbox",
         "set_schedule",

@@ -49,6 +49,7 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from smartbox.core.engine import SUPERVISE_RUN_RESET_SECONDS, SmartboxEngine
+from smartbox.device.modes import lock_kind
 from smartbox.protocol import (
     AuthConfig,
     AuthError,
@@ -64,6 +65,7 @@ from smartbox.protocol import (
 from smartbox.protocol.retry import backoff_delay
 
 from .adapter import EngineChangeFanOut
+from .boost_prefs import BoostPrefs, boost_prefs_for
 from .const import (
     DOMAIN,
     SMARTBOX_UNAVAILABLE_DELAY,
@@ -74,7 +76,7 @@ from .devices import async_ensure_box_devices
 from .entity_builder import EntityBuilder
 from .history import HistoryImport
 from .identity import SmartboxDeviceInfo, SmartboxIdentity, async_discover_identity
-from .membership import MembershipWatcher, clear_node_added_issue
+from .membership import LatePidWatcher, MembershipWatcher, clear_node_added_issue
 from .reseller import api_base_url, reseller_from_entry_data
 from .services import ServiceTargets, async_register_services, async_unregister_services
 from .token_store import TokenStore, token_store_for
@@ -83,8 +85,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from homeassistant.core import Event, HomeAssistant
+    from smartbox.protocol.reseller import SmartboxReseller
 
-__version__ = "3.2.1"
+__version__ = "3.3.0-rc.1"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,8 +122,9 @@ class SmartboxRuntime:
     Stored on ``entry.runtime_data`` for the entity platforms. Runtime state
     does not outlive the entry: the ws_user recovery streak lives on the
     monitor task, so a reload rebuilds it. The token-store lock table in
-    ``hass.data`` is the one cross-reload coordination object; it serializes
-    storage access and is not runtime state.
+    ``hass.data`` serializes storage access, and the PID-reload marker set
+    prevents a late-identity reload loop; both are cross-reload coordination,
+    not runtime state.
     """
 
     engine: SmartboxEngine
@@ -128,12 +132,14 @@ class SmartboxRuntime:
     transport: WsUserTransport
     auth: TokenManager
     token_store: TokenStore
+    boost_prefs: BoostPrefs
     # "restored" when setup resumed the stored bundle, "granted" when it
     # minted a fresh session (first run, dead storage, or a rejected restore).
     token_origin: str
     identity: SmartboxIdentity
     fanout: EngineChangeFanOut
     membership: MembershipWatcher
+    late_pid: LatePidWatcher
     entity_builder: EntityBuilder
     history: HistoryImport
     # The entry data this runtime was built from. A reauth (or any data
@@ -145,7 +151,9 @@ class SmartboxRuntime:
     services: ServiceTargets = field(default_factory=ServiceTargets)
 
 
-def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
+def auth_config_from_entry_data(
+    data: Mapping[str, Any], *, reseller: SmartboxReseller | None = None
+) -> AuthConfig:
     """Build the protocol-layer AuthConfig from config-entry data.
 
     The reseller table supplies the endpoint identity: the Basic auth string
@@ -155,14 +163,14 @@ def auth_config_from_entry_data(data: Mapping[str, Any]) -> AuthConfig:
     ``api_url`` is the brand key, not a host. ``RESELLER_OVERRIDES`` can
     replace the documented auth fields for manual testing.
     """
-    reseller = reseller_from_entry_data(data)
+    resolved = reseller if reseller is not None else reseller_from_entry_data(data)
     return AuthConfig(
-        api_host=api_base_url(reseller),
-        basic_auth_creds=reseller.basic_auth,
-        serial_id=str(reseller.serial_id),
+        api_host=api_base_url(resolved),
+        basic_auth_creds=resolved.basic_auth,
+        serial_id=str(resolved.serial_id),
         username=data[CONF_USERNAME],
         password=data[CONF_PASSWORD],
-        referer=reseller.web_url or None,
+        referer=resolved.web_url or None,
     )
 
 
@@ -231,6 +239,35 @@ def _async_prune_thermostat_energy_entities(
             for node in identity.nodes
             if node.node_type == SmartboxNodeType.THM
             for key in ("power", "total_consumption")
+        },
+    )
+
+
+def _async_prune_integer_lock_switches(
+    hass: HomeAssistant,
+    entry: SmartboxConfigEntry,
+    identity: SmartboxIdentity,
+) -> None:
+    """Remove the old boolean child-lock switch on integer-lock families.
+
+    The integer families now expose the Off/Local lock/Remote lock select
+    (``{node_id}_lock_mode``). The switch's unique id is ``{node_id}_lock``;
+    leaving it behind would show an unavailable duplicate.
+    """
+    _async_prune_registry_entities(
+        hass,
+        entry,
+        {
+            f"{node.node_id}_lock"
+            for node in identity.nodes
+            if node.heater_surface
+            and lock_kind(
+                node.node_type,
+                node.pid,
+                node.version.get("fw_version"),
+                node.setup,
+            )
+            == "int"
         },
     )
 
@@ -451,6 +488,7 @@ async def _async_teardown_runtime(runtime: SmartboxRuntime) -> None:
     idempotent and bounded.
     """
     runtime.membership.close()
+    runtime.late_pid.close()
     try:
         await runtime.engine.stop()
     finally:
@@ -480,10 +518,13 @@ async def _async_build_runtime(
     trouble propagates raw and retries via ``ConfigEntryNotReady``. Protocol-layer
     errors propagate raw for the caller to map.
     """
-    config = auth_config_from_entry_data(entry.data)
+    reseller = reseller_from_entry_data(entry.data)
+    config = auth_config_from_entry_data(entry.data, reseller=reseller)
     websession = async_get_clientsession(hass)
-    token_store = token_store_for(hass, entry.entry_id, entry.data)
+    token_store = token_store_for(hass, entry.entry_id, entry.data, reseller=reseller)
     stored = await token_store.async_load()
+    boost_prefs = boost_prefs_for(hass, entry.entry_id)
+    await boost_prefs.async_load()
     client = SmartboxClient(
         config,
         session=websession,
@@ -528,9 +569,7 @@ async def _async_build_runtime(
         )
     else:
         _LOGGER.debug("Minted a fresh smartbox session for entry %s", entry.entry_id)
-    identity = await async_discover_identity(
-        client, reseller_from_entry_data(entry.data)
-    )
+    identity = await async_discover_identity(client, reseller)
     engine = SmartboxEngine(
         client,
         unavailable_delay=SMARTBOX_UNAVAILABLE_DELAY,
@@ -566,12 +605,14 @@ async def _async_build_runtime(
         transport=transport,
         auth=auth,
         token_store=token_store,
+        boost_prefs=boost_prefs,
         token_origin=origin,
         identity=identity,
         # ONE fan-out (one engine subscription) per config entry, shared
         # by every platform's entities (see adapter.py module docstring).
         fanout=EngineChangeFanOut(engine),
         membership=membership,
+        late_pid=LatePidWatcher(hass, entry, identity, engine),
         entity_builder=entity_builder,
         services=services,
         history=history,
@@ -656,6 +697,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
         hass, entry.entry_id, runtime.identity.devices
     )
     _async_rehome_device_entities(hass, entry, box_device_ids)
+    _async_prune_integer_lock_switches(hass, entry, runtime.identity)
     _async_prune_boxless_power_limit_entities(hass, entry, runtime.identity.devices)
     _async_prune_boxless_priority_entities(hass, entry, runtime.identity)
     _async_prune_thermostat_energy_entities(hass, entry, runtime.identity)
@@ -667,6 +709,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> 
     # Setup discovery is a full membership list, so registry devices it no
     # longer contains start the same confirmed-removal path as live loss.
     runtime.membership.async_start()
+    # Start the identity watch only after the platforms and membership are
+    # live, so a version frame during setup cannot schedule a reload halfway
+    # through it.
+    runtime.late_pid.async_start()
 
     # Domain services are registered once, after the platforms published
     # their entities on runtime.services. Each entry adds the same cleanup
@@ -725,6 +771,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
     try:
         unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
         if unloaded and runtime is not None:
+            await runtime.boost_prefs.async_flush()
             # Await the bounded teardown so the entry never finishes unloading
             # while its transport is still tearing down. (HA itself clears
             # entry.runtime_data once the platforms unloaded.)
@@ -747,10 +794,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) ->
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:
-    """Drop the entry's repair issues and its stored tokens."""
+    """Drop the entry's repair issues, stored tokens and boost preferences."""
     ir.async_delete_issue(hass, DOMAIN, ws_user_flapping_issue_id(entry))
     clear_node_added_issue(hass, entry)
     await token_store_for(hass, entry.entry_id, entry.data).async_clear()
+    await boost_prefs_for(hass, entry.entry_id).async_clear()
+    LatePidWatcher.async_clear(hass, entry.entry_id)
 
 
 async def update_listener(hass: HomeAssistant, entry: SmartboxConfigEntry) -> None:

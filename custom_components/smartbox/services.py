@@ -47,10 +47,17 @@ from .const import (
     ATTR_DURATION,
     DAY_KEYS,
     DOMAIN,
+    FIELD_ACTIVE_DAYS,
+    FIELD_RESOLUTION,
     FIELD_SCHEDULE,
+    FIELD_SLOT_1,
+    FIELD_SLOT_2,
     SERVICE_SET_BOOST_MODE,
     SERVICE_SET_BOOST_PARAMS,
+    SERVICE_SET_CHARGING_SCHEDULE,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_SCHEDULE_RESOLUTION,
+    SERVICE_SET_THERMOSTAT_SCHEDULE,
 )
 from .exceptions import user_error, validation_error
 
@@ -79,6 +86,9 @@ _SERVICE_NAMES = (
     SERVICE_SET_BOOST_MODE,
     SERVICE_SET_BOOST_PARAMS,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_SCHEDULE_RESOLUTION,
+    SERVICE_SET_CHARGING_SCHEDULE,
+    SERVICE_SET_THERMOSTAT_SCHEDULE,
 )
 
 
@@ -91,6 +101,39 @@ class ScheduleServiceTarget(Protocol):
 
     async def async_set_schedule(self, prog: ProgDict) -> None:
         """Write the schedule for this entity's node."""
+
+    async def async_set_schedule_resolution(self, resolution: int) -> None:
+        """Write the programme resolution for this entity's node."""
+
+
+class ThermostatScheduleTarget(Protocol):
+    """Entity shape ``smartbox.set_thermostat_schedule`` needs."""
+
+    @property
+    def entity_id(self) -> str | None:
+        """The registry entity id the service call targets."""
+
+    async def async_set_thermostat_schedule(
+        self, prog: dict[str, list[dict[str, object]]]
+    ) -> None:
+        """Write the thermostat programme."""
+
+
+class ChargingScheduleTarget(Protocol):
+    """Entity shape ``smartbox.set_charging_schedule`` needs."""
+
+    @property
+    def entity_id(self) -> str | None:
+        """The registry entity id the service call targets."""
+
+    async def async_set_charging_schedule(
+        self,
+        *,
+        active_days: list[int] | None,
+        slot_1: dict[str, int] | None,
+        slot_2: dict[str, int] | None,
+    ) -> None:
+        """Write the storage charging configuration."""
 
 
 class BoostServiceTarget(Protocol):
@@ -140,6 +183,8 @@ class ServiceTargets:
     """
 
     schedule: list[ScheduleServiceTarget] = field(default_factory=list)
+    thermostat_schedule: list[ThermostatScheduleTarget] = field(default_factory=list)
+    charging: list[ChargingScheduleTarget] = field(default_factory=list)
     boost: list[BoostServiceTarget] = field(default_factory=list)
     climate: list[BoostModeServiceTarget] = field(default_factory=list)
 
@@ -151,6 +196,10 @@ class ServiceTargets:
         the outgoing entity's removal callback is still pending.
         """
         self.schedule[:] = [entity for entity in self.schedule if entity is not target]
+        self.thermostat_schedule[:] = [
+            entity for entity in self.thermostat_schedule if entity is not target
+        ]
+        self.charging[:] = [entity for entity in self.charging if entity is not target]
         self.boost[:] = [entity for entity in self.boost if entity is not target]
         self.climate[:] = [entity for entity in self.climate if entity is not target]
 
@@ -340,6 +389,46 @@ async def _handle_set_boost_params(hass: HomeAssistant, call: ServiceCall) -> No
             ) from ex
 
 
+async def _handle_set_schedule_resolution(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    """Write the programme resolution to targeted schedule sensors."""
+    resolution = int(call.data[FIELD_RESOLUTION])
+    target_entity_ids = require_service_target(
+        hass, call.data, SERVICE_SET_SCHEDULE_RESOLUTION
+    )
+    matched = False
+    for other in loaded_runtimes(hass):
+        for schedule_entity in other.services.schedule:
+            if schedule_entity.entity_id not in target_entity_ids:
+                continue
+            matched = True
+            try:
+                await schedule_entity.async_set_schedule_resolution(resolution)
+            except ValueError as ex:
+                msg = "schedule_invalid"
+                raise validation_error(
+                    msg,
+                    entity_id=schedule_entity.entity_id or "",
+                    error=str(ex),
+                ) from ex
+            except SmartboxError as ex:
+                if isinstance(ex, AuthError):
+                    key = "schedule_auth_failed"
+                elif isinstance(ex, TransportUnavailableError):
+                    key = "schedule_api_unavailable"
+                else:
+                    key = "schedule_api_error"
+                raise user_error(
+                    key,
+                    entity_id=schedule_entity.entity_id or "",
+                    error=str(ex),
+                ) from ex
+    if not matched:
+        msg = "schedule_wrong_target"
+        raise validation_error(msg, service=SERVICE_SET_SCHEDULE_RESOLUTION)
+
+
 async def _handle_set_schedule(hass: HomeAssistant, call: ServiceCall) -> None:
     """Write a day-keyed schedule to targeted schedule sensors."""
     schedule: ProgDict = call.data[FIELD_SCHEDULE]
@@ -377,6 +466,90 @@ async def _handle_set_schedule(hass: HomeAssistant, call: ServiceCall) -> None:
         raise validation_error(msg, service=SERVICE_SET_SCHEDULE)
 
 
+async def _handle_set_thermostat_schedule(
+    hass: HomeAssistant, call: ServiceCall
+) -> None:
+    """Write a thermostat ``{m, t}`` programme."""
+    schedule = call.data[FIELD_SCHEDULE]
+    target_entity_ids = require_service_target(
+        hass, call.data, SERVICE_SET_THERMOSTAT_SCHEDULE
+    )
+    matched = False
+    for other in loaded_runtimes(hass):
+        for thermostat in other.services.thermostat_schedule:
+            if thermostat.entity_id not in target_entity_ids:
+                continue
+            matched = True
+            try:
+                await thermostat.async_set_thermostat_schedule(schedule)
+            except ValueError as ex:
+                msg = "thermostat_schedule_invalid"
+                raise validation_error(
+                    msg,
+                    entity_id=thermostat.entity_id or "",
+                    error=str(ex),
+                ) from ex
+            except SmartboxError as ex:
+                if isinstance(ex, AuthError):
+                    msg = "thermostat_schedule_auth_failed"
+                elif isinstance(ex, TransportUnavailableError):
+                    msg = "thermostat_schedule_api_unavailable"
+                else:
+                    msg = "thermostat_schedule_write_failed"
+                raise user_error(
+                    msg,
+                    entity_id=thermostat.entity_id or "",
+                    error=str(ex),
+                ) from ex
+    if not matched:
+        msg = "thermostat_schedule_wrong_target"
+        raise validation_error(msg, service=SERVICE_SET_THERMOSTAT_SCHEDULE)
+
+
+async def _handle_set_charging_schedule(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Write the storage charging days and valley slots."""
+    active_days = call.data.get(FIELD_ACTIVE_DAYS)
+    slot_1 = call.data.get(FIELD_SLOT_1)
+    slot_2 = call.data.get(FIELD_SLOT_2)
+    target_entity_ids = require_service_target(
+        hass, call.data, SERVICE_SET_CHARGING_SCHEDULE
+    )
+    matched = False
+    for other in loaded_runtimes(hass):
+        for charging in other.services.charging:
+            if charging.entity_id not in target_entity_ids:
+                continue
+            matched = True
+            try:
+                await charging.async_set_charging_schedule(
+                    active_days=active_days,
+                    slot_1=slot_1,
+                    slot_2=slot_2,
+                )
+            except ValueError as ex:
+                msg = "charging_schedule_invalid"
+                raise validation_error(
+                    msg,
+                    entity_id=charging.entity_id or "",
+                    error=str(ex),
+                ) from ex
+            except SmartboxError as ex:
+                if isinstance(ex, AuthError):
+                    msg = "charging_schedule_auth_failed"
+                elif isinstance(ex, TransportUnavailableError):
+                    msg = "charging_schedule_api_unavailable"
+                else:
+                    msg = "charging_schedule_write_failed"
+                raise user_error(
+                    msg,
+                    entity_id=charging.entity_id or "",
+                    error=str(ex),
+                ) from ex
+    if not matched:
+        msg = "charging_schedule_wrong_target"
+        raise validation_error(msg, service=SERVICE_SET_CHARGING_SCHEDULE)
+
+
 _BOOST_MODE_SCHEMA = vol.Schema(
     {
         vol.Optional("active", default=True): cv.boolean,
@@ -394,12 +567,62 @@ _BOOST_PARAMS_SCHEMA = vol.All(
         {
             vol.Optional(ATTR_TEMPERATURE): vol.Coerce(float),
             vol.Optional(ATTR_DURATION): vol.All(
-                vol.Coerce(int), vol.Range(min=60, max=240)
+                vol.Coerce(int), vol.Range(min=60, max=1440)
             ),
             **cv.ENTITY_SERVICE_FIELDS,
         },
     ),
     cv.has_at_least_one_key(ATTR_TEMPERATURE, ATTR_DURATION),
+)
+
+_THERMOSTAT_SEGMENT_SCHEMA = vol.Schema(
+    {
+        vol.Required("m"): vol.All(vol.Coerce(int), vol.Range(min=0, max=1440)),
+        vol.Required("t"): vol.Coerce(float),
+    }
+)
+
+_THERMOSTAT_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Required(FIELD_SCHEDULE): vol.All(
+            dict,
+            vol.Length(min=7, max=7),
+            {
+                vol.All(vol.Coerce(str), vol.In(DAY_KEYS)): [
+                    _THERMOSTAT_SEGMENT_SCHEMA
+                ],
+            },
+        ),
+        **cv.ENTITY_SERVICE_FIELDS,
+    }
+)
+
+_CHARGING_SLOT_SCHEMA = vol.Schema(
+    {
+        vol.Required("start"): vol.All(vol.Coerce(int), vol.Range(min=0, max=1440)),
+        vol.Required("end"): vol.All(vol.Coerce(int), vol.Range(min=0, max=1440)),
+    }
+)
+
+_CHARGING_SCHEDULE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional(FIELD_ACTIVE_DAYS): vol.All(
+                [cv.boolean], vol.Length(min=7, max=7)
+            ),
+            vol.Optional(FIELD_SLOT_1): _CHARGING_SLOT_SCHEMA,
+            vol.Optional(FIELD_SLOT_2): _CHARGING_SLOT_SCHEMA,
+            **cv.ENTITY_SERVICE_FIELDS,
+        }
+    ),
+    cv.has_at_least_one_key(FIELD_ACTIVE_DAYS, FIELD_SLOT_1, FIELD_SLOT_2),
+)
+
+_SCHEDULE_RESOLUTION_SCHEMA = vol.Schema(
+    {
+        vol.Required(FIELD_RESOLUTION): vol.All(vol.Coerce(str), vol.In(("0", "1"))),
+        **cv.ENTITY_SERVICE_FIELDS,
+    }
 )
 
 _SCHEDULE_SCHEMA = vol.Schema(
@@ -439,6 +662,27 @@ def async_register_services(hass: HomeAssistant) -> None:
             SERVICE_SET_SCHEDULE,
             partial(_handle_set_schedule, hass),
             schema=_SCHEDULE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_SCHEDULE_RESOLUTION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_SCHEDULE_RESOLUTION,
+            partial(_handle_set_schedule_resolution, hass),
+            schema=_SCHEDULE_RESOLUTION_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CHARGING_SCHEDULE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CHARGING_SCHEDULE,
+            partial(_handle_set_charging_schedule, hass),
+            schema=_CHARGING_SCHEDULE_SCHEMA,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_THERMOSTAT_SCHEDULE):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_THERMOSTAT_SCHEDULE,
+            partial(_handle_set_thermostat_schedule, hass),
+            schema=_THERMOSTAT_SCHEDULE_SCHEMA,
         )
 
 

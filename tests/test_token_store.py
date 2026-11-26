@@ -173,6 +173,19 @@ async def test_clear_errors_are_logged_not_raised(
     assert "Could not remove stored smartbox tokens" in caplog.text
 
 
+def test_account_from_entry_data_accepts_pre_resolved_reseller(
+    config_entry, reseller, monkeypatch
+):
+    """Runtime setup resolves the table once and passes it to the store."""
+    monkeypatch.setattr(
+        "custom_components.smartbox.token_store.reseller_from_entry_data",
+        lambda _data: pytest.fail("reseller table resolved twice"),
+    )
+    row = reseller.return_value[config_entry.data["api_name"]]
+    stamp = account_from_entry_data(config_entry.data, reseller=row)
+    assert "10" in stamp
+
+
 def test_account_stamp_is_reseller_and_host_scoped_and_case_folded() -> None:
     assert (
         account_from_entry_data({"api_name": "api-lhz", "username": "User@Example.com"})

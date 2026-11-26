@@ -114,6 +114,8 @@ class EntityBuilder:
             ]
             lengths = (
                 len(self._services.schedule),
+                len(self._services.thermostat_schedule),
+                len(self._services.charging),
                 len(self._services.boost),
                 len(self._services.climate),
             )
@@ -126,8 +128,10 @@ class EntityBuilder:
                 # Builders publish service targets while constructing; a
                 # failed attempt must not leave those targets behind.
                 del self._services.schedule[lengths[0] :]
-                del self._services.boost[lengths[1] :]
-                del self._services.climate[lengths[2] :]
+                del self._services.thermostat_schedule[lengths[1] :]
+                del self._services.charging[lengths[2] :]
+                del self._services.boost[lengths[3] :]
+                del self._services.climate[lengths[4] :]
                 raise
             self._known_devices.update(device.dev_id for device in new_devices)
             self._known_nodes.update(node.node_id for node in new_nodes)

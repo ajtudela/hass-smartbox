@@ -9,7 +9,9 @@ identity, device-info fields and the entity creation gates.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
+import math
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
@@ -19,28 +21,56 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
+from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.codes import accepts_extra_options
+from smartbox.device.modes import boost_params_editable
+from smartbox.device.profile import (
+    ControllerLimits,
+    boost_temperature_bounds,
+    controller_limits,
+    max_limit_bounds,
+    profile_bounds,
+)
 from smartbox.protocol.errors import SmartboxError
-from smartbox.protocol.values import parse_number
+from smartbox.protocol.values import (
+    celsius_to_node_units,
+    node_units_to_celsius,
+    parse_number,
+    parse_number_or_none,
+)
 
 from .adapter import (
     SmartboxBoxAdapterEntity,
     SmartboxNodeAdapterEntity,
+    extra_temp_from_node_units,
     node_boost_params,
     node_max_stemp_limit,
+    node_max_stemp_limit_c,
     node_power_limit,
+    node_runback_limits,
+    node_runback_params,
     node_setup_float,
     node_units,
 )
-from .const import DEFAULT_BOOST_TIME, MAX_TEMP_LIMIT_DEFAULT
+from .const import (
+    BOOST_TIME_MIN,
+    BOOST_TIME_STEP,
+    MAX_TEMP_LIMIT_DEFAULT,
+    RUNBACK_TIME_DEFAULT,
+    RUNBACK_TIME_MAX,
+    RUNBACK_TIME_STEP,
+)
 from .entity_builder import EntityBuilder
 from .exceptions import validation_error
 from .identity import (
     SmartboxDeviceInfo,
     SmartboxNodeInfo,
     away_offset_available,
+    boost_params_available,
     max_temp_limit_available,
     node_power_limit_available,
     prog_temps_available,
+    runback_params_available,
 )
 from .mapping import get_temperature_unit
 
@@ -85,6 +115,39 @@ class _DeviceScaleBounds:
             return self._F_SCALE_BOUNDS
         return self._C_SCALE_BOUNDS
 
+    def _bounds_from_celsius(
+        self,
+        min_c: float,
+        max_c: float,
+        celsius_step: float,
+        fahrenheit_step: float,
+    ) -> tuple[float, float, float]:
+        """Convert a Celsius (min, max) pair to the node's native scale."""
+        if get_temperature_unit(self._status) == UnitOfTemperature.FAHRENHEIT:
+            convert = TemperatureConverter.convert
+            return (
+                float(
+                    math.floor(
+                        convert(
+                            min_c,
+                            UnitOfTemperature.CELSIUS,
+                            UnitOfTemperature.FAHRENHEIT,
+                        )
+                    )
+                ),
+                float(
+                    math.ceil(
+                        convert(
+                            max_c,
+                            UnitOfTemperature.CELSIUS,
+                            UnitOfTemperature.FAHRENHEIT,
+                        )
+                    )
+                ),
+                fahrenheit_step,
+            )
+        return (min_c, max_c, celsius_step)
+
     @property
     def native_min_value(self) -> float:
         """Return the native minimum value."""
@@ -105,6 +168,10 @@ class SmartboxNodeNumberEntity(SmartboxNodeAdapterEntity, NumberEntity):
     """Base for node-level number entities (identity on the node adapter base)."""
 
     _attr_entity_category = EntityCategory.CONFIG
+
+    def _controller_limits(self) -> ControllerLimits:
+        """Return the decoded controller limits for this node."""
+        return self._controller_profile().limits
 
 
 def _build_device_entities(
@@ -168,8 +235,19 @@ def _build_node_numbers(
     groups: list[EntityGroup] = []
     # A thm node can dispatch to an htr-derived controller whose factory
     # payload carries boost_config (Tevolve floor thermostats), but the
-    # thermostat climate entity does not model boost.
-    if node.heater_node and node.boost_available:
+    # thermostat climate entity does not model boost. Legacy product codes
+    # reject the extra_options object the two boost numbers write, so the
+    # entities (and the service targets they publish) exist only where that
+    # setup write can land.
+    if (
+        node.heater_surface
+        and node.boost_available
+        and boost_params_available(node)
+        and (
+            not boost_params_editable(node.node_type, node.pid, node.setup)
+            or accepts_extra_options(node.pid)
+        )
+    ):
         boost_entities: list[ConfigBoostDuration | ConfigBoostTemperature] = [
             ConfigBoostTemperature(
                 node, entry, runtime, fanout, "config_boost_temperature"
@@ -179,6 +257,21 @@ def _build_node_numbers(
         # Publish the entities the (domain-global) service acts on.
         runtime.services.boost.extend(boost_entities)
         groups.append((cast("list[Entity]", boost_entities), True))
+
+    if node.heater_surface and node.boost_available and runback_params_available(node):
+        groups.append(
+            (
+                [
+                    ConfigRunbackTemperature(
+                        node, entry, runtime, fanout, "config_runback_temperature"
+                    ),
+                    ConfigRunbackDuration(
+                        node, entry, runtime, fanout, "config_runback_duration"
+                    ),
+                ],
+                True,
+            )
+        )
 
     if node_power_limit_available(node):
         groups.append(
@@ -202,25 +295,29 @@ def _build_node_numbers(
             )
         )
     if prog_temps_available(node):
-        groups.append(
-            (
-                [
-                    prog_temp_cls(
-                        node,
-                        entry,
-                        runtime,
-                        fanout,
-                        f"prog_{profile}_temperature",
-                    )
-                    for profile, prog_temp_cls in (
-                        ("frost", ProgFrostTemperature),
-                        ("eco", ProgEcoTemperature),
-                        ("comfort", ProgComfortTemperature),
-                    )
-                ],
-                True,
-            )
+        limits = controller_limits(
+            node.node_type,
+            node.pid,
+            node.version.get("fw_version"),
+            node.setup,
         )
+        prog_entities = [
+            prog_temp_cls(
+                node,
+                entry,
+                runtime,
+                fanout,
+                f"prog_{profile}_temperature",
+            )
+            for profile, prog_temp_cls in (
+                ("frost", ProgFrostTemperature),
+                ("eco", ProgEcoTemperature),
+                ("comfort", ProgComfortTemperature),
+            )
+            if profile_bounds(limits, profile) is not None
+        ]
+        if prog_entities:
+            groups.append((cast("list[Entity]", prog_entities), True))
     return groups
 
 
@@ -288,9 +385,10 @@ class NodePowerLimit(SmartboxNodeNumberEntity):
 class ConfigBoostTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     """Smartbox boost temperature control.
 
-    The stored value follows the node's temperature scale, so the slider
-    bounds are scale-coherent: 5-30 °C in 0.5 steps or 41-86 °F in whole
-    degrees (the same ranges as the programme temperatures).
+    Legacy controllers store the value on the device (``extra_options``), so
+    the slider reads and writes the same field the vendor app uses. FULL
+    WiFi/ATC controllers take it per activation; those values live in the
+    entry's :class:`BoostPrefs` store so the slider survives a restart.
     """
 
     _attr_mode = NumberMode.SLIDER
@@ -300,9 +398,26 @@ class ConfigBoostTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     _F_SCALE_BOUNDS = (41.0, 86.0, 1.0)
 
     @property
+    def _stores_locally(self) -> bool:
+        """Whether this controller takes the value per activation."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        return not boost_params_editable(self._node.node_type, self._live_pid, setup)
+
+    @property
+    def _device_scale_bounds(self) -> tuple[float, float, float]:
+        """Return the controller's boost-temperature range."""
+        min_c, max_c = boost_temperature_bounds(self._controller_limits())
+        return self._bounds_from_celsius(min_c, max_c, 0.5, 1.0)
+
+    @property
     def native_value(self) -> float | None:
         """Return the current boost temperature."""
         state = self._node_state()
+        if self._stores_locally:
+            pref = self._runtime.boost_prefs.get(self._node.node_id).boost_temp_c
+            if pref is not None:
+                return celsius_to_node_units(pref, node_units(state) or "C")
         boost_temp, _boost_minutes = node_boost_params(state)
         return boost_temp
 
@@ -327,8 +442,18 @@ class ConfigBoostTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
                 max=f"{self.native_max_value:g}",
                 unit=self.native_unit_of_measurement or "",
             )
+        state = self._node_state()
+        if self._stores_locally:
+            units = node_units(state) or "C"
+            value_c = node_units_to_celsius(value, units) if units == "F" else value
+            await self._runtime.boost_prefs.async_update(
+                self._node.node_id, boost_temp_c=value_c
+            )
+            return
         await self._runtime.engine.set_extra_options(
-            self._dev_id, self._ref, {"boost_temp": str(value)}
+            self._dev_id,
+            self._ref,
+            {"boost_temp": f"{extra_temp_from_node_units(state, value):.1f}"},
         )
 
 
@@ -339,14 +464,30 @@ class ConfigBoostDuration(SmartboxNodeNumberEntity):
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_device_class = NumberDeviceClass.DURATION
 
-    _attr_native_min_value: float = DEFAULT_BOOST_TIME
-    _attr_native_max_value: float = 240.0
-    _attr_native_step: float = 60.0
+    _attr_native_min_value: float = BOOST_TIME_MIN
+    _attr_native_max_value: float = 1440.0
+    _attr_native_step: float = BOOST_TIME_STEP
+
+    @property
+    def _stores_locally(self) -> bool:
+        """Whether this controller takes the value per activation."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        return not boost_params_editable(self._node.node_type, self._live_pid, setup)
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the controller's boost-duration ceiling."""
+        return float(self._controller_limits().boost_max_minutes)
 
     @property
     def native_value(self) -> float | None:
         """Return the current boost duration."""
         state = self._node_state()
+        if self._stores_locally:
+            pref = self._runtime.boost_prefs.get(self._node.node_id).boost_time
+            if pref is not None:
+                return float(pref)
         _boost_temp, boost_minutes = node_boost_params(state)
         return boost_minutes
 
@@ -364,8 +505,131 @@ class ConfigBoostDuration(SmartboxNodeNumberEntity):
                 max=f"{self.native_max_value:g}",
                 unit=self.native_unit_of_measurement or "",
             )
+        if self._stores_locally:
+            await self._runtime.boost_prefs.async_update(
+                self._node.node_id, boost_time=int(value)
+            )
+            return
         await self._runtime.engine.set_extra_options(
             self._dev_id, self._ref, {"boost_time": int(value)}
+        )
+
+
+class ConfigRunbackTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
+    """Runback target temperature for a FULL-boost node.
+
+    The vendor app pre-fills from ``default_runback_temp``; that device field
+    stays the initial value. A user edit is stored in the entry's
+    :class:`BoostPrefs` so it never collides with the shared legacy fields.
+    """
+
+    _attr_mode = NumberMode.SLIDER
+    _attr_device_class = NumberDeviceClass.TEMPERATURE
+
+    _C_SCALE_BOUNDS = (5.0, 30.0, 0.5)
+    _F_SCALE_BOUNDS = (41.0, 86.0, 1.0)
+
+    @property
+    def _device_scale_bounds(self) -> tuple[float, float, float]:
+        """Return the runback temperature range in the node's scale."""
+        state = self._node_state()
+        limits = self._controller_limits()
+        min_temp, max_temp = node_runback_limits(state)
+        units = node_units(state)
+        if min_temp is None:
+            min_c = limits.min_c
+        else:
+            min_c = node_units_to_celsius(min_temp, "F") if units == "F" else min_temp
+        if max_temp is None:
+            max_c = limits.max_c
+        else:
+            max_c = node_units_to_celsius(max_temp, "F") if units == "F" else max_temp
+        return self._bounds_from_celsius(min_c, max_c, 0.5, 1.0)
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the runback temperature."""
+        state = self._node_state()
+        pref = self._runtime.boost_prefs.get(self._node.node_id).runback_temp_c
+        if pref is not None:
+            return celsius_to_node_units(pref, node_units(state) or "C")
+        temperature, _minutes = node_runback_params(state)
+        return temperature
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit of measurement."""
+        if (unit := get_temperature_unit(self._status)) is not None:
+            return unit
+        return UnitOfTemperature.CELSIUS
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Store the runback temperature as a Home Assistant preference."""
+        if not self.native_min_value <= value <= self.native_max_value:
+            msg = "runback_temperature_out_of_range"
+            raise validation_error(
+                msg,
+                min=f"{self.native_min_value:g}",
+                max=f"{self.native_max_value:g}",
+                unit=self.native_unit_of_measurement or "",
+            )
+        state = self._node_state()
+        units = node_units(state) or "C"
+        value_c = node_units_to_celsius(value, units) if units == "F" else value
+        await self._runtime.boost_prefs.async_update(
+            self._node.node_id, runback_temp_c=value_c
+        )
+
+
+class ConfigRunbackDuration(SmartboxNodeNumberEntity):
+    """Runback duration for a FULL-boost node (30-minute app grid).
+
+    The app shares ``extra_options.boost_time`` as a runback default, but the
+    modes are separate screens with separate limits. This entity keeps a
+    runback-specific Home Assistant preference instead of overloading the
+    boost duration field.
+    """
+
+    _attr_mode = NumberMode.SLIDER
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_device_class = NumberDeviceClass.DURATION
+
+    _attr_native_min_value: float = RUNBACK_TIME_DEFAULT
+    _attr_native_max_value: float = float(RUNBACK_TIME_MAX)
+    _attr_native_step: float = float(RUNBACK_TIME_STEP)
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the node's ``max_runback_time`` ceiling when present."""
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        extra = setup.get("extra_options")
+        raw = extra.get("max_runback_time") if isinstance(extra, Mapping) else None
+        value = parse_number_or_none(raw)
+        if value is None:
+            return float(RUNBACK_TIME_MAX)
+        return float(max(value, RUNBACK_TIME_DEFAULT))
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the runback duration preference, or the app default."""
+        pref = self._runtime.boost_prefs.get(self._node.node_id).runback_time
+        if pref is None:
+            return float(RUNBACK_TIME_DEFAULT)
+        return float(pref)
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Store the runback duration as a Home Assistant preference."""
+        if not self.native_min_value <= value <= self.native_max_value:
+            msg = "runback_duration_out_of_range"
+            raise validation_error(
+                msg,
+                min=f"{self.native_min_value:g}",
+                max=f"{self.native_max_value:g}",
+                unit=self.native_unit_of_measurement or "",
+            )
+        await self._runtime.boost_prefs.async_update(
+            self._node.node_id, runback_time=int(value)
         )
 
 
@@ -420,6 +684,12 @@ class MaxTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     _F_SCALE_BOUNDS = (60.0, 86.0, 2.0)
 
     @property
+    def _device_scale_bounds(self) -> tuple[float, float, float]:
+        """Return the controller's max-limit range."""
+        min_c, max_c = max_limit_bounds(self._controller_limits())
+        return self._bounds_from_celsius(min_c, max_c, 1.0, 2.0)
+
+    @property
     def native_value(self) -> float | None:
         """Return the current maximum target temperature."""
         return node_max_stemp_limit(self._node_state())
@@ -433,8 +703,14 @@ class MaxTemperature(_DeviceScaleBounds, SmartboxNodeNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the maximum target temperature."""
+        profile = self._controller_profile(max_limit_c=value)
         await self._runtime.engine.set_max_stemp_limit(
-            self._dev_id, self._ref, value, node_units(self._node_state())
+            self._dev_id,
+            self._ref,
+            value,
+            node_units(self._node_state()),
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
 
@@ -445,7 +721,7 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
     the app-shaped 4-key status body (see ``engine.set_prog_temps``): profiles
     the caller does not change are sent back with their current values plus
     units. The vendor app clamps profile temps against their neighbours before
-    sending (docs/webapi-spec.md §5), and the engine applies that clamp; the
+    sending (docs/api-ws-user.md §2.8), and the engine applies that clamp; the
     slider bounds here are scale-coherent overall bounds, not the
     context-dependent per-profile result.
     """
@@ -456,6 +732,16 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
 
     _C_SCALE_BOUNDS = (5.0, 30.0, 0.5)
     _F_SCALE_BOUNDS = (41.0, 86.0, 1.0)
+
+    @property
+    def _device_scale_bounds(self) -> tuple[float, float, float]:
+        """Return the controller's bounds for this programme profile."""
+        state = self._node_state()
+        profile = self._controller_profile(max_limit_c=node_max_stemp_limit_c(state))
+        bounds = (profile.prog_bounds or {}).get(self.status_key)
+        if bounds is None:
+            return super()._device_scale_bounds
+        return self._bounds_from_celsius(bounds[0], bounds[1], 0.5, 1.0)
 
     @property
     def native_value(self) -> float | None:
@@ -484,14 +770,20 @@ class ProgTemperatureBase(_DeviceScaleBounds, SmartboxNodeNumberEntity):
             for key in ("ice_temp", "eco_temp", "comf_temp")
         }
         current[self.status_key] = value
+        state = self._node_state()
+        setup_units = state.setup.get("units") if state is not None else None
+        units = status.get("units") or setup_units or "C"
+        profile = self._controller_profile(max_limit_c=node_max_stemp_limit_c(state))
         await self._runtime.engine.set_prog_temps(
             self._dev_id,
             self._ref,
             ice_temp=current["ice_temp"],
             eco_temp=current["eco_temp"],
             comf_temp=current["comf_temp"],
-            units=status.get("units"),
+            units=units,
             changed=self.status_key,
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
 

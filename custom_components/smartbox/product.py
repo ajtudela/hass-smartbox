@@ -16,70 +16,9 @@ from an ordinary heater here. The model picker is driven by the per-tenant
 
 from __future__ import annotations
 
-from .const import SmartboxNodeType
+from smartbox.device.codes import PRODUCT_CODE_LABELS, product_code
 
-# The app's EProductCodeValue enum, grouped by control category. Codes not
-# present here fall back to the wire node type.
-PRODUCT_CODE_LABELS: dict[str, str] = {
-    # Helki
-    "01": "Triac heater",
-    "02": "Relay heater",
-    "07": "Triac heater",
-    "32": "WiFi heater",
-    "35": "WiFi heater",
-    "1C": "Storage heater",
-    "04": "Thermostat",
-    "0F": "Thermostatic valve",
-    "03": "Power monitor",
-    "22": "Power monitor",
-    # Elnur
-    "11": "Triac heater",
-    "0B": "Triac heater",
-    "13": "Relay heater",
-    "1B": "Triac heater",
-    "0C": "Triac heater",
-    "14": "Storage heater",
-    "20": "Storage heater",
-    "25": "Storage heater",
-    "2A": "Water storage heater",
-    "2E": "Storage heater",
-    # Haverland
-    "0A": "Heater module",
-    "17": "Relay heater",
-    "1D": "WiFi heater",
-    "47": "WiFi heater",
-    "FF": "Heater",
-    # Climastar
-    "08": "Triac heater",
-    "10": "Relay heater",
-    "16": "Relay heater",
-    "12": "Heater",
-    "3D": "WiFi heater",
-    # Lucht LHZ
-    "33": "WiFi heater",
-    "0D": "Relay heater",
-    "18": "Relay heater",
-    "36": "Relay heater",
-    # Perry
-    "09": "Thermostat",
-    # Tevolve
-    "1A": "Triac heater",
-    "21": "Triac heater",
-    "1E": "Relay heater",
-    "23": "Relay heater",
-    "24": "Heater",
-    "27": "Heater",
-    "28": "Thermostat",
-    "31": "WiFi heater",
-    "34": "WiFi heater",
-    "39": "WiFi heater",
-    "4C": "WiFi heater",
-    # EV Confort / Ferroli
-    "1F": "Triac heater",
-    "38": "WiFi heater",
-    "43": "WiFi heater",
-    "4D": "WiFi heater",
-}
+from .const import SmartboxNodeType
 
 NODE_TYPE_LABELS: dict[str, str] = {
     SmartboxNodeType.HTR: "Heater",
@@ -89,20 +28,6 @@ NODE_TYPE_LABELS: dict[str, str] = {
     SmartboxNodeType.PMO: "Power monitor",
 }
 
-# The vendor app reads the product code as pid.substring(2, 4).
-_PID_PRODUCT_CODE_START = 2
-_PID_PRODUCT_CODE_END = 4
-
-
-def product_code(pid: str | None) -> str | None:
-    """Return the vendor product code (``pid[2:4]``, uppercased), or None."""
-    if not isinstance(pid, str):
-        return None
-    value = pid.strip().upper()
-    if len(value) < _PID_PRODUCT_CODE_END:
-        return None
-    return value[_PID_PRODUCT_CODE_START:_PID_PRODUCT_CODE_END]
-
 
 def product_label(node_type: str, pid: str | None) -> str:
     """Return a human product label for a node, falling back to its wire type."""
@@ -110,3 +35,11 @@ def product_label(node_type: str, pid: str | None) -> str:
     if code is not None and code in PRODUCT_CODE_LABELS:
         return PRODUCT_CODE_LABELS[code]
     return NODE_TYPE_LABELS.get(node_type, node_type)
+
+
+__all__ = [
+    "NODE_TYPE_LABELS",
+    "PRODUCT_CODE_LABELS",
+    "product_code",
+    "product_label",
+]

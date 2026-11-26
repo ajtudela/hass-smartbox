@@ -7,8 +7,9 @@ messages.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import logging
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.climate import (
     PRESET_ACTIVITY,
@@ -40,6 +41,7 @@ from custom_components.smartbox.mapping import (
     get_current_prog_profile,
     get_hvac_mode,
     get_next_prog_change,
+    get_target_temperature,
     get_temperature_unit,
     htr_mod_policy,
     htr_mod_setpoint_limits,
@@ -54,12 +56,12 @@ from custom_components.smartbox.mapping import (
 
 def test_acm_active_uses_the_water_ready_level_for_water_storage():
     """Water storage at 50% is ready, not active (docs/api-contract.md §3.4)."""
-    assert acm_active({"charging": True, "charge_level": 40}, "2A") is True
-    assert acm_active({"charging": True, "charge_level": 50}, "2A") is False
-    assert acm_active({"charging": False, "charge_level": 40}, "2A") is False
-    assert acm_active({"charging": 1, "charge_level": 40}, "2A") is False
+    assert acm_active({"charging": True, "charge_level": 40}, "082A0000") is True
+    assert acm_active({"charging": True, "charge_level": 50}, "082A0000") is False
+    assert acm_active({"charging": False, "charge_level": 40}, "082A0000") is False
+    assert acm_active({"charging": 1, "charge_level": 40}, "082A0000") is False
     # Other storage controllers keep raw charging, including at 50%.
-    assert acm_active({"charging": True, "charge_level": 50}, "1C") is True
+    assert acm_active({"charging": True, "charge_level": 50}, "081C0000") is True
 
 
 # --- temperature_write ---
@@ -203,8 +205,8 @@ def test_temperature_write_htr_mod_18c_is_an_eco_setpoint():
     )
 
 
-def test_temperature_write_htr_mod_other_product_keeps_the_legacy_body():
-    """Only the two Haverland product codes get the app's limits."""
+def test_temperature_write_known_non_htr_mod_code_uses_the_base_body():
+    """A known non-0A/FF code on the htr_mod wire follows the base controller."""
     assert temperature_write(
         SmartboxNodeType.HTR_MOD,
         {
@@ -216,14 +218,7 @@ def test_temperature_write_htr_mod_other_product_keeps_the_legacy_body():
         },
         14.2,
         model_code="1C",
-    ) == HtrModWrite(
-        on=True,
-        mode="manual",
-        selected_temp="eco",
-        comfort_temp=18.2,
-        eco_offset="4",
-        units="C",
-    )
+    ) == SetpointWrite(units="C")
 
 
 def test_temperature_write_htr_mod_fahrenheit_keeps_the_legacy_body():
@@ -305,7 +300,10 @@ def test_htr_mod_setpoint_limits():
         7.0,
         7.0,
     )
-    assert htr_mod_setpoint_limits({"selected_temp": "off"}, policy) is None
+    assert htr_mod_setpoint_limits({"selected_temp": "off"}, policy) == (
+        10.0,
+        28.0,
+    )
     assert htr_mod_setpoint_limits({}, policy) is None
 
 
@@ -386,12 +384,11 @@ def test_temperature_write_htr_mod_comfort_needs_the_stored_offset():
         (
             {
                 "mode": "auto",
-                "selected_temp": "eco",
                 "comfort_temp": "17.2",
                 "units": "C",
             },
-            "eco_offset",
-            "1C",
+            "selected_temp",
+            "0A",
         ),
         (
             {
@@ -409,6 +406,31 @@ def test_temperature_write_htr_mod_missing_keys_raise(status, key, model_code):
     # None pins only the exception type - the message wording is not contract
     with pytest.raises(KeyError, match=key):
         temperature_write(SmartboxNodeType.HTR_MOD, status, 17.2, model_code=model_code)
+
+
+def test_htr_mod_writes_follow_the_pid_on_a_plain_htr_wire():
+    """0A is htr_mod on any wire; FF is htr_mod only on the htr_mod wire."""
+    status = {
+        "units": "C",
+        "mode": "manual",
+        "selected_temp": "comfort",
+        "comfort_temp": "21.0",
+        "eco_offset": "0.0",
+    }
+    assert isinstance(
+        temperature_write(SmartboxNodeType.HTR, status, 21.5, model_code="0A"),
+        HtrModWrite,
+    )
+    assert isinstance(
+        hvac_mode_write(SmartboxNodeType.HTR, status, HVACMode.HEAT, model_code="0A"),
+        HtrModWrite,
+    )
+    assert temperature_write(
+        SmartboxNodeType.HTR,
+        {"units": "C", "stemp": "20.0"},
+        21.5,
+        model_code="FF",
+    ) == SetpointWrite(units="C")
 
 
 def test_temperature_write_modified_auto_engagement():
@@ -672,9 +694,14 @@ def test_rtc_time_to_datetime_september_is_zero_indexed():
     )
 
 
-def test_rtc_time_to_datetime_december_unconfirmed_indexing():
-    # n=11 -> December under the 0-indexed reading; a 1-indexed 12 fails
-    # to parse and yields None (recorded Phase-4 open item)
+def test_rtc_time_to_datetime_november_live_frame():
+    # 2026-11-24 frame: n=10 -> November under the 0-indexed reading.
+    rtc = {"d": 24, "h": 22, "m": 11, "n": 10, "s": 6, "w": 2, "y": 2026}
+    assert rtc_time_to_datetime(rtc).month == 11
+
+
+def test_rtc_time_to_datetime_december_extrapolation():
+    # n=11 -> December follows the same rule; 1-indexed 12 yields None.
     rtc = {"d": 31, "h": 23, "m": 59, "n": 11, "s": 59, "w": 0, "y": 2026}
     assert rtc_time_to_datetime(rtc).month == 12
     assert rtc_time_to_datetime({**rtc, "n": 12}) is None
@@ -701,7 +728,7 @@ def test_rtc_time_to_datetime_malformed_returns_none(rtc):
 @pytest.fixture
 def fixed_utcnow(monkeypatch):
     fixed = datetime(2023, 10, 10, 1, 0, tzinfo=UTC)
-    monkeypatch.setattr(dt_util, "utcnow", lambda: fixed)
+    monkeypatch.setattr(dt_util, "now", lambda: fixed)
     return fixed
 
 
@@ -715,9 +742,9 @@ def test_boost_end_datetime_already_passed_rolls_to_tomorrow(fixed_utcnow):
     assert boost_end == datetime(2023, 10, 11, 0, 30, tzinfo=UTC)
 
 
-def test_boost_end_datetime_exactly_now_rolls_to_tomorrow(fixed_utcnow):
+def test_boost_end_datetime_exactly_now_stays_today(fixed_utcnow):
     boost_end = get_boost_end_datetime(60)  # 01:00 UTC == now
-    assert boost_end == datetime(2023, 10, 11, 1, 0, tzinfo=UTC)
+    assert boost_end == datetime(2023, 10, 10, 1, 0, tzinfo=UTC)
 
 
 def test_boost_end_datetime_is_local(fixed_utcnow):
@@ -726,3 +753,125 @@ def test_boost_end_datetime_is_local(fixed_utcnow):
     assert get_boost_end_datetime("garbage") is None
     assert get_boost_end_datetime(-1) is None
     assert get_boost_end_datetime(1440) is None
+
+
+def test_boost_end_datetime_is_home_local_and_ignores_the_weekday():
+    """boost_end_day is the end weekday, not a day offset."""
+    paris = ZoneInfo("Europe/Paris")
+    now = datetime(2026, 11, 22, 13, 49, tzinfo=paris)
+    assert get_boost_end_datetime(889, 0, now=now) == now.replace(
+        hour=14, minute=49, second=0, microsecond=0
+    )
+    # 1 = Monday, not "tomorrow": the end is still today.
+    assert get_boost_end_datetime(889, 1, now=now) == now.replace(
+        hour=14, minute=49, second=0, microsecond=0
+    )
+    # 2026-11-26 is Thursday (4); a 60-minute boost at 15:07 ends 16:07 today.
+    thursday = datetime(2026, 11, 26, 15, 7, tzinfo=paris)
+    assert get_boost_end_datetime(967, 4, now=thursday) == thursday.replace(
+        hour=16, minute=7, second=0, microsecond=0
+    )
+    assert get_boost_end_datetime(0, 0, now=now) == now.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    assert get_boost_end_datetime(1440) is None
+
+
+def test_acm_target_is_none_while_off():
+    assert get_target_temperature("acm", {"mode": "off", "stemp": "21.0"}) is None
+    assert get_target_temperature("acm", {"mode": "manual", "stemp": "21.0"}) == 21.0
+
+
+def test_boost_target_is_visible_while_the_wire_mode_is_off():
+    """The app's boost mode owns the target before status.mode is read."""
+    frame = {"mode": "off", "boost": True, "stemp": "20.0"}
+    assert get_target_temperature("htr", dict(frame)) == 20.0
+    assert get_target_temperature("acm", dict(frame)) == 20.0
+
+
+def test_get_target_temperature_returns_none_for_malformed_numbers():
+    """Entity read paths must not raise on a malformed wire number."""
+    assert (
+        get_target_temperature("htr", {"mode": "manual", "stemp": "not-a-number"})
+        is None
+    )
+    assert (
+        get_target_temperature(
+            "htr_mod",
+            {
+                "mode": "manual",
+                "on": True,
+                "selected_temp": "comfort",
+                "comfort_temp": "bad",
+                "eco_offset": "4.0",
+            },
+        )
+        is None
+    )
+    assert (
+        get_target_temperature(
+            "htr_mod",
+            {
+                "mode": "manual",
+                "on": True,
+                "selected_temp": "eco",
+                "comfort_temp": "20.0",
+                "eco_offset": "bad",
+            },
+        )
+        is None
+    )
+
+
+def test_htr_mod_auto_target_comes_from_the_programme(monkeypatch):
+    """AUTO reads the current slot's profile, as getAutoModeTemp does."""
+    monkeypatch.setattr(
+        "custom_components.smartbox.mapping.dt_util.now",
+        lambda: datetime(2026, 11, 23, 5, 0, tzinfo=UTC),  # Monday, slot 5
+    )
+    status = {
+        "mode": "auto",
+        "on": True,
+        "comfort_temp": "21.0",
+        "eco_offset": "4.0",
+        "ice_temp": "7.0",
+    }
+    assert get_target_temperature("htr_mod", status, {"1": [3] * 24}) == 21.0
+    assert get_target_temperature("htr_mod", status, {"1": [2] * 24}) == 17.0
+    assert get_target_temperature("htr_mod", status, {"1": [1] * 24}) == 7.0
+    assert get_target_temperature("htr_mod", status, {"1": [0] * 24}) is None
+
+
+def test_htr_mod_manual_off_profile_is_off_and_accepts_a_setpoint():
+    """selected_temp off is OFF in manual, and a setpoint picks eco/comfort."""
+    status = {
+        "mode": "manual",
+        "on": True,
+        "selected_temp": "off",
+        "units": "C",
+        "comfort_temp": "20.0",
+        "eco_offset": "4.0",
+        "ice_temp": "7.0",
+    }
+    assert get_hvac_mode("htr_mod", status) == HVACMode.OFF
+    assert get_target_temperature("htr_mod", status) is None
+    write = temperature_write("htr_mod", status, 17.0, model_code="0a")
+    assert isinstance(write, HtrModWrite)
+    assert write.on is True
+    assert write.mode == "manual"
+    assert write.selected_temp == "eco"
+    assert write.comfort_temp == 21.0
+    assert write.eco_offset == "4.0"
+
+    heat = hvac_mode_write(
+        "htr_mod",
+        status,
+        HVACMode.HEAT,
+    )
+    assert isinstance(heat, HtrModWrite)
+    assert heat.selected_temp == "comfort"
+
+    fahrenheit = {**status, "units": "F"}
+    write = temperature_write("htr_mod", fahrenheit, 63.0, model_code="0a")
+    assert isinstance(write, HtrModWrite)
+    assert write.selected_temp == "comfort"

@@ -22,6 +22,9 @@
       },
       "target_charge": {
         "default": "mdi:battery-arrow-up"
+      },
+      "thermostat_schedule": {
+        "default": "mdi:calendar-clock"
       }
     },
     "binary_sensor": {

@@ -96,6 +96,12 @@
       },
       "window_detection": {
         "name": "Detección de ventana"
+      },
+      "true_radiant_active": {
+        "name": "True Radiant activo"
+      },
+      "power_fail_detection": {
+        "name": "Detección de fallo de alimentación"
       }
     },
     "climate": {
@@ -132,6 +138,9 @@
       "rtc_drift": {
         "name": "Desviación del reloj"
       },
+      "thermostat_schedule": {
+        "name": "Horario del termostato"
+      },
       "schedule": {
         "name": "Horario",
         "state": {
@@ -139,6 +148,18 @@
           "eco": "Eco",
           "comfort": "Confort"
         }
+      },
+      "error_code": {
+        "name": "Código de error"
+      },
+      "pcb_temperature": {
+        "name": "Temperatura de PCB"
+      },
+      "power_pcb_temperature": {
+        "name": "Temperatura de PCB de potencia"
+      },
+      "actual_duty_cycle": {
+        "name": "Ciclo de trabajo real"
       }
     },
     "number": {
@@ -168,6 +189,12 @@
       },
       "prog_comfort_temperature": {
         "name": "Confort"
+      },
+      "config_runback_temperature": {
+        "name": "Runback Temperature"
+      },
+      "config_runback_duration": {
+        "name": "Runback Duration"
       }
     },
     "switch": {
@@ -263,6 +290,44 @@
           "description": "Franjas por día, p. ej. día \"0\": [0, 0, 1, 1, ...], con 24 entradas por día (48 donde el radiador admita franjas de media hora)."
         }
       }
+    },
+    "set_charging_schedule": {
+      "name": "Programar el horario de carga del acumulador",
+      "description": "Configura los días de carga y las franjas valle del acumulador. Los campos omitidos conservan su valor actual.",
+      "fields": {
+        "active_days": {
+          "name": "Días activos",
+          "description": "Siete valores booleanos, domingo primero."
+        },
+        "slot_1": {
+          "name": "Franja valle 1",
+          "description": "Minuto de inicio/fin del día; 0/0 desactiva la franja."
+        },
+        "slot_2": {
+          "name": "Franja valle 2",
+          "description": "Minuto de inicio/fin del día; 0/0 desactiva la franja."
+        }
+      }
+    },
+    "set_thermostat_schedule": {
+      "name": "Programar horario del termostato",
+      "description": "Configura el programa diario de minutos/temperatura del termostato. m es el minuto final del segmento (0..1440); t es la temperatura en la unidad del nodo.",
+      "fields": {
+        "schedule": {
+          "name": "Horario",
+          "description": "Las siete claves de día; cada valor es una lista de segmentos minuto/temperatura, p. ej. día 0 con m=360, t=19.0."
+        }
+      }
+    },
+    "set_schedule_resolution": {
+      "name": "Establecer resolución del programa",
+      "description": "Cambia el editor del programa entre resolución horaria y media horaria.",
+      "fields": {
+        "resolution": {
+          "name": "Resolución",
+          "description": "0 = horaria (24 franjas), 1 = media horaria (48 franjas)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -289,6 +354,9 @@
     },
     "boost_mode_unsupported": {
       "message": "Este nodo no admite el punto de conexión /boost_mode"
+    },
+    "boost_unsupported": {
+      "message": "Este nodo no admite el modo boost"
     },
     "boost_mode_invalid": {
       "message": "mode debe ser uno de {modes} cuando active está activo"
@@ -317,6 +385,9 @@
     "advanced_slot_requires_full_boost": {
       "message": "El boost advanced-slot solo está disponible en nodos con full boost"
     },
+    "storage_ui_mode_unsupported": {
+      "message": "El modo de interfaz del acumulador solo está disponible en acumuladores Elnur"
+    },
     "schedule_invalid": {
       "message": "Horario no válido para {entity_id}: {error}"
     },
@@ -332,6 +403,42 @@
     "schedule_wrong_target": {
       "message": "{service} no apunta a ningún sensor de horario; las entidades solicitadas no son sensores de horario de Smartbox o sus entradas no están cargadas"
     },
+    "charging_schedule_invalid": {
+      "message": "Horario de carga no válido para {entity_id}: {error}"
+    },
+    "charging_schedule_write_failed": {
+      "message": "Error al escribir el horario de carga para {entity_id}: {error}"
+    },
+    "charging_schedule_wrong_target": {
+      "message": "{service} no apunta a ningún sensor de carga objetivo del acumulador; las entidades solicitadas no son sensores Smartbox del acumulador o sus entradas no están cargadas"
+    },
+    "thermostat_schedule_invalid": {
+      "message": "Horario del termostato no válido para {entity_id}: {error}"
+    },
+    "thermostat_schedule_write_failed": {
+      "message": "Error al escribir el horario del termostato para {entity_id}: {error}"
+    },
+    "thermostat_schedule_wrong_target": {
+      "message": "{service} no apunta a ningún sensor de horario del termostato; las entidades solicitadas no son horarios Smartbox del termostato o sus entradas no están cargadas"
+    },
+    "hvac_mode_unsupported": {
+      "message": "Este calefactor no admite el modo HVAC solicitado."
+    },
+    "charging_schedule_auth_failed": {
+      "message": "La autenticación falló al escribir el horario de carga para {entity_id}: {error}"
+    },
+    "charging_schedule_api_unavailable": {
+      "message": "La API de Smartbox no estaba disponible al escribir el horario de carga para {entity_id}: {error}"
+    },
+    "thermostat_schedule_auth_failed": {
+      "message": "La autenticación falló al escribir el horario del termostato para {entity_id}: {error}"
+    },
+    "thermostat_schedule_api_unavailable": {
+      "message": "La API de Smartbox no estaba disponible al escribir el horario del termostato para {entity_id}: {error}"
+    },
+    "temperature_control_unsupported": {
+      "message": "This heater does not expose temperature control in its current storage UI mode."
+    },
     "box_power_limit_not_known": {
       "message": "Todavía no se conoce ningún límite de potencia para este equipo, así que no hay nada que restaurar. Establece primero un valor en la entidad numérica del límite de potencia (0 significa sin límite)."
     },
@@ -340,6 +447,33 @@
     },
     "action_failed": {
       "message": "Error al comunicarse con la API de Smartbox para {entity_id}: {error}"
+    },
+    "boost_parameters_required": {
+      "message": "Boost needs a temperature and duration; set the boost number entities or pass them in the service call"
+    },
+    "boost_duration_step": {
+      "message": "Boost duration must be a multiple of {step} minutes"
+    },
+    "boost_mode_unavailable": {
+      "message": "This heater advertises no boost style Home Assistant can use"
+    },
+    "runback_parameters_required": {
+      "message": "Runback needs a temperature and duration; set the runback number entities"
+    },
+    "runback_temperature_out_of_range": {
+      "message": "Runback temperature must be between {min} and {max} {unit}"
+    },
+    "runback_duration_out_of_range": {
+      "message": "Runback duration must be between {min} and {max} {unit}"
+    },
+    "runback_duration_step": {
+      "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "Esa opción ya no está disponible; actualiza la entidad."
+    },
+    "status_unavailable": {
+      "message": "El estado del calentador aún no está disponible; inténtalo tras la próxima actualización."
     }
   },
   "issues": {

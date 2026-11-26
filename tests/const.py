@@ -132,18 +132,17 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
-            "boost_enabled": False,
         },
         {
             # No max_stemp_limit/priority: exercises the availability
             # gating for older-family units.
             "away_offset": "3.0",
+            "operational_mode": 1,
             "factory_options": {
                 "true_radiant_available": False,
                 "window_mode_available": False,
                 "boost_config": 2,
             },
-            "boost_enabled": True,
         },
     ],
     "device_2": [
@@ -162,7 +161,6 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
-            "boost_enabled": True,
         },
         {
             "away_offset": "1.5",
@@ -173,7 +171,6 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
-            "boost_enabled": False,
         },
         {
             "away_offset": "1.5",
@@ -184,7 +181,6 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": False,
             "window_mode_enabled": False,
-            "boost_enabled": False,
         },
         {
             "away_offset": "1.5",
@@ -195,7 +191,6 @@ MOCK_SMARTBOX_NODE_SETUP: dict[str, list[dict[str, Any]]] = {
             },
             "true_radiant_enabled": True,
             "window_mode_enabled": True,
-            "boost_enabled": False,
         },
         {
             "away_offset": "1.5",

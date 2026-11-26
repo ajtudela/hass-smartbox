@@ -8,7 +8,7 @@ This file is the operating manual for any agent working in this repo.
 
 - **Git.** Never run history-mutating commands (`commit`, `push`, `tag`, `merge`, `rebase`, `reset`, ...). Leave changes in the working tree; commit only on an explicit instruction ("commit this", "commit and push"). "Do X" is not authorization to commit X. Read-only git commands are fine.
 - **Credentials.** Never read or print any `.env` file (no `cat`, no `grep` into it) — only its key names matter. Probe output stays masked: no tokens, basic-auth headers, passwords or token-bearing URLs.
-- **Wire facts have one home: `docs/api-contract.md`.** New facts are probed with `tools/live_probe.py`, recorded there with provenance, and only then encoded; shipped text cites the section (`docs/api-contract.md §5.1`) and never restates a rule as folklore. `docs/webapi-spec.md` holds the decoded web app's statics; `docs/api-ws-user.md` the current apps' behavior.
+- **Wire facts have one home: `docs/api-contract.md`.** New facts are probed with `tools/live_probe.py`, recorded there with provenance, and only then encoded; shipped text cites the section (`docs/api-contract.md §5.1`) and never restates a rule as folklore. `docs/api-endpoints.md` is the endpoint index; `docs/api-ws-user.md` holds the current apps' behavior and statics.
 - **Shipped text is self-contained.** Code, tests and docs state the reason for a decision, may reference repo history (versions, commits), and cite in-repo paths. They never point at agent instructions or local-only files; the fuller conventions are in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Keep the docs true.** When behavior changes, update what describes it: `docs/ARCHITECTURE.md`, `README.md`, `CHANGELOG.md`, the `docs/` records.
 

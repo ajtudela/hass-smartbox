@@ -147,10 +147,14 @@ async def test_set_lock_body(sleeps, session, client, writes, locked):
     assert posts(session)[0]["json"] == {"locked": locked}
 
 
-async def test_set_lock_rejects_non_bool(sleeps, session, client, writes):
+async def test_set_lock_accepts_bool_or_wire_enum(sleeps, session, client, writes):
+    grant(session)
+    for value in (True, False, 0, 1, 2):
+        session.enqueue(FakeResponse())
+        await writes.set_lock("dev1", NODE, value)
+        assert posts(session)[-1]["json"] == {"locked": value}
     with pytest.raises(ValueError, match="locked"):
-        await writes.set_lock("dev1", NODE, 1)
-    assert session.calls == []
+        await writes.set_lock("dev1", NODE, 3)
 
 
 @pytest.mark.parametrize("on", [True, False])
@@ -316,7 +320,7 @@ async def test_set_extra_options_requires_mapping(sleeps, session, client, write
 
 
 async def test_set_prog_temps_requires_units(sleeps, session, client, writes):
-    """A unitless profile-temp body is one the app never sends (webapi-spec §4)."""
+    """A unitless profile-temp body is one the app never sends (api-contract §5.2)."""
     with pytest.raises(ValueError, match="units"):
         await writes.set_prog_temps(
             "dev1",

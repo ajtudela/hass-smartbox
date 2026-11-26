@@ -74,7 +74,11 @@ async def test_builder_failure_rolls_back_published_targets_and_known_sets():
 
     def build_once(node):
         nonlocal fail
+        services.schedule.append(node)
+        services.thermostat_schedule.append(node)
+        services.charging.append(node)
         services.boost.append(node)
+        services.climate.append(node)
         if fail:
             fail = False
             msg = "builder failed"
@@ -85,7 +89,11 @@ async def test_builder_failure_rolls_back_published_targets_and_known_sets():
     with pytest.raises(RuntimeError, match="builder failed"):
         await builder.async_add_identity(_identity(["dev_1"], ["dev_1_0"]))
 
+    assert services.schedule == []
+    assert services.thermostat_schedule == []
+    assert services.charging == []
     assert services.boost == []
+    assert services.climate == []
     assert add_entities.call_count == 0
 
     assert await builder.async_add_identity(_identity(["dev_1"], ["dev_1_0"])) == (

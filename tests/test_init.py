@@ -30,6 +30,7 @@ from homeassistant.helpers import (
 )
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from smartbox.core.state import NodeChange, NodeState
 from smartbox.protocol import (
     AuthError,
     TransportUnavailableError,
@@ -51,6 +52,7 @@ from custom_components.smartbox.const import (
     SmartboxNodeType,
 )
 from custom_components.smartbox.history import HistoryImport
+from custom_components.smartbox.membership import LatePidWatcher
 from custom_components.smartbox.services import ServiceTargets, remove_service_if_last
 from custom_components.smartbox.token_store import token_store_for
 from tests.const import CONF_PASSWORD, MOCK_SMARTBOX_CONFIG
@@ -419,6 +421,7 @@ async def test_teardown_closes_the_store_when_engine_stop_fails():
     """A failed stop must not leave the token store accepting writes."""
     runtime = SimpleNamespace(
         membership=SimpleNamespace(close=Mock()),
+        late_pid=SimpleNamespace(close=Mock()),
         engine=SimpleNamespace(stop=AsyncMock(side_effect=RuntimeError("boom"))),
         transport=SimpleNamespace(close=AsyncMock()),
         token_store=SimpleNamespace(close=Mock()),
@@ -571,6 +574,33 @@ async def test_thermostat_energy_entities_are_pruned(hass, config_entry):
         registry.async_get_entity_id("sensor", DOMAIN, "node_11_total_consumption")
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_integer_lock_switch_is_pruned(hass, config_entry):
+    """The old boolean lock switch is removed on integer-lock families."""
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "switch", DOMAIN, "node_11_lock", config_entry=config_entry
+    )
+    identity = SimpleNamespace(
+        nodes=[
+            SimpleNamespace(
+                node_id="node_11",
+                node_type=SmartboxNodeType.ACM,
+                heater_node=True,
+                heater_surface=True,
+                pid="081c",
+                version={"fw_version": "1.8.0"},
+                setup={},
+                status={"locked": 0},
+            )
+        ]
+    )
+
+    smartbox_init._async_prune_integer_lock_switches(hass, config_entry, identity)
+
+    assert registry.async_get_entity_id("switch", DOMAIN, "node_11_lock") is None
 
 
 @pytest.mark.asyncio
@@ -1110,3 +1140,275 @@ async def test_transient_probe_failure_is_not_retried_with_a_fresh_grant(
         assert not await hass.config_entries.async_setup(config_entry.entry_id)
 
     grant.assert_not_awaited()
+
+
+async def test_late_pid_reloads_once(hass, config_entry):
+    """A PID first seen after discovery schedules one reload, not a loop."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    entry = SimpleNamespace(entry_id="entry1", state=ConfigEntryState.LOADED)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        LatePidWatcher(hass, entry, runtime.identity, runtime.engine).async_start()
+        change = NodeChange(
+            dev_id="dev1",
+            node_key="htr/2",
+            kind="version",
+            node=NodeState(version={"pid": "04020000"}),
+        )
+        await runtime.engine.callback(change)
+        reload.assert_called_once_with("entry1")
+        await runtime.engine.callback(change)
+        reload.assert_called_once_with("entry1")
+
+        # A fresh watcher after the reload still sees a missing discovery PID:
+        # the cross-reload marker must prevent a second reload.
+        node.version = {"pid": None}
+        reload_world = SimpleNamespace(
+            identity=SimpleNamespace(nodes=[node]), engine=Engine()
+        )
+        LatePidWatcher(
+            hass, entry, reload_world.identity, reload_world.engine
+        ).async_start()
+        reload.reset_mock()
+        await reload_world.engine.callback(change)
+        reload.assert_not_called()
+
+        # A present discovery PID, a status change or an unknown node is not
+        # a late-identity event.
+        node.version = {"pid": "04020000"}
+        runtime2 = SimpleNamespace(
+            identity=SimpleNamespace(nodes=[node]), engine=Engine()
+        )
+        LatePidWatcher(hass, entry, runtime2.identity, runtime2.engine).async_start()
+        reload.reset_mock()
+        await runtime2.engine.callback(change)
+        status = NodeChange(
+            dev_id="dev1",
+            node_key="htr/2",
+            kind="status",
+            node=NodeState(version={"pid": "04020000"}),
+        )
+        await runtime2.engine.callback(status)
+        unknown = NodeChange(
+            dev_id="dev1",
+            node_key="htr/9",
+            kind="version",
+            node=NodeState(version={"pid": "04020000"}),
+        )
+        await runtime2.engine.callback(unknown)
+
+        # An unloaded entry and invalid/unreviewed PIDs are ignored.
+        node.version = {"pid": None}
+        runtime3 = SimpleNamespace(
+            identity=SimpleNamespace(nodes=[node]), engine=Engine()
+        )
+        entry.state = ConfigEntryState.UNLOAD_IN_PROGRESS
+        watcher3 = LatePidWatcher(hass, entry, runtime3.identity, runtime3.engine)
+        watcher3.async_start()
+        reload.reset_mock()
+        for pid in ("", "zz", 123):
+            await runtime3.engine.callback(
+                NodeChange(
+                    dev_id="dev1",
+                    node_key="htr/2",
+                    kind="version",
+                    node=NodeState(version={"pid": pid}),
+                )
+            )
+        reload.assert_not_called()
+        LatePidWatcher.async_clear(hass, "entry1")
+        assert not any(
+            marker[0] == "entry1"
+            for marker in hass.data.get(f"{DOMAIN}_pid_reloads", set())
+        )
+
+
+async def test_late_pid_watcher_seeds_the_ingested_version(hass):
+    """A version slot merged before the watcher starts still schedules."""
+
+    class Engine:
+        def subscribe(self, _callback):
+            pass
+
+        def node(self, _dev_id, _key):
+            return NodeState(version={"pid": "04020000"})
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry2", state=ConfigEntryState.LOADED)
+    watcher = LatePidWatcher(
+        hass,
+        entry,
+        SimpleNamespace(nodes=[node]),
+        Engine(),
+    )
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        reload.assert_called_once_with("entry2")
+
+
+async def test_late_pid_defers_until_the_entry_is_loaded(hass):
+    """A late PID seen during a reload waits, then schedules once."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry4", state=ConfigEntryState.SETUP_IN_PROGRESS)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        await asyncio.sleep(0.05)
+        reload.assert_not_called()
+        entry.state = ConfigEntryState.LOADED
+        await asyncio.sleep(0.25)
+        reload.assert_called_once_with("entry4")
+
+
+async def test_late_pid_abandons_a_deferred_marker_on_terminal_state(hass):
+    """A setup-retry entry discards the marker instead of reloading later."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry5", state=ConfigEntryState.SETUP_RETRY)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        await asyncio.sleep(0.25)
+        reload.assert_not_called()
+    assert not any(
+        marker[0] == "entry5"
+        for marker in hass.data.get(f"{DOMAIN}_pid_reloads", set())
+    )
+
+
+async def test_late_pid_close_discards_the_deferred_marker(hass):
+    """Closing the watcher while it waits drops the reload request."""
+
+    class Engine:
+        def subscribe(self, callback):
+            self.callback = callback
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry6", state=ConfigEntryState.SETUP_IN_PROGRESS)
+    runtime = SimpleNamespace(identity=SimpleNamespace(nodes=[node]), engine=Engine())
+    watcher = LatePidWatcher(hass, entry, runtime.identity, runtime.engine)
+    with patch.object(hass.config_entries, "async_schedule_reload") as reload:
+        watcher.async_start()
+        await runtime.engine.callback(
+            NodeChange(
+                dev_id="dev1",
+                node_key="htr/2",
+                kind="version",
+                node=NodeState(version={"pid": "04020000"}),
+            )
+        )
+        watcher.close()
+        await asyncio.sleep(0.25)
+        reload.assert_not_called()
+    assert not any(
+        marker[0] == "entry6"
+        for marker in hass.data.get(f"{DOMAIN}_pid_reloads", set())
+    )
+
+
+def test_late_pid_start_schedules_a_pending_marker(hass):
+    """A marker set before start schedules the wait, and scheduling is guarded."""
+
+    class Engine:
+        def subscribe(self, _callback):
+            pass
+
+        def node(self, _dev_id, _key):
+            return None
+
+    node = SimpleNamespace(
+        dev_id="dev1",
+        node_type="htr",
+        addr="2",
+        version={"pid": None},
+        supported_wire_type=True,
+    )
+    entry = SimpleNamespace(entry_id="entry7", state=ConfigEntryState.LOADED)
+    watcher = LatePidWatcher(hass, entry, SimpleNamespace(nodes=[node]), Engine())
+    watcher._discard_pending_marker()
+    watcher._pending = True
+    with patch.object(hass, "async_create_task") as create_task:
+        create_task.side_effect = lambda coro: coro.close()
+        watcher.async_start()
+        create_task.assert_called_once()
+    marker = ("entry7", "dev1", "htr/2", "04020000")
+    hass.data[f"{DOMAIN}_pid_reloads"] = {marker}
+    watcher._pending_marker = marker
+    watcher._discard_pending_marker()
+    assert hass.data[f"{DOMAIN}_pid_reloads"] == set()
+    watcher._scheduled = True
+    watcher._schedule()

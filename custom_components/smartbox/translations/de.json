@@ -96,6 +96,12 @@
       },
       "window_detection": {
         "name": "Fenstererkennung"
+      },
+      "true_radiant_active": {
+        "name": "True Radiant aktiv"
+      },
+      "power_fail_detection": {
+        "name": "Netzausfallerkennung"
       }
     },
     "climate": {
@@ -132,6 +138,9 @@
       "rtc_drift": {
         "name": "Uhrabweichung"
       },
+      "thermostat_schedule": {
+        "name": "Thermostat-Zeitplan"
+      },
       "schedule": {
         "name": "Zeitplan",
         "state": {
@@ -139,6 +148,18 @@
           "eco": "Eco",
           "comfort": "Komfort"
         }
+      },
+      "error_code": {
+        "name": "Fehlercode"
+      },
+      "pcb_temperature": {
+        "name": "PCB-Temperatur"
+      },
+      "power_pcb_temperature": {
+        "name": "Leistungs-PCB-Temperatur"
+      },
+      "actual_duty_cycle": {
+        "name": "Tatsächlicher Einschaltzyklus"
       }
     },
     "number": {
@@ -168,6 +189,12 @@
       },
       "prog_comfort_temperature": {
         "name": "Komfort"
+      },
+      "config_runback_temperature": {
+        "name": "Runback Temperature"
+      },
+      "config_runback_duration": {
+        "name": "Runback Duration"
       }
     },
     "switch": {
@@ -263,6 +290,44 @@
           "description": "Programmfenster pro Tag, z. B. Tag \"0\": [0, 0, 1, 1, ...], mit 24 Einträgen pro Tag (48, wo der Heizkörper halbstündige Fenster unterstützt)."
         }
       }
+    },
+    "set_charging_schedule": {
+      "name": "Ladezeitplan des Speichers setzen",
+      "description": "Setzt Ladetage und Talzeitfenster des Speicherheizgeräts. Ausgelassene Felder behalten ihren aktuellen Wert.",
+      "fields": {
+        "active_days": {
+          "name": "Aktive Tage",
+          "description": "Sieben Wahrheitswerte, Sonntag zuerst."
+        },
+        "slot_1": {
+          "name": "Talzeit 1",
+          "description": "Start-/Endminute des Tages; 0/0 deaktiviert das Zeitfenster."
+        },
+        "slot_2": {
+          "name": "Talzeit 2",
+          "description": "Start-/Endminute des Tages; 0/0 deaktiviert das Zeitfenster."
+        }
+      }
+    },
+    "set_thermostat_schedule": {
+      "name": "Thermostat-Zeitplan setzen",
+      "description": "Setzt das tagesweise Minuten-/Temperaturprogramm des Thermostats. m ist die Endminute des Segments (0..1440); t ist die Temperatur in der Geräteeinheit.",
+      "fields": {
+        "schedule": {
+          "name": "Zeitplan",
+          "description": "Alle sieben Tagesschlüssel; jeder Wert ist eine Liste von Minuten-/Temperatursegmenten, z. B. Tag 0 mit m=360, t=19.0."
+        }
+      }
+    },
+    "set_schedule_resolution": {
+      "name": "Zeitplanauflösung setzen",
+      "description": "Schaltet den Zeitplan-Editor zwischen stündlicher und halbstündlicher Auflösung um.",
+      "fields": {
+        "resolution": {
+          "name": "Auflösung",
+          "description": "0 = stündlich (24 Slots), 1 = halbstündlich (48 Slots)."
+        }
+      }
     }
   },
   "exceptions": {
@@ -289,6 +354,9 @@
     },
     "boost_mode_unsupported": {
       "message": "Dieser Knoten unterstützt den /boost_mode-Endpunkt nicht"
+    },
+    "boost_unsupported": {
+      "message": "Dieser Knoten unterstützt den Boost-Modus nicht"
     },
     "boost_mode_invalid": {
       "message": "mode muss einer von {modes} sein, wenn active gesetzt ist"
@@ -317,6 +385,9 @@
     "advanced_slot_requires_full_boost": {
       "message": "Advanced-Slot-Boost ist nur auf Full-Boost-Knoten verfügbar"
     },
+    "storage_ui_mode_unsupported": {
+      "message": "Der Speicher-UI-Modus ist nur bei Elnur-Speicherheizgeräten verfügbar"
+    },
     "schedule_invalid": {
       "message": "Ungültiger Zeitplan für {entity_id}: {error}"
     },
@@ -332,6 +403,42 @@
     "schedule_wrong_target": {
       "message": "{service} zielt auf keinen Zeitplan-Sensor; die angeforderten Entitäten sind keine Smartbox-Zeitplan-Sensoren oder ihre Einträge sind nicht geladen"
     },
+    "charging_schedule_invalid": {
+      "message": "Ungültiger Ladezeitplan für {entity_id}: {error}"
+    },
+    "charging_schedule_write_failed": {
+      "message": "Fehler beim Schreiben des Ladezeitplans für {entity_id}: {error}"
+    },
+    "charging_schedule_wrong_target": {
+      "message": "{service} zielt auf keinen Speicher-Ziel-Ladesensor; die angeforderten Entitäten sind keine Smartbox-Speichersensoren oder ihre Einträge sind nicht geladen"
+    },
+    "thermostat_schedule_invalid": {
+      "message": "Ungültiger Thermostat-Zeitplan für {entity_id}: {error}"
+    },
+    "thermostat_schedule_write_failed": {
+      "message": "Fehler beim Schreiben des Thermostat-Zeitplans für {entity_id}: {error}"
+    },
+    "thermostat_schedule_wrong_target": {
+      "message": "{service} zielt auf keinen Thermostat-Zeitplansensor; die angeforderten Entitäten sind keine Smartbox-Thermostat-Zeitpläne oder ihre Einträge sind nicht geladen"
+    },
+    "hvac_mode_unsupported": {
+      "message": "Dieses Heizgerät unterstützt den angeforderten HVAC-Modus nicht."
+    },
+    "charging_schedule_auth_failed": {
+      "message": "Authentifizierung beim Schreiben des Ladezeitplans für {entity_id} fehlgeschlagen: {error}"
+    },
+    "charging_schedule_api_unavailable": {
+      "message": "Die Smartbox-API war beim Schreiben des Ladezeitplans für {entity_id} nicht verfügbar: {error}"
+    },
+    "thermostat_schedule_auth_failed": {
+      "message": "Authentifizierung beim Schreiben des Thermostat-Zeitplans für {entity_id} fehlgeschlagen: {error}"
+    },
+    "thermostat_schedule_api_unavailable": {
+      "message": "Die Smartbox-API war beim Schreiben des Thermostat-Zeitplans für {entity_id} nicht verfügbar: {error}"
+    },
+    "temperature_control_unsupported": {
+      "message": "This heater does not expose temperature control in its current storage UI mode."
+    },
     "box_power_limit_not_known": {
       "message": "Für dieses Gehäuse ist noch keine Leistungsgrenze bekannt, daher gibt es nichts wiederherzustellen. Lege zuerst einen Wert auf der Number-Entität für die Leistungsgrenze fest (0 bedeutet dort keine Grenze)."
     },
@@ -340,6 +447,33 @@
     },
     "action_failed": {
       "message": "Fehler bei der Kommunikation mit der Smartbox-API für {entity_id}: {error}"
+    },
+    "boost_parameters_required": {
+      "message": "Boost needs a temperature and duration; set the boost number entities or pass them in the service call"
+    },
+    "boost_duration_step": {
+      "message": "Boost duration must be a multiple of {step} minutes"
+    },
+    "boost_mode_unavailable": {
+      "message": "This heater advertises no boost style Home Assistant can use"
+    },
+    "runback_parameters_required": {
+      "message": "Runback needs a temperature and duration; set the runback number entities"
+    },
+    "runback_temperature_out_of_range": {
+      "message": "Runback temperature must be between {min} and {max} {unit}"
+    },
+    "runback_duration_out_of_range": {
+      "message": "Runback duration must be between {min} and {max} {unit}"
+    },
+    "runback_duration_step": {
+      "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "Diese Option ist nicht mehr verfügbar; die Entität neu laden."
+    },
+    "status_unavailable": {
+      "message": "Der Heizungsstatus ist noch nicht verfügbar; nach der nächsten Aktualisierung erneut versuchen."
     }
   },
   "issues": {

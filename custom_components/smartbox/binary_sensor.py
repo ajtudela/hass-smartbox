@@ -5,9 +5,8 @@ updates arrive via the shared ``EngineChangeFanOut``. The REST discovery
 identity is kept only for registry identity and device-info fields.
 """
 
-from collections.abc import Mapping
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 # The component root re-exports this public name without __all__; mypy
 # strict's no_implicit_reexport cannot see that re-export.
@@ -16,6 +15,9 @@ from homeassistant.components.binary_sensor import (  # type: ignore[attr-define
     BinarySensorEntity,
 )
 from homeassistant.const import EntityCategory
+from smartbox.device.profile import diagnostic_fields
+from smartbox.device.settings import pir_enabled
+from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import parse_number_or_none
 
 from .adapter import (
@@ -23,12 +25,7 @@ from .adapter import (
     SmartboxBoxAdapterEntity,
     SmartboxNodeAdapterEntity,
 )
-from .const import (
-    PRODUCT_CODE_WATER_STORAGE,
-    WATER_FULLY_READY_LEVEL,
-    WATER_READY_LEVEL,
-    SmartboxNodeType,
-)
+from .const import WATER_FULLY_READY_LEVEL, WATER_READY_LEVEL, SmartboxNodeType
 from .entity_builder import EntityBuilder
 
 if TYPE_CHECKING:
@@ -62,7 +59,7 @@ async def async_setup_entry(
     # itself.
     def build_device(device: SmartboxDeviceInfo) -> list[EntityGroup]:
         """Build the box connectivity entity."""
-        return [([Connected(device, entry, runtime, fanout)], False)]
+        return _build_device_binary_sensors(device, entry, runtime, fanout)
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the node facts that have no existing entity of their own."""
@@ -78,6 +75,16 @@ async def async_setup_entry(
     _LOGGER.debug("Finished setting up Smartbox binary sensor platform")
 
 
+def _build_device_binary_sensors(
+    device: SmartboxDeviceInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the box connectivity entity."""
+    return [([Connected(device, entry, runtime, fanout)], False)]
+
+
 def _build_node_binary_sensors(
     node: SmartboxNodeInfo,
     entry: SmartboxConfigEntry,
@@ -88,7 +95,7 @@ def _build_node_binary_sensors(
     if not node.supported_wire_type:
         return []
     entities: list[Entity] = []
-    if node.heater_node:
+    if node.heater_surface:
         # The heater controllers read window_open from every status body; the
         # thermostat controller does not. Create the entity regardless of the
         # discovery snapshot so an offline node does not lose it until reload;
@@ -96,11 +103,16 @@ def _build_node_binary_sensors(
         entities.append(WindowDetection(node, entry, runtime, fanout))
         # PIR is a controller feature, gated on extra_options.pir_enabled in
         # the app (TevolvePIRHeaterController.getStatusIndicators).
-        if _pir_enabled(node.setup):
+        if pir_enabled(node.setup):
             entities.append(PirPresence(node, entry, runtime, fanout))
+    fields = diagnostic_fields(node.pid, node.node_type)
+    if "true_radiant_active" in fields:
+        entities.append(TrueRadiantActive(node, entry, runtime, fanout))
+    if "power_fail_det" in fields:
+        entities.append(PowerFailureDetection(node, entry, runtime, fanout))
     if node.node_type == SmartboxNodeType.ACM:
         # Water storage replaces CHARGING with active/water-ready states.
-        if node.get_model_code() == PRODUCT_CODE_WATER_STORAGE:
+        if is_water_storage(node.pid):
             entities.append(WaterReady(node, entry, runtime, fanout))
             entities.append(WaterFullyReady(node, entry, runtime, fanout))
         else:
@@ -110,12 +122,6 @@ def _build_node_binary_sensors(
     if node.node_type == SmartboxNodeType.THM:
         entities.append(LowBattery(node, entry, runtime, fanout))
     return [(entities, False)] if entities else []
-
-
-def _pir_enabled(setup: Mapping[str, Any]) -> bool:
-    """Whether the node's PIR presence controller is enabled in setup."""
-    extra = setup.get("extra_options")
-    return isinstance(extra, Mapping) and extra.get("pir_enabled") is True
 
 
 class Connected(SmartboxBoxAdapterEntity, BinarySensorEntity):
@@ -195,6 +201,32 @@ class WindowDetection(SmartboxNodeBinarySensor):
     _strict_true = True
     device_class = BinarySensorDeviceClass.WINDOW
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+
+class PowerFailureDetection(SmartboxNodeBinarySensor):
+    """Whether the controller's power-failure detection is active.
+
+    The field is true on a healthy HJM WiFi heater, so it describes the
+    detection feature rather than a current fault.
+    """
+
+    _key = "power_fail_detection"
+    payload_key = "power_fail_det"
+    _strict_true = True
+    device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+
+class TrueRadiantActive(SmartboxNodeBinarySensor):
+    """Whether the true-radiant element is currently active."""
+
+    _key = "true_radiant_active"
+    payload_key = "true_radiant_active"
+    _strict_true = True
+    device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
 
 class Charging(SmartboxNodeBinarySensor):

@@ -17,11 +17,9 @@ from homeassistant.const import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 from smartbox.core.state import Change, DeviceChange, NodeChange
-from smartbox.protocol.values import (
-    BoostConfig,
-    celsius_to_node_units,
-    node_units_to_celsius,
-)
+from smartbox.device.modes import boost_uses_legacy_path, lock_kind
+from smartbox.device.profile import ControllerLimits, max_limit_bounds
+from smartbox.protocol.values import celsius_to_node_units, node_units_to_celsius
 
 from .adapter import (
     EngineChangeFanOut,
@@ -33,21 +31,23 @@ from .adapter import (
     node_setup_bool,
     node_units,
 )
-from .const import MAX_TEMP_LIMIT_DEFAULT
+from .boost_activation import plan_boost
 from .entity_builder import EntityBuilder
 from .exceptions import user_error
 from .identity import (
     SmartboxDeviceInfo,
     SmartboxNodeInfo,
-    boost_config,
+    easy_available,
     max_temp_limit_available,
     node_power_limit_available,
+    runback_available,
     true_radiant_available,
     window_mode_available,
 )
 from .mapping import get_boost_end_datetime
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from homeassistant.core import HomeAssistant
@@ -78,12 +78,7 @@ async def async_setup_entry(
 
     def build_device(device: SmartboxDeviceInfo) -> list[EntityGroup]:
         """Build the box-level switches the device actually supports."""
-        _LOGGER.debug("Creating away switch for box %r", device.dev_id)
-        switches: list[Entity] = [AwaySwitch(device, entry, runtime, fanout)]
-        if device.box_power_limit_available:
-            _LOGGER.debug("Creating no power limit switch for box %r", device.dev_id)
-            switches.append(NoPowerLimitSwitch(device, entry, runtime, fanout))
-        return [(switches, False)]
+        return _build_device_switches(device, entry, runtime, fanout)
 
     def build_node(node: SmartboxNodeInfo) -> list[EntityGroup]:
         """Build the switches this node's setup exposes."""
@@ -100,7 +95,22 @@ async def async_setup_entry(
     _LOGGER.debug("Finished setting up Smartbox switch platform")
 
 
-def _build_node_switches(
+def _build_device_switches(
+    device: SmartboxDeviceInfo,
+    entry: SmartboxConfigEntry,
+    runtime: SmartboxRuntime,
+    fanout: EngineChangeFanOut,
+) -> list[EntityGroup]:
+    """Build the box-level switches the device actually supports."""
+    _LOGGER.debug("Creating away switch for box %r", device.dev_id)
+    switches: list[Entity] = [AwaySwitch(device, entry, runtime, fanout)]
+    if device.box_power_limit_available:
+        _LOGGER.debug("Creating no power limit switch for box %r", device.dev_id)
+        switches.append(NoPowerLimitSwitch(device, entry, runtime, fanout))
+    return [(switches, False)]
+
+
+def _build_node_switches(  # noqa: C901, PLR0912 - one branch per capability
     node: SmartboxNodeInfo,
     entry: SmartboxConfigEntry,
     runtime: SmartboxRuntime,
@@ -114,6 +124,10 @@ def _build_node_switches(
     if not node.supported_wire_type:
         return []
     switch_entities: list[Entity] = []
+    if node.thermostat_surface and "anti_grippage" in node.setup:
+        switch_entities.append(
+            AntiGrippageSwitch(node, entry, runtime, fanout, "anti_grippage")
+        )
     if window_mode_available(node):
         _LOGGER.debug("Creating window_mode switch for node %r", node.name)
         switch_entities.append(
@@ -132,13 +146,34 @@ def _build_node_switches(
     # A thm node can dispatch to an htr-derived controller whose factory
     # payload carries boost_config (Tevolve floor thermostats), but the
     # thermostat climate entity does not model boost.
-    if node.heater_node and node.boost_available:
+    # Storage keeps the legacy /boost switch (plan_boost routes it); the
+    # CLI-only check_boost refuses acm because it is the status-flag path.
+    if node.heater_surface and node.boost_available:
         _LOGGER.debug("Creating boost switch for node %r", node.name)
         switch_entities.append(BoostSwitch(node, entry, runtime, fanout, "boost"))
     else:
         _LOGGER.info("Boost mode not available for node %r", node.name)
+    if easy_available(node):
+        _LOGGER.debug("Creating EASY switch for node %r", node.name)
+        switch_entities.append(
+            EasyModeSwitch(node, entry, runtime, fanout, "easy_mode")
+        )
+    if runback_available(node):
+        _LOGGER.debug("Creating RUNBACK switch for node %r", node.name)
+        switch_entities.append(
+            RunbackModeSwitch(node, entry, runtime, fanout, "runback_mode")
+        )
 
-    if node.heater_node:
+    if (
+        node.heater_surface
+        and lock_kind(
+            node.node_type,
+            node.pid,
+            node.version.get("fw_version"),
+            node.setup,
+        )
+        == "bool"
+    ):
         _LOGGER.debug("Creating lock switch for node %r", node.name)
         switch_entities.append(ChildLockSwitch(node, entry, runtime, fanout, "lock"))
 
@@ -380,8 +415,11 @@ class BoostSwitch(SmartboxNodeSwitchEntity):
         boost_end: datetime | None = None
         remaining = 0
         end_time: str | None = None
-        if bool(status.get("boost", False)):
-            boost_end = get_boost_end_datetime(status.get("boost_end_min", 0))
+        boost_end_min = status.get("boost_end_min")
+        if bool(status.get("boost", False)) and boost_end_min is not None:
+            boost_end = get_boost_end_datetime(
+                boost_end_min, status.get("boost_end_day")
+            )
             if boost_end is not None:
                 remaining = int((boost_end - dt_util.now()).total_seconds())
                 if remaining:
@@ -396,27 +434,41 @@ class BoostSwitch(SmartboxNodeSwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
         """Turn on boost mode."""
         _LOGGER.debug("Activating boost mode for %r", self._node.name)
-        state = self._node_state()
-        config = boost_config(state.setup if state is not None else {})
-        if config in (
-            BoostConfig.SET_TEMP_AND_TIME,
-            BoostConfig.FULL,
-        ):
-            temperature, minutes = node_boost_params(state)
+        plan = plan_boost(
+            self._node,
+            self._node_state(),
+            getattr(self._runtime, "boost_prefs", None),
+        )
+        if plan.mode is None:
             await self._runtime.engine.set_boost(
                 self._dev_id,
                 self._ref,
                 on=True,
-                temperature=temperature,
-                time_minutes=int(minutes) if minutes is not None else None,
+                temperature=plan.temperature,
+                time_minutes=plan.minutes,
+                legacy=plan.legacy,
             )
             return
-        await self._runtime.engine.set_boost(self._dev_id, self._ref, on=True)
+        await self._runtime.engine.set_boost_mode(
+            self._dev_id,
+            self._ref,
+            active=True,
+            mode=plan.mode,
+            temperature=plan.temperature,
+            time_minutes=plan.minutes,
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
         """Turn off boost mode."""
         _LOGGER.debug("Deactivating boost mode for %r", self._node.name)
-        await self._runtime.engine.set_boost(self._dev_id, self._ref, on=False)
+        state = self._node_state()
+        setup = state.setup if state is not None else self._node.setup
+        await self._runtime.engine.set_boost(
+            self._dev_id,
+            self._ref,
+            on=False,
+            legacy=boost_uses_legacy_path(self._live_pid, setup),
+        )
 
     @property
     def is_on(self) -> bool:
@@ -484,10 +536,16 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
         # provides one, so the device default is computed on demand.
         self._last_max_stemp_limit: str | None = None
 
+    def _controller_limits(self) -> ControllerLimits:
+        """Return the decoded controller limits for this node."""
+        return self._controller_profile().limits
+
     def _default_limit(self) -> float:
         """Return the device's default ceiling in the NODE's unit."""
         units = node_units(self._node_state()) or "C"
-        return celsius_to_node_units(MAX_TEMP_LIMIT_DEFAULT, units)
+        return celsius_to_node_units(
+            max_limit_bounds(self._controller_limits())[1], units
+        )
 
     def _remember(self, limit: float) -> None:
         """Seed the last-known-limit memory.
@@ -504,7 +562,7 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
                 self._last_max_stemp_limit = str(limit)
             return
         celsius = node_units_to_celsius(limit, units)
-        if 0 < celsius <= MAX_TEMP_LIMIT_DEFAULT:
+        if 0 < celsius <= max_limit_bounds(self._controller_limits())[1]:
             self._last_max_stemp_limit = str(limit)
 
     async def async_added_to_hass(self) -> None:
@@ -551,17 +609,111 @@ class MaxTemperatureLimitSwitch(SmartboxNodeSwitchEntity, RestoreEntity):
             if self._last_max_stemp_limit is not None
             else self._default_limit()
         )
+        profile = self._controller_profile(max_limit_c=limit)
         await self._runtime.engine.set_max_stemp_limit(
-            self._dev_id, self._ref, limit, node_units(self._node_state())
+            self._dev_id,
+            self._ref,
+            limit,
+            node_units(self._node_state()),
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
     async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
         """Disable the maximum temperature limit."""
+        profile = self._controller_profile(max_limit_c=None)
         await self._runtime.engine.set_max_stemp_limit(
-            self._dev_id, self._ref, None, node_units(self._node_state())
+            self._dev_id,
+            self._ref,
+            None,
+            node_units(self._node_state()),
+            bounds_c=profile.prog_bounds,
+            offset_c=profile.limits.profile_offset_c,
         )
 
     @property
     def is_on(self) -> bool:
         """Return true if the maximum temperature limit is enabled."""
         return node_max_stemp_limit(self._node_state()) is not None
+
+
+class EasyModeSwitch(SmartboxNodeSwitchEntity):
+    """Tevolve EASY mode (status ``easy``).
+
+    The app presents this as a persistent setting and disables it while
+    RUNBACK is enabled. Turning EASY on therefore clears RUNBACK first.
+    """
+
+    _attr_name = "Easy mode"
+    _attr_icon = "mdi:emoticon-happy-outline"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether EASY mode is active."""
+        return bool(self._status.get("easy", False))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Enable EASY mode; RUNBACK and EASY are mutually exclusive."""
+        if bool(self._status.get("runback", False)):
+            await self._runtime.engine.set_runback(
+                self._dev_id, self._ref, enabled=False
+            )
+        await self._runtime.engine.set_easy(self._dev_id, self._ref, enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Disable EASY mode."""
+        await self._runtime.engine.set_easy(self._dev_id, self._ref, enabled=False)
+
+
+class RunbackModeSwitch(SmartboxNodeSwitchEntity):
+    """Tevolve RUNBACK mode (status ``runback``).
+
+    RUNBACK and EASY are mutually exclusive in the app; enabling RUNBACK
+    clears EASY first.
+    """
+
+    _attr_name = "Runback"
+    _attr_icon = "mdi:run-fast"
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether RUNBACK mode is active."""
+        return bool(self._status.get("runback", False))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Enable RUNBACK; EASY and RUNBACK are mutually exclusive."""
+        if bool(self._status.get("easy", False)):
+            await self._runtime.engine.set_easy(self._dev_id, self._ref, enabled=False)
+        await self._runtime.engine.set_runback(self._dev_id, self._ref, enabled=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Disable RUNBACK."""
+        await self._runtime.engine.set_runback(self._dev_id, self._ref, enabled=False)
+
+
+class AntiGrippageSwitch(SmartboxNodeSwitchEntity):
+    """Thermostat anti-grippage protection (setup string on/off)."""
+
+    _attr_name = "Anti-grippage"
+    _attr_icon = "mdi:snowflake-alert"
+
+    def _setup(self) -> Mapping[str, Any]:
+        state = self._node_state()
+        return state.setup if state is not None else self._node.setup
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether anti-grippage is enabled."""
+        return self._setup().get("anti_grippage") in ("on", True)
+
+    async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Enable anti-grippage."""
+        await self._runtime.engine.set_setup_value(
+            self._dev_id, self._ref, "anti_grippage", "on"
+        )
+
+    async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ANN401, ARG002
+        """Disable anti-grippage."""
+        await self._runtime.engine.set_setup_value(
+            self._dev_id, self._ref, "anti_grippage", "off"
+        )

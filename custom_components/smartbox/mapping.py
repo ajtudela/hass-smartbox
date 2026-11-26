@@ -37,6 +37,8 @@ from homeassistant.components.climate import (  # type: ignore[attr-defined]
 from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
+from smartbox.device.profile import HtrModPolicy, htr_mod_policy, is_htr_mod_node
+from smartbox.device.storage import is_water_storage
 from smartbox.protocol.values import bounded_repr, parse_number_or_none
 
 from .const import (
@@ -44,7 +46,6 @@ from .const import (
     PRESET_FROST,
     PRESET_SCHEDULE,
     PRESET_SELF_LEARN,
-    PRODUCT_CODE_WATER_STORAGE,
     WATER_READY_LEVEL,
     SmartboxNodeType,
 )
@@ -171,27 +172,35 @@ def rtc_time_to_datetime(rtc: dict[str, Any] | None) -> datetime | None:
         return None
 
 
-def get_boost_end_datetime(boost_end_min: int) -> datetime | None:
+def get_boost_end_datetime(
+    boost_end_min: int,
+    boost_end_day: int | None = None,
+    *,
+    now: datetime | None = None,
+) -> datetime | None:
     """Return the local datetime at which the node boost ends.
 
-    boost_end_min is the minute of the day (UTC) at which the boost ends, as
-    reported by the API status. Returns a future datetime (the next day if the
-    boost already ended earlier in the current UTC day), or None for a
-    malformed/out-of-range minute value (entity properties must not raise).
+    ``boost_end_min`` is the HOME-LOCAL minute of day, not UTC: a 60-minute
+    boost started at 13:49 CET reported ``889`` (14:49) `[live 2026-11-22]`.
+    ``boost_end_day`` is the weekday of the end (0 = Sunday), not a day offset;
+    the vendor apps ignore it. It stays in the signature for compatibility.
+    Returns a future datetime, or None for a malformed/out-of-range minute
+    value (entity properties must not raise).
     """
+    del boost_end_day
     try:
         minute_of_day = int(boost_end_min)
     except TypeError, ValueError:
         return None
     if not 0 <= minute_of_day < _PROG_DAY_MINUTES:
         return None
-    now = dt_util.utcnow()
+    current = now if now is not None else dt_util.now()
     hour, minute = divmod(minute_of_day, 60)
-    boost_end = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if boost_end <= now:
-        # Boost already ended for the current UTC day: it ends tomorrow.
+    boost_end = current.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if boost_end < current:
+        # The end minute has passed: the next occurrence is tomorrow.
         boost_end += timedelta(days=1)
-    return dt_util.as_local(boost_end)
+    return boost_end
 
 
 def check_status_key(key: str, node_type: str, status: dict[str, Any]) -> None:
@@ -208,89 +217,91 @@ def check_status_key(key: str, node_type: str, status: dict[str, Any]) -> None:
         raise KeyError(msg)
 
 
-def get_target_temperature(node_type: str, status: dict[str, Any]) -> float | None:
+def _htr_mod_profile_temperature(status: dict[str, Any], profile: str) -> float | None:
+    """Return the htr_mod target for one programme profile."""
+    if profile == "off":
+        return None
+    if profile == "ice":
+        return parse_number_or_none(status.get("ice_temp"))
+    comfort = parse_number_or_none(status.get("comfort_temp"))
+    if profile == "eco":
+        offset = parse_number_or_none(status.get("eco_offset"))
+        if comfort is None or offset is None:
+            return None
+        return comfort - offset
+    return comfort
+
+
+def _get_htr_mod_target(status: dict[str, Any], prog: ProgDict | None) -> float | None:
+    """Return the htr_mod target without the generic off check."""
+    if status.get("mode") == "off" or status.get("on", True) is False:
+        return None
+    if status.get("mode") == "auto" and prog is not None:
+        index = get_current_prog_profile(prog, dt_util.now())
+        if index is not None:
+            names = ("off", "ice", "eco", "comfort")
+            if 0 <= index < len(names):
+                return _htr_mod_profile_temperature(status, names[index])
+    check_status_key("selected_temp", SmartboxNodeType.HTR_MOD, status)
+    selected = status["selected_temp"]
+    if selected == "off":
+        return None
+    if selected in ("comfort", "eco", "ice"):
+        return _htr_mod_profile_temperature(status, selected)
+    msg = (
+        f"Unexpected 'selected_temp' value {bounded_repr(selected)}"
+        f" found for {SmartboxNodeType.HTR_MOD} - please report to"
+        f" {GITHUB_ISSUES_URL}."
+    )
+    raise KeyError(msg)
+
+
+def _is_htr_mod(node_type: str, model_code: str | None) -> bool:
+    """Whether the node uses htr_mod control.
+
+    The htr_mod wire keeps its historical surface before the PID arrives;
+    ``0A`` is htr_mod on any wire, while ``FF`` is htr_mod only on that wire.
+    """
+    return is_htr_mod_node(model_code, node_type)
+
+
+def get_target_temperature(
+    node_type: str,
+    status: dict[str, Any],
+    prog: ProgDict | None = None,
+    model_code: str | None = None,
+) -> float | None:
     """Get the target temperature.
 
     None when the node is off, matching the official app. The wire keeps the
     stale previous-mode value, so the off check mirrors ``get_hvac_mode``
-    instead of trusting ``stemp`` / ``selected_temp``.
+    instead of trusting ``stemp`` / ``selected_temp``. htr_mod in AUTO derives
+    the target from the current programme slot, as the app's
+    ``getAutoModeTemp`` does.
     """
-    if node_type == SmartboxNodeType.HTR_MOD:
-        if (
-            status.get("mode") == "off"
-            or status.get("on", True) is False
-            or status.get("selected_temp") == "off"
-        ):
+    if _is_htr_mod(node_type, model_code):
+        return _get_htr_mod_target(status, prog)
+    if status.get("boost", False):
+        # The app's boost mode is a UI heating mode of its own; the wire keeps
+        # the pre-boost ``mode`` (often "off") while ``stemp`` carries the
+        # boost target. Read the target before the mode gate.
+        return parse_number_or_none(status.get("stemp"))
+    if node_type == SmartboxNodeType.ACM:
+        # Storage telemetry has no stemp on the classic/accumulator families;
+        # a storage target is the charge level, exposed separately.
+        if status.get("mode") == "off":
             return None
-        check_status_key("selected_temp", node_type, status)
-        if status["selected_temp"] == "comfort":
-            check_status_key("comfort_temp", node_type, status)
-            return float(status["comfort_temp"])
-        if status["selected_temp"] == "eco":
-            check_status_key("comfort_temp", node_type, status)
-            check_status_key("eco_offset", node_type, status)
-            return float(status["comfort_temp"]) - float(status["eco_offset"])
-        if status["selected_temp"] == "ice":
-            check_status_key("ice_temp", node_type, status)
-            return float(status["ice_temp"])
-        msg = (
-            f"Unexpected 'selected_temp' value {bounded_repr(status['selected_temp'])}"
-            f" found for {node_type} - please report to"
-            f" {GITHUB_ISSUES_URL}."
-        )
-        raise KeyError(msg)
+        return parse_number_or_none(status.get("stemp"))
     if status.get("mode") == "off":
         return None
     check_status_key("stemp", node_type, status)
-    return float(status["stemp"])
+    return parse_number_or_none(status["stemp"])
 
 
 # --- htr_mod setpoint policy (vendor-app parity) ---
 # The app's factory dispatches on the product code (pid[2:4]) and each
 # controller carries its own constants; this table is that dispatch in data
 # form (docs/api-contract.md §1.9, §7 item 7).
-
-
-@dataclass(frozen=True)
-class HtrModPolicy:
-    """Setpoint grid and profile bounds for one htr_mod hardware policy.
-
-    ``step_c`` is the controller's setpoint step in Celsius. The eco offset
-    ladder is integral, so the offset search walks comfort in 1 C steps.
-    """
-
-    step_c: float
-    comfort_c: tuple[float, float]
-    eco_max_c: float
-    offset_c: tuple[int, int]
-
-    @property
-    def eco_min_c(self) -> float:
-        """Return the eco floor: the comfort floor less the largest offset."""
-        return self.comfort_c[0] - self.offset_c[1]
-
-
-# HaverlandHtrModController: the only htr_mod controller in the 2.54.2 bundles.
-_HAVERLAND_HTR_MOD = HtrModPolicy(
-    step_c=1.0,
-    comfort_c=(18.0, 28.0),
-    eco_max_c=18.0,
-    offset_c=(4, 8),
-)
-_HTR_MOD_POLICIES = {"0a": _HAVERLAND_HTR_MOD, "ff": _HAVERLAND_HTR_MOD}
-
-
-def htr_mod_policy(model_code: str | None) -> HtrModPolicy | None:
-    """Return the htr_mod setpoint policy for a product code, if any.
-
-    "0A" (heater module) and "FF" (legacy heater) are the codes the vendor
-    app's factory routes to its htr_mod controller. An unread version returns
-    the Haverland policy, because every htr_mod controller in the 2.54.2
-    bundles is that one; other codes keep the plain pass-through.
-    """
-    if model_code is None:
-        return _HAVERLAND_HTR_MOD
-    return _HTR_MOD_POLICIES.get(model_code.lower())
 
 
 def htr_mod_setpoint_limits(
@@ -315,6 +326,8 @@ def htr_mod_setpoint_limits(
             return float(math.floor(value + 0.5))
         return value
 
+    if status.get("mode") == "auto":
+        return as_node(policy.global_min_c), as_node(policy.comfort_c[1])
     if selected in ("comfort", "eco"):
         return as_node(policy.eco_min_c), as_node(policy.comfort_c[1])
     if selected == "ice":
@@ -323,6 +336,10 @@ def htr_mod_setpoint_limits(
         except KeyError, TypeError, ValueError:
             return None
         return ice, ice
+    if selected == "off":
+        # The app enters eco/comfort on a setpoint from OFF; advertise that
+        # write range rather than the global 5 C floor it cannot accept.
+        return as_node(policy.eco_min_c), as_node(policy.comfort_c[1])
     return None
 
 
@@ -406,15 +423,15 @@ def temperature_write(
 ) -> TemperatureWrite:
     """Map a target-temperature change onto the operation that performs it."""
     check_status_key("units", node_type, status)
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if _is_htr_mod(node_type, model_code):
         policy = htr_mod_policy(model_code)
         if (
             policy is not None
             and status.get("units") == "C"
-            and status.get("selected_temp") in ("comfort", "eco")
+            and status.get("selected_temp") in ("comfort", "eco", "off")
         ):
             return _htr_mod_temperature_write(status, temp, policy)
-        if status["selected_temp"] == "comfort":
+        if status["selected_temp"] in ("comfort", "off"):
             target_temp = temp
         elif status["selected_temp"] == "eco":
             check_status_key("eco_offset", node_type, status)
@@ -434,7 +451,11 @@ def temperature_write(
             # The app's setpoint builder sends manual on every setpoint, on any
             # node scale; this pass-through keeps that part of the body.
             mode="manual",
-            selected_temp=status["selected_temp"],
+            selected_temp=(
+                "comfort"
+                if status["selected_temp"] == "off"
+                else status["selected_temp"]
+            ),
             comfort_temp=target_temp,
             eco_offset=status["eco_offset"],
             units=status["units"],
@@ -455,7 +476,7 @@ def temperature_write(
     return SetpointWrite(units=status["units"])
 
 
-def acm_active(status: Mapping[str, Any], model_code: str | None) -> bool:
+def acm_active(status: Mapping[str, Any], pid: str | None) -> bool:
     """Whether a storage heater is actively heating.
 
     Water storage (product code ``2A``) replaces the CHARGING indicator with
@@ -464,7 +485,7 @@ def acm_active(status: Mapping[str, Any], model_code: str | None) -> bool:
     """
     if status.get("charging") is not True:
         return False
-    if model_code == PRODUCT_CODE_WATER_STORAGE:
+    if is_water_storage(pid):
         return parse_number_or_none(status.get("charge_level")) != WATER_READY_LEVEL
     return True
 
@@ -476,6 +497,12 @@ def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
     check_status_key("mode", node_type, status)
     if status["mode"] == "off" or (
         node_type == SmartboxNodeType.HTR_MOD and not status.get("on", True)
+    ):
+        return HVACMode.OFF
+    if (
+        node_type == SmartboxNodeType.HTR_MOD
+        and status["mode"] == "manual"
+        and status.get("selected_temp") == "off"
     ):
         return HVACMode.OFF
     mode = status["mode"]
@@ -506,19 +533,23 @@ def get_hvac_mode(node_type: str, status: dict[str, Any]) -> HVACMode | None:
 
 
 def hvac_mode_write(
-    node_type: str, status: dict[str, Any], hvac_mode: str
+    node_type: str,
+    status: dict[str, Any],
+    hvac_mode: str,
+    model_code: str | None = None,
 ) -> StatusModeWrite:
     """Map an HVAC-mode change onto the operation that performs it."""
     error_msg = f"Unsupported hvac mode {hvac_mode}"
-    if node_type == SmartboxNodeType.HTR_MOD:
+    if _is_htr_mod(node_type, model_code):
         if hvac_mode == HVACMode.OFF:
             return HtrModWrite(on=False)
         if hvac_mode == HVACMode.HEAT:
             # The status key has to travel with the mode on these nodes
             check_status_key("selected_temp", node_type, status)
-            return HtrModWrite(
-                on=True, mode="manual", selected_temp=status["selected_temp"]
-            )
+            selected = status["selected_temp"]
+            if selected == "off":
+                selected = "comfort"
+            return HtrModWrite(on=True, mode="manual", selected_temp=selected)
         if hvac_mode == HVACMode.AUTO:
             return HtrModWrite(on=True, mode="auto")
         raise ValueError(error_msg)
@@ -532,10 +563,13 @@ def hvac_mode_write(
 
 
 def preset_mode_write(
-    node_type: str, status: dict[str, Any], preset_mode: str
+    node_type: str,
+    status: dict[str, Any],
+    preset_mode: str,
+    model_code: str | None = None,
 ) -> StatusModeWrite:
     """Map a preset change onto the operation that performs it."""
-    if node_type != SmartboxNodeType.HTR_MOD:
+    if not _is_htr_mod(node_type, model_code):
         msg = f"{node_type} nodes do not support preset {preset_mode}"
         raise ValueError(msg)
     # PRESET_HOME and PRESET_AWAY are not handled via status updates
@@ -544,7 +578,7 @@ def preset_mode_write(
         raise ValueError(msg)
 
     if preset_mode == PRESET_SCHEDULE:
-        return hvac_mode_write(node_type, status, HVACMode.AUTO)
+        return hvac_mode_write(node_type, status, HVACMode.AUTO, model_code=model_code)
     if preset_mode == PRESET_SELF_LEARN:
         return HtrModWrite(on=True, mode="self_learn")
     if preset_mode == PRESET_ACTIVITY:

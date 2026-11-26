@@ -40,6 +40,6 @@ def test_smartbox_library_pins_agree():
     specs = {
         match
         for text in texts
-        for match in re.findall(r"smartbox(>=[0-9.]+(?:,<[0-9.]+)?)", text)
+        for match in re.findall(r"smartbox((?:>=|==)[0-9][\w.]*(?:,<\d[\w.]*)?)", text)
     }
-    assert specs == {">=3.2.1,<3.3"}, specs
+    assert specs == {"==3.3.0rc1"}, specs

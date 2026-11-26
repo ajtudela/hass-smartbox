@@ -1,24 +1,71 @@
-"""Stack-seeding helpers shared by the platform test suites.
+"""Stack-seeding and hand-built-world helpers shared by the test suites.
 
-The harness delivers the mock world to the engine as a ws snapshot
-through the runtime's FakeTransport (``seed_stack``) and lets tests
-deliver the confirming frames a live device pushes after accepted
-writes (``confirm_write`` / ``confirm_setup_write`` / the setup
-delta ``push_setup_update`` / raw ``push_status`` frames). The
-FakeSmartbox models the SERVER side only: the fixture routes the
-client's POSTs to it (see ``build_fake_world`` and conftest), so writes
-mutate its state and are asserted through ``fake.requests`` - the fake
-pushes no frames itself, so tests deliver the confirming ones
-explicitly.
+``seed_stack`` drives the full ws-snapshot harness: it delivers the mock world
+to the engine through the runtime's FakeTransport and lets tests push the
+confirming frames a live device sends after accepted writes (``confirm_write``
+/ ``confirm_setup_write`` / the setup delta ``push_setup_update`` / raw
+``push_status``). ``engine_with_node`` and ``NoopFanout`` serve the
+property-level tests that need one node in a world without the HA harness; the
+single private ``_world`` poke lives in that helper.
+
+The FakeSmartbox models the SERVER side only: the fixture routes the client's
+POSTs to it (see ``build_fake_world`` and conftest), so writes mutate its state
+and are asserted through ``fake.requests`` - the fake pushes no frames itself,
+so tests deliver the confirming ones explicitly.
 """
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+from smartbox.core.engine import SmartboxEngine
+from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
 from smartbox.protocol.client import NodeRef
 from smartbox.protocol.values import is_lost
 
 from custom_components.smartbox.const import DOMAIN, SmartboxNodeType
 from tests.fake_api import FakeSmartbox
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+class NoopFanout:
+    """Fan-out double for property tests (no engine subscription)."""
+
+    def register_node(self, *_args):
+        return lambda: None
+
+
+def engine_with_node(
+    *,
+    dev_id: str,
+    node_type: str,
+    addr: int = 0,
+    status: Mapping[str, object] | None = None,
+    setup: Mapping[str, object] | None = None,
+    version: Mapping[str, object] | None = None,
+    away: Mapping[str, object] | None = None,
+    host: object | None = None,
+) -> SmartboxEngine:
+    """Install one hand-built node in a fresh engine world.
+
+    The single private ``_world`` poke keeps property tests out of the HA
+    harness; every other step uses the engine's public API.
+    """
+    engine = SmartboxEngine(host)
+    node = NodeState(
+        status=dict(status or {}),
+        setup=dict(setup or {}),
+        version=dict(version) if version else None,
+    )
+    device = DeviceState(
+        dev_id=dev_id,
+        away=dict(away or {}),
+        node_states={node_key(node_type, addr): node},
+    )
+    object.__setattr__(engine, "_world", WorldState(devices={dev_id: device}))
+    return engine
 
 
 def ref(node_info) -> NodeRef:
@@ -56,6 +103,7 @@ async def build_fake_world(mock_smartbox):
                 ]
                 if node_info["type"] != SmartboxNodeType.PMO
                 else None,
+                version=await mock_smartbox.session.get_node_version(dev_id, node_info),
             )
     return fake
 

@@ -5,33 +5,21 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from smartbox.core.engine import SmartboxEngine
-from smartbox.core.state import DeviceState, NodeState, WorldState, node_key
-
-from custom_components.smartbox import control_mode
-from custom_components.smartbox.control_mode import (
-    HTR_TRIAC_UI,
-    MODE_LABELS_C,
-    STORAGE_WIRE,
-    _choices,
+from smartbox.device import control_modes as library_control_mode
+from smartbox.device.control_modes import (
     control_mode_available,
     control_mode_choices,
     control_mode_label,
 )
+
 from custom_components.smartbox.product import product_code
 from custom_components.smartbox.select import ControlMode
+from tests.stack import NoopFanout, engine_with_node
 
 DEV = "device_1"
 ADDR = 3
 PID = "0402"  # LHZ/EHC (04) + HELKI_RELAY_HEATER (02)
 SETUP = {"control_mode": 5, "priority": "low"}
-
-
-class _NoopFanout:
-    """Fan-out double for property tests (no engine subscription)."""
-
-    def register_node(self, *_args):
-        return lambda: None
 
 
 class _Host:
@@ -49,14 +37,13 @@ class _Host:
 
 def _entity(host=None, setup=None) -> ControlMode:
     setup = dict(SETUP if setup is None else setup)
-    engine = SmartboxEngine(host or _Host())
-    key = node_key("htr", ADDR)
-    device = DeviceState(
+    engine = engine_with_node(
         dev_id=DEV,
-        away={},
-        node_states={key: NodeState(status={}, setup=dict(setup))},
+        node_type="htr",
+        addr=ADDR,
+        setup=setup,
+        host=host or _Host(),
     )
-    object.__setattr__(engine, "_world", WorldState(devices={DEV: device}))
     node = MagicMock()
     node.node_type = "htr"
     node.name = "Heater"
@@ -72,7 +59,7 @@ def _entity(host=None, setup=None) -> ControlMode:
     node.supported_wire_type = True
     node.heater_node = True
     node.boost_available = False
-    return ControlMode(node, MagicMock(), SimpleNamespace(engine=engine), _NoopFanout())
+    return ControlMode(node, MagicMock(), SimpleNamespace(engine=engine), NoopFanout())
 
 
 def test_confirmed_lhz_relay_htr_map_matches_the_live_cycle() -> None:
@@ -173,18 +160,6 @@ def test_product_code_and_label_none_paths() -> None:
     assert control_mode_label(choices, 99) is None
 
 
-def test_ui_mode_missing_from_wire_returns_none() -> None:
-    # A triac UI offers PID, which the OFF-first storage wire does not contain.
-    assert _choices(HTR_TRIAC_UI, STORAGE_WIRE, MODE_LABELS_C) is None
-
-
-def test_choices_none_path_in_control_mode_choices(monkeypatch) -> None:
-    monkeypatch.setattr(
-        control_mode, "_ui_for_actuation", lambda _actuation, _sensor: ("OFF",)
-    )
-    assert control_mode_choices(PID, "htr", {"control_mode": 0}, "C") is None
-
-
 def test_unoffered_stored_index_keeps_the_catalogue() -> None:
     # Relay htr wire 4 is plain PID, which the relay UI does not offer.
     choices = control_mode_choices(PID, "htr", {"control_mode": 4}, "C")
@@ -220,7 +195,7 @@ def test_unlisted_acm_code_uses_the_htr_default() -> None:
 
 
 def test_storage_family_requires_relay_actuation(monkeypatch) -> None:
-    monkeypatch.setitem(control_mode.ACTUATION, "1C", "TRIAC")
+    monkeypatch.setitem(library_control_mode.ACTUATION, "1C", "TRIAC")
     assert control_mode_choices("041C", "acm", {"control_mode": 5}, "C") is None
 
 
@@ -276,3 +251,13 @@ async def test_select_writes_the_wire_index() -> None:
         assert host.posts[-1][1]["priority"] == "low"
     finally:
         await select._runtime.engine.stop()
+
+
+def test_unlisted_acm_defaults_to_the_storage_controller():
+    """The app's factory default for an unlisted acm is HelkiStorage."""
+    choices = control_mode_choices("0899", "acm", {"control_mode": 0}, "C")
+    assert choices is not None
+    # Storage relay UI keeps PID_15 as the first offered label, with the
+    # storage wire array's OFF at index 0 still excluded.
+    assert choices[0][0] == "PID (15 min. period)"
+    assert control_mode_choices("0899", "thm", {"control_mode": 0}, "C") is None

@@ -83,6 +83,9 @@
     "boost_mode_unsupported": {
       "message": "This node does not support the /boost_mode endpoint"
     },
+    "boost_unsupported": {
+      "message": "This node does not support boost mode"
+    },
     "boost_mode_invalid": {
       "message": "Mode must be one of {modes} when active"
     },
@@ -110,6 +113,9 @@
     "advanced_slot_requires_full_boost": {
       "message": "Advanced-slot boost is only available on full-boost nodes"
     },
+    "storage_ui_mode_unsupported": {
+      "message": "Storage UI mode is only available on Elnur storage heaters"
+    },
     "schedule_invalid": {
       "message": "Invalid schedule for {entity_id}: {error}"
     },
@@ -125,6 +131,42 @@
     "schedule_wrong_target": {
       "message": "{service} targets no schedule sensor; the requested entities are not Smartbox schedule sensors or their entries are not loaded"
     },
+    "charging_schedule_invalid": {
+      "message": "Invalid charging schedule for {entity_id}: {error}"
+    },
+    "charging_schedule_write_failed": {
+      "message": "Error writing the charging schedule for {entity_id}: {error}"
+    },
+    "charging_schedule_wrong_target": {
+      "message": "{service} targets no storage target-charge sensor; the requested entities are not Smartbox storage sensors or their entries are not loaded"
+    },
+    "thermostat_schedule_invalid": {
+      "message": "Invalid thermostat schedule for {entity_id}: {error}"
+    },
+    "thermostat_schedule_write_failed": {
+      "message": "Error writing the thermostat schedule for {entity_id}: {error}"
+    },
+    "thermostat_schedule_wrong_target": {
+      "message": "{service} targets no thermostat schedule sensor; the requested entities are not Smartbox thermostat schedules or their entries are not loaded"
+    },
+    "hvac_mode_unsupported": {
+      "message": "This heater does not support the requested HVAC mode."
+    },
+    "charging_schedule_auth_failed": {
+      "message": "Authentication failed while writing the charging schedule for {entity_id}: {error}"
+    },
+    "charging_schedule_api_unavailable": {
+      "message": "The Smartbox API was unavailable while writing the charging schedule for {entity_id}: {error}"
+    },
+    "thermostat_schedule_auth_failed": {
+      "message": "Authentication failed while writing the thermostat schedule for {entity_id}: {error}"
+    },
+    "thermostat_schedule_api_unavailable": {
+      "message": "The Smartbox API was unavailable while writing the thermostat schedule for {entity_id}: {error}"
+    },
+    "temperature_control_unsupported": {
+      "message": "This heater does not expose temperature control in its current storage UI mode."
+    },
     "box_power_limit_not_known": {
       "message": "No power limit is known for this box yet, so there is nothing to restore. Set a value on the power limit number entity first (0 there means no limit)."
     },
@@ -133,6 +175,33 @@
     },
     "action_failed": {
       "message": "Error communicating with the Smartbox API for {entity_id}: {error}"
+    },
+    "boost_parameters_required": {
+      "message": "Boost needs a temperature and duration; set the boost number entities or pass them in the service call"
+    },
+    "boost_duration_step": {
+      "message": "Boost duration must be a multiple of {step} minutes"
+    },
+    "boost_mode_unavailable": {
+      "message": "This heater advertises no boost style Home Assistant can use"
+    },
+    "runback_parameters_required": {
+      "message": "Runback needs a temperature and duration; set the runback number entities"
+    },
+    "runback_temperature_out_of_range": {
+      "message": "Runback temperature must be between {min} and {max} {unit}"
+    },
+    "runback_duration_out_of_range": {
+      "message": "Runback duration must be between {min} and {max} {unit}"
+    },
+    "runback_duration_step": {
+      "message": "Runback duration must be a multiple of {step} minutes"
+    },
+    "selection_unavailable": {
+      "message": "That option is no longer available; refresh the entity."
+    },
+    "status_unavailable": {
+      "message": "The heater status is not available yet; try again after the next update."
     }
   },
   "options": {
@@ -173,6 +242,12 @@
       },
       "window_detection": {
         "name": "Window Detection"
+      },
+      "true_radiant_active": {
+        "name": "True Radiant Active"
+      },
+      "power_fail_detection": {
+        "name": "Power Failure Detection"
       }
     },
     "climate": {
@@ -209,6 +284,9 @@
       "rtc_drift": {
         "name": "Clock Drift"
       },
+      "thermostat_schedule": {
+        "name": "Thermostat schedule"
+      },
       "schedule": {
         "name": "Schedule",
         "state": {
@@ -216,6 +294,18 @@
           "eco": "Eco",
           "comfort": "Comfort"
         }
+      },
+      "error_code": {
+        "name": "Error Code"
+      },
+      "pcb_temperature": {
+        "name": "PCB Temperature"
+      },
+      "power_pcb_temperature": {
+        "name": "Power PCB Temperature"
+      },
+      "actual_duty_cycle": {
+        "name": "Actual Duty Cycle"
       }
     },
     "number": {
@@ -245,6 +335,12 @@
       },
       "prog_comfort_temperature": {
         "name": "Comfort"
+      },
+      "config_runback_temperature": {
+        "name": "Runback Temperature"
+      },
+      "config_runback_duration": {
+        "name": "Runback Duration"
       }
     },
     "switch": {
@@ -338,6 +434,44 @@
         "schedule": {
           "name": "Schedule",
           "description": "Day-keyed profile slots, e.g. day \"0\": [0, 0, 1, 1, ...], with 24 entries per day (48 where the heater supports half-hourly slots)."
+        }
+      }
+    },
+    "set_charging_schedule": {
+      "name": "Set storage charging schedule",
+      "description": "Sets the storage heater's charging days and valley slots. Omitted fields keep their current values.",
+      "fields": {
+        "active_days": {
+          "name": "Active days",
+          "description": "Seven booleans, Sunday-first."
+        },
+        "slot_1": {
+          "name": "Valley 1",
+          "description": "Start/end minute of day; 0/0 disables the slot."
+        },
+        "slot_2": {
+          "name": "Valley 2",
+          "description": "Start/end minute of day; 0/0 disables the slot."
+        }
+      }
+    },
+    "set_thermostat_schedule": {
+      "name": "Set thermostat schedule",
+      "description": "Sets the thermostat's day-keyed minute/temperature programme. m is the segment end minute (0..1440); t is the temperature in the node's unit.",
+      "fields": {
+        "schedule": {
+          "name": "Schedule",
+          "description": "All seven day keys; each value is a list of minute/temperature segments, e.g. day 0 with m=360, t=19.0."
+        }
+      }
+    },
+    "set_schedule_resolution": {
+      "name": "Set schedule resolution",
+      "description": "Switches the heater schedule editor between hourly and half-hourly resolution.",
+      "fields": {
+        "resolution": {
+          "name": "Resolution",
+          "description": "0 = hourly (24 slots), 1 = half-hourly (48 slots)."
         }
       }
     }

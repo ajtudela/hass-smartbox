@@ -12,6 +12,16 @@ from smartbox.protocol.auth import TokenBundle
 from smartbox.protocol.client import SmartboxClient
 from smartbox.protocol.reseller import SmartboxReseller
 
+try:
+    import smartbox.device  # noqa: F401
+except ModuleNotFoundError as ex:  # pragma: no cover - developer setup only
+    msg = (
+        "The integration needs the smartbox 3.3 library. Run "
+        "`uv sync --all-extras --dev` (installs smartbox==3.3.0rc1) or "
+        "tools/dev_install_library.sh for a sibling checkout."
+    )
+    raise RuntimeError(msg) from ex
+
 from tests.fake_transport import FakeTransport
 
 from .const import (

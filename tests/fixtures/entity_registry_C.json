@@ -1,0 +1,954 @@
+{
+  "binary_sensor.device_1_0_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_1_0_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_1_1_charging": {
+    "device_class": "battery_charging",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "charging",
+    "unique_id": "device_1_1_charging",
+    "unit": null
+  },
+  "binary_sensor.device_1_1_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_1_1_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_1_connectivity": {
+    "device_class": "connectivity",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "connected",
+    "unique_id": "device_1_connected",
+    "unit": null
+  },
+  "binary_sensor.device_2_1_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_2_1_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_2_2_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_2_2_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_2_3_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_2_3_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_2_4_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_2_4_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_2_5_window_detection": {
+    "device_class": "window",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "window_detection",
+    "unique_id": "device_2_5_window_detection",
+    "unit": null
+  },
+  "binary_sensor.device_2_connectivity": {
+    "device_class": "connectivity",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "connected",
+    "unique_id": "device_2_connected",
+    "unit": null
+  },
+  "climate.device_1_0": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "home"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_1_0_thermostat",
+    "unit": null
+  },
+  "climate.device_1_1": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "auto",
+      "heat",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "boost",
+      "home"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_1_1_thermostat",
+    "unit": null
+  },
+  "climate.device_2_1": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "activity",
+      "comfort",
+      "eco",
+      "frost",
+      "self_learn",
+      "schedule"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_2_1_thermostat",
+    "unit": null
+  },
+  "climate.device_2_2": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "boost",
+      "activity",
+      "comfort",
+      "eco",
+      "frost",
+      "self_learn",
+      "schedule"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_2_2_thermostat",
+    "unit": null
+  },
+  "climate.device_2_3": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "activity",
+      "comfort",
+      "eco",
+      "frost",
+      "self_learn",
+      "schedule"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_2_3_thermostat",
+    "unit": null
+  },
+  "climate.device_2_4": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "activity",
+      "comfort",
+      "eco",
+      "frost",
+      "self_learn",
+      "schedule"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_2_4_thermostat",
+    "unit": null
+  },
+  "climate.device_2_5": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "hvac_modes": [
+      "heat",
+      "auto",
+      "off"
+    ],
+    "preset_modes": [
+      "away",
+      "activity",
+      "comfort",
+      "eco",
+      "frost",
+      "self_learn",
+      "schedule"
+    ],
+    "translation_key": "thermostat",
+    "unique_id": "device_2_5_thermostat",
+    "unit": null
+  },
+  "number.device_1_0_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_1_0_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_0_comfort": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 30.0,
+    "min": 1.0,
+    "step": 0.5,
+    "translation_key": "prog_comfort_temperature",
+    "unique_id": "device_1_0_prog_comfort_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_0_eco": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 29.5,
+    "min": 0.5,
+    "step": 0.5,
+    "translation_key": "prog_eco_temperature",
+    "unique_id": "device_1_0_prog_eco_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_0_frost": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 29.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "prog_frost_temperature",
+    "unique_id": "device_1_0_prog_frost_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_0_maximum": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 30.0,
+    "min": 16.0,
+    "step": 1.0,
+    "translation_key": "max_temperature",
+    "unique_id": "device_1_0_max_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_1_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_1_1_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_1_boost_duration": {
+    "device_class": "duration",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 1440.0,
+    "min": 60,
+    "step": 60,
+    "translation_key": "config_boost_duration",
+    "unique_id": "device_1_1_config_boost_duration",
+    "unit": "min"
+  },
+  "number.device_1_1_boost_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 30.0,
+    "min": 5.0,
+    "step": 0.5,
+    "translation_key": "config_boost_temperature",
+    "unique_id": "device_1_1_config_boost_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_1_comfort": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 30.0,
+    "min": 6.0,
+    "step": 0.5,
+    "translation_key": "prog_comfort_temperature",
+    "unique_id": "device_1_1_prog_comfort_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_1_eco": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 29.5,
+    "min": 5.5,
+    "step": 0.5,
+    "translation_key": "prog_eco_temperature",
+    "unique_id": "device_1_1_prog_eco_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_1_frost": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 29.0,
+    "min": 5.0,
+    "step": 0.5,
+    "translation_key": "prog_frost_temperature",
+    "unique_id": "device_1_1_prog_frost_temperature",
+    "unit": "\u00b0C"
+  },
+  "number.device_1_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 60000,
+    "min": 0.0,
+    "step": 1.0,
+    "translation_key": "power_limit",
+    "unique_id": "device_1_power_limit",
+    "unit": "W"
+  },
+  "number.device_2_0_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 60000,
+    "min": 0.0,
+    "step": 1.0,
+    "translation_key": "node_power_limit",
+    "unique_id": "device_2_0_node_power_limit",
+    "unit": "W"
+  },
+  "number.device_2_1_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_2_1_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_2_2_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_2_2_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_2_3_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_2_3_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_2_4_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_2_4_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_2_5_away_offset": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 5.0,
+    "min": 0.0,
+    "step": 0.5,
+    "translation_key": "away_offset",
+    "unique_id": "device_2_5_away_offset",
+    "unit": "\u00b0C"
+  },
+  "number.device_2_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "max": 60000,
+    "min": 0.0,
+    "step": 1.0,
+    "translation_key": "power_limit",
+    "unique_id": "device_2_power_limit",
+    "unit": "W"
+  },
+  "select.device_1_0_radiator_priority": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "options": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "translation_key": "priority",
+    "unique_id": "device_1_0_priority",
+    "unit": null
+  },
+  "select.device_1_1_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "options": [
+      "Off",
+      "Local lock",
+      "Remote lock"
+    ],
+    "translation_key": "lock_mode",
+    "unique_id": "device_1_1_lock_mode",
+    "unit": null
+  },
+  "sensor.device_1_0_duty_cycle": {
+    "device_class": null,
+    "disabled_by": "integration",
+    "entity_category": "diagnostic",
+    "translation_key": "duty_cycle",
+    "unique_id": "device_1_0_duty_cycle",
+    "unit": null
+  },
+  "sensor.device_1_0_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_1_0_power",
+    "unit": "W"
+  },
+  "sensor.device_1_0_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_1_0_schedule",
+    "unit": null
+  },
+  "sensor.device_1_0_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_1_0_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_1_0_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_1_0_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_1_1_boost_end": {
+    "device_class": "timestamp",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "boost_end_time",
+    "unique_id": "device_1_1_boost_end_time",
+    "unit": null
+  },
+  "sensor.device_1_1_charge_level": {
+    "device_class": "battery",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "charge_level",
+    "unique_id": "device_1_1_charge_level",
+    "unit": "%"
+  },
+  "sensor.device_1_1_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_1_1_power",
+    "unit": "W"
+  },
+  "sensor.device_1_1_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_1_1_schedule",
+    "unit": null
+  },
+  "sensor.device_1_1_target_charge": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "target_charge",
+    "unique_id": "device_1_1_target_charge",
+    "unit": "%"
+  },
+  "sensor.device_1_1_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_1_1_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_1_1_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_1_1_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_1_clock_drift": {
+    "device_class": null,
+    "disabled_by": "integration",
+    "entity_category": "diagnostic",
+    "translation_key": "rtc_drift",
+    "unique_id": "device_1_rtc_drift",
+    "unit": null
+  },
+  "sensor.device_2_0_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_0_power",
+    "unit": "W"
+  },
+  "sensor.device_2_0_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_0_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_1_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_1_power",
+    "unit": "W"
+  },
+  "sensor.device_2_1_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_2_1_schedule",
+    "unit": null
+  },
+  "sensor.device_2_1_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_2_1_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_2_1_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_1_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_2_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_2_power",
+    "unit": "W"
+  },
+  "sensor.device_2_2_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_2_2_schedule",
+    "unit": null
+  },
+  "sensor.device_2_2_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_2_2_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_2_2_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_2_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_3_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_3_power",
+    "unit": "W"
+  },
+  "sensor.device_2_3_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_2_3_schedule",
+    "unit": null
+  },
+  "sensor.device_2_3_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_2_3_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_2_3_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_3_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_4_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_4_power",
+    "unit": "W"
+  },
+  "sensor.device_2_4_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_2_4_schedule",
+    "unit": null
+  },
+  "sensor.device_2_4_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_2_4_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_2_4_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_4_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_5_power": {
+    "device_class": "power",
+    "disabled_by": null,
+    "entity_category": "diagnostic",
+    "translation_key": "power",
+    "unique_id": "device_2_5_power",
+    "unit": "W"
+  },
+  "sensor.device_2_5_schedule": {
+    "device_class": "enum",
+    "disabled_by": null,
+    "entity_category": null,
+    "options": [
+      "frost",
+      "eco",
+      "comfort"
+    ],
+    "translation_key": "schedule",
+    "unique_id": "device_2_5_schedule",
+    "unit": null
+  },
+  "sensor.device_2_5_temperature": {
+    "device_class": "temperature",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "temperature",
+    "unique_id": "device_2_5_temperature",
+    "unit": "\u00b0C"
+  },
+  "sensor.device_2_5_total_consumption": {
+    "device_class": "energy",
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "total_consumption",
+    "unique_id": "device_2_5_total_consumption",
+    "unit": "Wh"
+  },
+  "sensor.device_2_clock_drift": {
+    "device_class": null,
+    "disabled_by": "integration",
+    "entity_category": "diagnostic",
+    "translation_key": "rtc_drift",
+    "unique_id": "device_2_rtc_drift",
+    "unit": null
+  },
+  "switch.device_1_0_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_1_0_lock",
+    "unit": null
+  },
+  "switch.device_1_0_maximum_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "max_temperature_limit",
+    "unique_id": "device_1_0_max_temperature_limit",
+    "unit": null
+  },
+  "switch.device_1_0_true_radiant": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "true_radiant",
+    "unique_id": "device_1_0_true_radiant",
+    "unit": null
+  },
+  "switch.device_1_0_window_mode": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "window_mode",
+    "unique_id": "device_1_0_window_mode",
+    "unit": null
+  },
+  "switch.device_1_1_boost": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "boost",
+    "unique_id": "device_1_1_boost",
+    "unit": null
+  },
+  "switch.device_1_away_status": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "away_status",
+    "unique_id": "device_1_away_status",
+    "unit": null
+  },
+  "switch.device_1_no_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "no_power_limit",
+    "unique_id": "device_1_no_power_limit",
+    "unit": null
+  },
+  "switch.device_2_0_no_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "no_node_power_limit",
+    "unique_id": "device_2_0_no_node_power_limit",
+    "unit": null
+  },
+  "switch.device_2_1_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_2_1_lock",
+    "unit": null
+  },
+  "switch.device_2_1_true_radiant": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "true_radiant",
+    "unique_id": "device_2_1_true_radiant",
+    "unit": null
+  },
+  "switch.device_2_1_window_mode": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "window_mode",
+    "unique_id": "device_2_1_window_mode",
+    "unit": null
+  },
+  "switch.device_2_2_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_2_2_lock",
+    "unit": null
+  },
+  "switch.device_2_2_true_radiant": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "true_radiant",
+    "unique_id": "device_2_2_true_radiant",
+    "unit": null
+  },
+  "switch.device_2_2_window_mode": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "window_mode",
+    "unique_id": "device_2_2_window_mode",
+    "unit": null
+  },
+  "switch.device_2_3_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_2_3_lock",
+    "unit": null
+  },
+  "switch.device_2_3_true_radiant": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "true_radiant",
+    "unique_id": "device_2_3_true_radiant",
+    "unit": null
+  },
+  "switch.device_2_3_window_mode": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "window_mode",
+    "unique_id": "device_2_3_window_mode",
+    "unit": null
+  },
+  "switch.device_2_4_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_2_4_lock",
+    "unit": null
+  },
+  "switch.device_2_5_child_lock": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "lock",
+    "unique_id": "device_2_5_lock",
+    "unit": null
+  },
+  "switch.device_2_away_status": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": null,
+    "translation_key": "away_status",
+    "unique_id": "device_2_away_status",
+    "unit": null
+  },
+  "switch.device_2_no_power_limit": {
+    "device_class": null,
+    "disabled_by": null,
+    "entity_category": "config",
+    "translation_key": "no_power_limit",
+    "unique_id": "device_2_no_power_limit",
+    "unit": null
+  }
+}

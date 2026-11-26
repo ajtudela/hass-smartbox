@@ -19,20 +19,43 @@ jobs:
         python-version: [3.14]
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: hass-smartbox
+      - name: Check out the sibling smartbox library
+        uses: actions/checkout@v7
+        with:
+          repository: ajtudela/smartbox
+          # The migration branch needs the library checkout at ../smartbox.
+          # Set the SMARTBOX_LIB_REF repository variable while the matching
+          # library branch is not on main; after the library minor is released
+          # this can stay on the release tag.
+          ref: ${{ vars.SMARTBOX_LIB_REF || 'main' }}
+          path: smartbox
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Check the lockfile is up to date
+        working-directory: hass-smartbox
         run: uv lock --check
       - name: Install the project
+        working-directory: hass-smartbox
         run: uv sync --all-extras --dev
+      # The lock pins the published 3.2.1 wheel, which has no smartbox.device;
+      # install the sibling checkout over it so the type check can import the
+      # adapter. --no-sync keeps uv from restoring the locked wheel per step.
+      - name: Install the sibling library
+        working-directory: hass-smartbox
+        run: uv pip install --python .venv/bin/python -e ../smartbox
       - name: Lint with ruff
-        run: uv run ruff check custom_components tests tools
+        working-directory: hass-smartbox
+        run: uv run --no-sync ruff check custom_components tests tools
       - name: Check formatting with ruff
-        run: uv run ruff format --check custom_components tests tools
+        working-directory: hass-smartbox
+        run: uv run --no-sync ruff format --check custom_components tests tools
       - name: Type-check with mypy
-        run: uv run mypy custom_components tools
+        working-directory: hass-smartbox
+        run: uv run --no-sync mypy custom_components tools
 
   build:
     runs-on: ubuntu-latest
@@ -43,6 +66,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: hass-smartbox
+      - name: Check out the sibling smartbox library
+        uses: actions/checkout@v7
+        with:
+          repository: ajtudela/smartbox
+          # The migration branch needs the library checkout at ../smartbox.
+          # Set the SMARTBOX_LIB_REF repository variable while the matching
+          # library branch is not on main; after the library minor is released
+          # this can stay on the release tag.
+          ref: ${{ vars.SMARTBOX_LIB_REF || 'main' }}
+          path: smartbox
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -50,6 +85,7 @@ jobs:
           enable-cache: true
           ignore-nothing-to-cache: true
       - name: Test with python ${{ matrix.python-version }}
+        working-directory: hass-smartbox
         run: uv run --frozen tox -e py
       # Dependabot PRs do not receive repository secrets, so this upload
       # would fail on the missing token. The tests still run there; the
@@ -59,6 +95,7 @@ jobs:
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./hass-smartbox/coverage.xml
           fail_ci_if_error: true
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
@@ -66,7 +103,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
-          files: ./junit.xml
+          files: ./hass-smartbox/junit.xml
 
   minimum-home-assistant:
     # hacs.json and pyproject advertise HA 2026.5.0 as the floor; run the
@@ -74,6 +111,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          path: hass-smartbox
+      - name: Check out the sibling smartbox library
+        uses: actions/checkout@v7
+        with:
+          repository: ajtudela/smartbox
+          # The migration branch needs the library checkout at ../smartbox.
+          # Set the SMARTBOX_LIB_REF repository variable while the matching
+          # library branch is not on main; after the library minor is released
+          # this can stay on the release tag.
+          ref: ${{ vars.SMARTBOX_LIB_REF || 'main' }}
+          path: smartbox
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -81,4 +130,5 @@ jobs:
           enable-cache: true
           ignore-nothing-to-cache: true
       - name: Test against the minimum supported Home Assistant
+        working-directory: hass-smartbox
         run: uv run --frozen tox -e min

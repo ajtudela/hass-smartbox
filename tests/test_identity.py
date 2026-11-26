@@ -8,9 +8,12 @@ that protocol-layer errors propagate RAW for setup to map.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from smartbox.core.merging import boost_config
+from smartbox.device.control_modes import control_mode_available
 from smartbox.protocol.errors import AuthError, SmartboxError, TransportUnavailableError
 from smartbox.protocol.values import BoostConfig
 
@@ -20,12 +23,16 @@ from custom_components.smartbox.identity import (
     SmartboxNodeInfo,
     async_discover_identity,
     async_discover_membership,
+    away_offset_available,
     boost_available,
-    boost_config,
     duty_limit_options,
     duty_limit_value,
+    max_temp_limit_available,
     node_power_limit_available,
     priority_available,
+    prog_temps_available,
+    true_radiant_available,
+    window_mode_available,
 )
 
 HOME = {"id": "h1", "devs": [{"dev_id": "dev1", "name": "Box"}]}
@@ -459,7 +466,14 @@ def test_boost_config_uses_the_app_enum():
     """The vendor app's 0/1/2/3 boost_config values are the integration's."""
     assert [int(c) for c in BoostConfig] == [0, 1, 2, 3]
     assert boost_config({"factory_options": {"boost_config": 3}}) == 3
-    assert boost_available({"factory_options": {"boost_config": 3}}) is True
+    assert (
+        boost_available(
+            {"factory_options": {"boost_config": 3}},
+            node_type="htr",
+            pid="0132",
+        )
+        is False
+    )
 
 
 @pytest.mark.parametrize(
@@ -579,7 +593,9 @@ def test_duty_limit_options_keeps_only_usable_presets():
         "bbc_available": True,
         "bbc_value": 0,
     }
-    assert duty_limit_options({**base, "factory_options": unusable}) == (("Off", 0),)
+    assert duty_limit_options({**base, "factory_options": unusable}, "0132") == (
+        ("Off", 0),
+    )
 
     duplicate = {
         "lst_available": True,
@@ -587,15 +603,15 @@ def test_duty_limit_options_keeps_only_usable_presets():
         "bbc_available": True,
         "bbc_value": 50,
     }
-    assert duty_limit_options({**base, "factory_options": duplicate}) == (
+    assert duty_limit_options({**base, "factory_options": duplicate}, "0132") == (
         ("Off", 0),
         ("LST", 50),
     )
 
-    assert duty_limit_options(dict(base)) == (("Off", 0),)
-    assert duty_limit_options({**base, "power": 0}) == ()
-    assert duty_limit_options({"extra_options": {"user_duty_limit": 0}}) == ()
-    assert duty_limit_options({}) == ()
+    assert duty_limit_options(dict(base), "0132") == (("Off", 0),)
+    assert duty_limit_options({**base, "power": 0}, "0132") == ()
+    assert duty_limit_options({"extra_options": {"user_duty_limit": 0}}, "0132") == ()
+    assert duty_limit_options({}, "0132") == ()
 
     assert duty_limit_value({"extra_options": {"user_duty_limit": "25"}}) == 25
     assert duty_limit_value({"extra_options": {"user_duty_limit": "abc"}}) is None
@@ -711,3 +727,294 @@ async def test_membership_propagates_a_nodes_read_error():
 
     with pytest.raises(TransportUnavailableError):
         await async_discover_membership(client)
+
+
+def test_duty_limit_options_lhz_family_uses_hard_coded_presets():
+    """Lhz builds 0/80/90/70 plus its factory values, sorted like the app."""
+    base = {
+        "power": "2000.0",
+        "extra_options": {"user_duty_limit": 0},
+        "factory_options": {
+            "lst_available": True,
+            "lst_value": 25,
+            "bbc_available": True,
+            "bbc_value": 50,
+        },
+    }
+    assert duty_limit_options(base, "0102") == ()
+    assert duty_limit_options(base, "0138") == (
+        ("Off", 0),
+        ("LST", 25),
+        ("Baby Care", 50),
+        ("70 %", 70),
+        ("80 %", 80),
+        ("90 %", 90),
+    )
+    assert duty_limit_options(base, "0132") == (
+        ("Off", 0),
+        ("LST", 25),
+        ("Baby Care", 50),
+    )
+    assert duty_limit_options(base, "0133")[:3] == (
+        ("Off", 0),
+        ("LST", 25),
+        ("Baby Care", 50),
+    )
+
+
+def test_duty_limit_options_lhz_does_not_duplicate_70():
+    """An LST value of 70 is already in the hard-coded set."""
+    base = {
+        "power": "2000.0",
+        "extra_options": {"user_duty_limit": 0},
+        "factory_options": {
+            "lst_available": True,
+            "lst_value": 70,
+            "bbc_available": False,
+            "bbc_value": 0,
+        },
+    }
+    assert duty_limit_options(base, "0138") == (
+        ("Off", 0),
+        ("LST", 70),
+        ("80 %", 80),
+        ("90 %", 90),
+    )
+
+
+def test_prog_temps_available_does_not_depend_on_live_status():
+    """A lost node still advertises the three programme-temperature entities."""
+    node = SimpleNamespace(
+        node_type=SmartboxNodeType.HTR,
+        pid="0402",
+        version={"fw_version": "1.9"},
+        setup={},
+        status={"sync_status": "lost"},
+    )
+    assert prog_temps_available(node) is True
+
+    htr_mod = SimpleNamespace(
+        node_type=SmartboxNodeType.HTR_MOD,
+        pid="010A",
+        version={"fw_version": "1.8"},
+        setup={},
+        status={},
+    )
+    assert prog_temps_available(htr_mod) is False
+
+
+def test_thm_28_no_probes_hides_profile_temperatures() -> None:
+    """The Tevolve floor thermostat exposes ON/OFF only with no probes."""
+    node = SimpleNamespace(
+        node_type=SmartboxNodeType.THM,
+        pid="0128",
+        version={"fw_version": "1.9"},
+        setup={"extra_options": {"sensor_mode": 3}},
+        status={},
+    )
+    assert prog_temps_available(node) is False
+    node.setup = {"extra_options": {"sensor_mode": 2}}
+    assert prog_temps_available(node) is True
+
+
+def test_thm_28_no_probes_hides_the_probe_settings() -> None:
+    """The NO_PROBES timer hides away, control mode, window and radiance."""
+    node = SimpleNamespace(
+        node_type=SmartboxNodeType.THM,
+        pid="0128",
+        version={"fw_version": "1.9"},
+        setup={
+            "away_offset": "2.0",
+            "control_mode": 0,
+            "factory_options": {
+                "window_mode_available": True,
+                "true_radiant_available": True,
+            },
+            "extra_options": {"sensor_mode": 3},
+        },
+        status={},
+    )
+    assert away_offset_available(node) is False
+    assert control_mode_available(node.pid, node.node_type, node.setup, "C") is False
+    assert window_mode_available(node) is False
+    assert true_radiant_available(node) is False
+
+    node.setup["extra_options"] = {"sensor_mode": 2}
+    assert away_offset_available(node) is True
+    assert control_mode_available(node.pid, node.node_type, node.setup, "C") is True
+    assert window_mode_available(node) is True
+    assert true_radiant_available(node) is True
+
+
+def test_water_storage_has_no_profile_temperature_numbers() -> None:
+    """ElnurW exposes only ON/OFF_AUTO programme temperatures."""
+    node = SimpleNamespace(
+        node_type=SmartboxNodeType.ACM,
+        pid="082A",
+        version={"fw_version": "1.8"},
+        setup={},
+        status={},
+    )
+    assert prog_temps_available(node) is False
+
+
+def test_boost_availability_follows_the_catalogues():
+    """Each controller adds BOOST on its own rule, not one config test."""
+    assert boost_available({}, node_type="htr", pid="0117") is True
+    # Helki/Lhz heaters need config 2; LhzRelay 36 adds it unconditionally.
+    assert (
+        boost_available(
+            {"factory_options": {"boost_config": 2}},
+            node_type="htr",
+            pid="0132",
+        )
+        is True
+    )
+    for config in (0, 1, 3):
+        assert (
+            boost_available(
+                {"factory_options": {"boost_config": config}},
+                node_type="htr",
+                pid="0132",
+            )
+            is False
+        )
+    assert boost_available({}, node_type="htr", pid="0136") is True
+    # Tevolve triac/towel-rail add BOOST unconditionally; PIR removes it.
+    assert boost_available({}, node_type="htr", pid="011A") is True
+    assert boost_available({}, node_type="htr", pid="0123") is True
+    assert boost_available({}, node_type="htr", pid="0128") is True
+    assert boost_available({}, node_type="htr", pid="0127") is False
+    # Base ElectricHeater codes expose no boost even with a config.
+    for pid in ("0102", "011E", "0124", "0143", "010D", "0118"):
+        assert (
+            boost_available(
+                {"factory_options": {"boost_config": 2}},
+                node_type="htr",
+                pid=pid,
+            )
+            is False
+        )
+    # Haverland WiFi removes BOOST only at MAX_TEMP_FIXED_TIME (1).
+    for config in (0, 2, 3):
+        assert (
+            boost_available(
+                {"factory_options": {"boost_config": config}},
+                node_type="htr",
+                pid="011D",
+            )
+            is True
+        )
+    assert (
+        boost_available(
+            {"factory_options": {"boost_config": 1}},
+            node_type="htr",
+            pid="011D",
+        )
+        is False
+    )
+    # Helki storage exposes the legacy /boost path independently of config;
+    # Elnur does not expose it even if setup carries a boost_config.
+    assert (
+        boost_available(
+            {"factory_options": {"boost_config": 0}},
+            node_type="acm",
+            pid="081C",
+        )
+        is True
+    )
+    assert (
+        boost_available(
+            {"factory_options": {"boost_config": 2}},
+            node_type="acm",
+            pid="0814",
+        )
+        is False
+    )
+    # Electrorad/Evconfort Helki storage only gains boost at fw 1.8.
+    for brand in ("Electrorad", "evconfort"):
+        assert (
+            boost_available(
+                {},
+                node_type="acm",
+                pid="081C",
+                fw_version="1.7.9",
+                brand_name=brand,
+            )
+            is False
+        )
+        assert (
+            boost_available(
+                {},
+                node_type="acm",
+                pid="081C",
+                fw_version="1.8.0",
+                brand_name=brand,
+            )
+            is True
+        )
+
+
+def test_htr_mod_controller_hides_settings_the_app_does_not_expose():
+    """Haverland 0A/FF only lists name, priority and heater power."""
+    node = SimpleNamespace(
+        pid="010A",
+        node_type="htr_mod",
+        version={"fw_version": "1.8.0"},
+        setup={
+            "control_mode": 0,
+            "away_offset": "2.0",
+            "max_stemp_limit": "20.0",
+            "factory_options": {"boost_config": 2},
+        },
+        status={"locked": False},
+        heater_node=True,
+        boost_available=False,
+    )
+    assert control_mode_available(node.pid, node.node_type, node.setup, "C") is False
+    assert away_offset_available(node) is False
+    assert max_temp_limit_available(node) is False
+
+
+def test_max_limit_is_hidden_until_the_pid_is_known() -> None:
+    """A version-less node does not get a max-limit entity from setup alone."""
+    node = SimpleNamespace(
+        node_type="htr",
+        pid=None,
+        setup={"max_stemp_limit": "20.0"},
+        version={},
+    )
+    assert max_temp_limit_available(node) is False
+
+
+def test_max_limit_is_hidden_where_the_controller_opts_out() -> None:
+    """Storage, Tevolve triac/WiFi and Haverland WiFi do not offer the limit."""
+    setup = {"max_stemp_limit": "20.0"}
+    for node_type, pid in (
+        ("acm", "081C"),
+        ("acm", "0814"),
+        ("htr", "011A"),
+        ("htr", "0134"),
+        ("htr", "011D"),
+    ):
+        node = SimpleNamespace(
+            node_type=node_type, pid=pid, setup=setup, version={"fw_version": "1.9"}
+        )
+        assert max_temp_limit_available(node) is False
+    for pid in ("0402", "0147", "014C"):
+        node = SimpleNamespace(
+            node_type="htr", pid=pid, setup=setup, version={"fw_version": "1.9"}
+        )
+        assert max_temp_limit_available(node) is True
+
+
+def test_classic_accumulator_has_no_programme_temp_numbers():
+    """A classic accumulator's profile numbers would write unsupported temps."""
+    node = SimpleNamespace(
+        node_type="acm",
+        pid="0814",
+        version={"fw_version": "1.9"},
+        setup={"factory_options": {"ui_mode": 2}},
+        status={"sync_status": "lost"},
+    )
+    assert prog_temps_available(node) is False

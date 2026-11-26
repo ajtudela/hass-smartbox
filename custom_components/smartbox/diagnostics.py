@@ -14,6 +14,7 @@ sections stay correlatable without exposing the ids themselves.
 """
 
 from collections.abc import Mapping
+from dataclasses import asdict
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,7 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
+from smartbox.device.profile import resolve_stored_profile
 from smartbox.protocol.errors import ResellerNotExistError
 
 from . import ws_user_flapping_issue_id
@@ -248,6 +250,36 @@ def _ws_user_recovery_diagnostics(
     return {"repair_issue_raised": issue_id in ir.async_get(hass).issues}
 
 
+def _node_profile(
+    node_key: str,
+    node: Any,  # noqa: ANN401 - raw engine slot
+) -> dict[str, Any] | None:
+    """Return the neutral controller profile the adapter would resolve."""
+    node_type = node_key.split("/", 1)[0]
+    version = node.version if isinstance(node.version, Mapping) else {}
+    pid = version.get("pid")
+    if not isinstance(pid, str) or not pid:
+        return None
+    fw_version = version.get("fw_version")
+    setup = node.setup if isinstance(node.setup, Mapping) else {}
+    profile = resolve_stored_profile(
+        node_type,
+        pid,
+        fw_version if isinstance(fw_version, str) else None,
+        setup,
+    )
+    prog_bounds = profile.prog_bounds
+    return {
+        "code": profile.code,
+        "limits": asdict(profile.limits),
+        "climate_bounds": profile.climate_bounds,
+        "max_limit_bounds": profile.max_limit_bounds,
+        "boost_bounds": profile.boost_bounds,
+        "programme_kind": profile.programme_kind,
+        "prog_bounds": None if prog_bounds is None else dict(prog_bounds),
+    }
+
+
 def _engine_diagnostics(
     runtime: SmartboxRuntime, labels: Mapping[str, str]
 ) -> dict[str, Any]:
@@ -267,6 +299,7 @@ def _engine_diagnostics(
                         "prog": node.prog,
                         "version": node.version,
                         "available": node.available,
+                        "profile": _node_profile(key, node),
                     }
                     for key, node in device.node_states.items()
                 },

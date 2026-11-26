@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from homeassistant.core import HomeAssistant
+    from smartbox.protocol.reseller import SmartboxReseller
 
 __all__ = [
     "TokenStore",
@@ -78,7 +79,9 @@ def storage_key(entry_id: str) -> str:
     return f"{_STORAGE_KEY}.{entry_id}"
 
 
-def account_from_entry_data(data: Mapping[str, Any]) -> str:
+def account_from_entry_data(
+    data: Mapping[str, Any], *, reseller: SmartboxReseller | None = None
+) -> str:
     """Return the record's account stamp (reseller, serial, user, host).
 
     The same format the library's CLI cache uses, so a record's owner is
@@ -87,9 +90,9 @@ def account_from_entry_data(data: Mapping[str, Any]) -> str:
     still identify the owner.
     """
     try:
-        reseller = reseller_from_entry_data(data)
-        serial = str(reseller.serial_id)
-        host = api_base_url(reseller)
+        resolved = reseller if reseller is not None else reseller_from_entry_data(data)
+        serial = str(resolved.serial_id)
+        host = api_base_url(resolved)
     except ResellerNotExistError:
         serial = ""
         host = ""
@@ -99,10 +102,14 @@ def account_from_entry_data(data: Mapping[str, Any]) -> str:
 
 
 def token_store_for(
-    hass: HomeAssistant, entry_id: str, data: Mapping[str, Any]
+    hass: HomeAssistant,
+    entry_id: str,
+    data: Mapping[str, Any],
+    *,
+    reseller: SmartboxReseller | None = None,
 ) -> TokenStore:
     """Build the store for one entry (the only construction path)."""
-    return TokenStore(hass, entry_id, account_from_entry_data(data))
+    return TokenStore(hass, entry_id, account_from_entry_data(data, reseller=reseller))
 
 
 class TokenStore:
